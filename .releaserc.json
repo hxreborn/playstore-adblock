@@ -3,8 +3,33 @@
   "branches": ["main", "master"],
   "tagFormat": "v${version}",
   "plugins": [
-    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
-    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/commit-analyzer", {
+      "preset": "conventionalcommits",
+      "releaseRules": [
+        { "type": "security", "release": "patch" },
+        { "type": "refactor", "release": "patch" },
+        { "scope": "deps", "release": false }
+      ]
+    }],
+    ["@semantic-release/release-notes-generator", {
+      "preset": "conventionalcommits",
+      "presetConfig": {
+        "types": [
+          { "type": "feat",     "section": "Features" },
+          { "type": "fix",      "section": "Bug Fixes" },
+          { "type": "perf",     "section": "Performance Improvements" },
+          { "type": "security", "section": "Security" },
+          { "type": "refactor", "section": "Refactor" },
+          { "type": "revert",   "section": "Reverts" },
+          { "type": "test",     "section": "Tests" },
+          { "type": "build",    "section": "Build System" },
+          { "type": "docs",  "hidden": true },
+          { "type": "style", "hidden": true },
+          { "type": "ci",    "hidden": true },
+          { "type": "chore", "hidden": true }
+        ]
+      }
+    }],
     ["@semantic-release/exec", {
       "prepareCmd": "bash .github/semantic-release-prepare.sh ${nextRelease.version}"
     }],

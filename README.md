@@ -37,6 +37,9 @@
 - Android 11+ with an arm64-v8a device
 - Xposed manager with libxposed API 101+ (102 recommended), such as LSPosed
 
+> [!WARNING]
+> Hooking the Play Store can trip Google's device-certification or billing checks on devices without a working Play Integrity setup. This is inherent to modifying the Play Store.
+
 ## Install
 
 1. Install APK from [Releases](../../releases)
@@ -45,9 +48,6 @@
 
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
-
-> [!WARNING]
-> Hooking the Play Store can trip Google's device-certification or billing checks on devices without a working Play Integrity setup. This is inherent to modifying the Play Store.
 
 ## Related
 

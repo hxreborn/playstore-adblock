@@ -1,6 +1,6 @@
 <h1 align="center">
   <picture>
-    <!-- banner source: assets/banner_dark_v2.psd -->
+    <!-- banner source: assets/banner_dark_v3.psd -->
     <source media="(prefers-color-scheme: dark)" srcset="assets/banner_dark.png">
     <img src="assets/banner_light.png" alt="Google Play Store Adblock">
   </picture>

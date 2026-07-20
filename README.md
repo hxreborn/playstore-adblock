@@ -7,7 +7,7 @@
 </h1>
 
 <p align="center">
-  Xposed module that removes sponsored listings and ads from the Google Play Store. It filters sponsored results and shelves across home, For you, search, and search suggestions before they render, leaving organic results in place.
+  Xposed module that removes sponsored listings and ads from the Google Play Store.
 </p>
 
 <p align="center">

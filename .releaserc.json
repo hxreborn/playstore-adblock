@@ -1,0 +1,24 @@
+{
+  "repositoryUrl": "https://github.com/hxreborn/playstore-adblock.git",
+  "branches": ["main", "master"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/exec", {
+      "prepareCmd": "bash .github/semantic-release-prepare.sh ${nextRelease.version}"
+    }],
+    ["@semantic-release/git", {
+      "assets": ["gradle.properties"],
+      "message": "chore(release): ${nextRelease.version} [skip ci]"
+    }],
+    ["@semantic-release/github", {
+      "assets": [
+        {
+          "path": "playstore-adblock-v*-arm64-v8a.apk",
+          "label": "Play Store Adblock v${nextRelease.version} (arm64-v8a)"
+        }
+      ]
+    }]
+  ]
+}

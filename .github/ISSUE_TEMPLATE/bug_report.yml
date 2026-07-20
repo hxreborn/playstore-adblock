@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a bug in Play Store Adblock.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a report:
+
+        - Search existing issues so you don't file a duplicate.
+        - Include your Play Store version. The module resolves its targets per Play Store build, so this matters.
+  - type: input
+    attributes:
+      label: Play Store version
+      description: Play Store → Settings → About (version name and code).
+      placeholder: "52.2.25-31 (85222530)"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Module version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Android version and ROM
+      placeholder: "Android 15, Pixel / AOSP"
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Xposed framework
+      placeholder: "LSPosed 2.1.0 (7769)"
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Bug description
+      description: What happens and what you expected. Add steps to reproduce and screenshots if you can.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Logs
+      description: Relevant PlayStoreAdblock log lines from the LSPosed log (needs root).
+      render: shell
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I searched open and closed issues and this is not a duplicate.
+          required: true
+        - label: I included the Play Store version and a clear description.
+          required: true

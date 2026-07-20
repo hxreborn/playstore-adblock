@@ -9,7 +9,7 @@ updates:
       gradle:
         patterns: ["*"]
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "build(deps)"
 
   - package-ecosystem: github-actions
     directory: "/"
@@ -20,4 +20,4 @@ updates:
       actions:
         patterns: ["*"]
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "build(deps)"

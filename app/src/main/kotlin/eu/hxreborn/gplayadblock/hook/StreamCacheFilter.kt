@@ -1,0 +1,360 @@
+package eu.hxreborn.gplayadblock.hook
+
+import android.util.Log
+import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
+import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedModule
+import java.lang.reflect.Field
+import java.lang.reflect.Method
+import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+object StreamCacheFilter {
+    fun install(
+        module: XposedModule,
+        classLoader: ClassLoader,
+        targets: ResolvedTargets.Resolved,
+        logger: (Int, String, Throwable?) -> Unit,
+    ) {
+        val method = targets.cacheAssemblyMethod.resolve(classLoader)
+        val cardAdMetadataFields =
+            targets.cardAdMetadataFields
+                .map { field -> field.resolve(classLoader) }
+                .groupBy(Field::getDeclaringClass)
+        val classifier =
+            PresentationClassifier(
+                presentationKindField = targets.presentationKindField.resolve(classLoader),
+                presentationPayloadField = targets.presentationPayloadField.resolve(classLoader),
+                clusterCaseField = targets.clusterCaseField.resolve(classLoader),
+                clusterPayloadField = targets.clusterPayloadField.resolve(classLoader),
+                clusterServerLogsField =
+                    targets.clusterServerLogsField.resolve(classLoader),
+                byteStringToByteArrayMethod =
+                    targets.byteStringToByteArrayMethod.resolve(classLoader),
+                protobufToByteArrayMethod =
+                    targets.protobufToByteArrayMethod.resolve(classLoader),
+                cardKindField = targets.cardKindField.resolve(classLoader),
+                cardPayloadField = targets.cardPayloadField.resolve(classLoader),
+                cardAdMetadataFields = cardAdMetadataFields,
+                adPresenceField = targets.adPresenceField.resolve(classLoader),
+            )
+        val editor =
+            ProtoEditor(
+                newBuilderMethod = targets.protobufNewBuilderMethod.resolve(classLoader),
+                mergeMethod = targets.protobufMergeMethod.resolve(classLoader),
+                buildMethod = targets.protobufBuildMethod.resolve(classLoader),
+                builderMessageField = targets.protobufBuilderMessageField.resolve(classLoader),
+                parseMethod = targets.protobufParseMethod.resolve(classLoader),
+                registry =
+                    requireNotNull(
+                        targets.protobufRegistryFactory.resolve(classLoader).invoke(null),
+                    ),
+                toByteArrayMethod = targets.byteStringToByteArrayMethod.resolve(classLoader),
+                repeatedListCopyMethod = targets.repeatedListCopyMethod.resolve(classLoader),
+            )
+        val interceptor =
+            CacheAssemblyInterceptor(
+                transformer =
+                    CacheGraphTransformer(
+                        nodeClass =
+                            classLoader.loadClass(targets.presentationAccessor.className),
+                        presentationAccessor = targets.presentationAccessor.resolve(classLoader),
+                        nodeChildrenField = targets.cacheNodeChildrenField.resolve(classLoader),
+                        pageBoundariesField =
+                            targets.cachePageBoundariesField.resolve(classLoader),
+                        pageBoundariesCopyMethod =
+                            targets.cachePageBoundariesCopyMethod.resolve(classLoader),
+                        childIdsField = targets.childIdsField.resolve(classLoader),
+                        childPresenceField = targets.childPresenceField.resolve(classLoader),
+                        childContinuationField =
+                            targets.childContinuationField.resolve(classLoader),
+                        childKeyMethod = targets.childKeyMethod.resolve(classLoader),
+                        classifier = classifier,
+                        editor = editor,
+                        logger = logger,
+                    ),
+                logger = logger,
+            )
+        module
+            .hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept { chain -> interceptor.intercept(chain) }
+    }
+
+    private class CacheAssemblyInterceptor(
+        private val transformer: CacheGraphTransformer,
+        private val logger: (Int, String, Throwable?) -> Unit,
+    ) {
+        private val pathLogged = AtomicBoolean()
+        private val errorLogged = AtomicBoolean()
+
+        fun intercept(chain: XposedInterface.Chain): Any? {
+            if (pathLogged.compareAndSet(false, true)) {
+                logger(Log.INFO, "stream cache assembly path active", null)
+            }
+            val replacement =
+                try {
+                    transformer.transform(
+                        root = chain.getArg(2),
+                        rootChildren = chain.getArg(3),
+                        nodes = chain.getArg(4),
+                    )
+                } catch (exception: Exception) {
+                    if (errorLogged.compareAndSet(false, true)) {
+                        logger(Log.ERROR, "stream cache filtering failed", exception)
+                    }
+                    null
+                }
+            if (replacement == null) return chain.proceed()
+            val arguments = chain.args.toTypedArray()
+            arguments[2] = replacement.root
+            arguments[3] = replacement.rootChildren
+            arguments[4] = replacement.nodes
+            return chain.proceed(arguments)
+        }
+    }
+
+    private class CacheGraphTransformer(
+        private val nodeClass: Class<*>,
+        private val presentationAccessor: Method,
+        private val nodeChildrenField: Field,
+        private val pageBoundariesField: Field,
+        private val pageBoundariesCopyMethod: Method,
+        private val childIdsField: Field,
+        private val childPresenceField: Field,
+        private val childContinuationField: Field,
+        private val childKeyMethod: Method,
+        private val classifier: PresentationClassifier,
+        private val editor: ProtoEditor,
+        private val logger: (Int, String, Throwable?) -> Unit,
+    ) {
+        private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
+        private val collapsedParentsLogged = AtomicBoolean()
+
+        fun transform(
+            root: Any?,
+            rootChildren: Any?,
+            nodes: Any?,
+        ): Replacement? {
+            if (root == null || !nodeClass.isInstance(root)) return null
+            val rootList = rootChildren as? List<*> ?: return null
+            val nodeMap = nodes as? Map<*, *> ?: return null
+            if (nodeMap.isEmpty()) return null
+            if (nodeMap.entries.any { entry ->
+                    entry.key !is String || !nodeClass.isInstance(entry.value)
+                }
+            ) {
+                return null
+            }
+
+            val keyCache = IdentityHashMap<Any, String>()
+            val keyFor = { child: Any ->
+                keyCache[child]
+                    ?: (childKeyMethod.invoke(null, child) as String).also { key ->
+                        keyCache[child] = key
+                    }
+            }
+            val records =
+                nodeMap.entries.associate { entry ->
+                    val key = entry.key as String
+                    val node = requireNotNull(entry.value)
+                    key to record(node, keyFor)
+                }
+            val adCasesByKey = LinkedHashMap<String, Int>()
+            for ((key, record) in records) {
+                val presentation = presentationAccessor.invoke(record.node) ?: continue
+                val case = classifier.classify(presentation)
+                if (classifier.isAd(case)) adCasesByKey[key] = case
+            }
+            if (adCasesByKey.isEmpty()) return null
+
+            val referencedKeys = HashSet<String>()
+            rootList.filterNotNull().mapTo(referencedKeys, keyFor)
+            records.values.flatMapTo(referencedKeys) { record -> record.childKeys }
+            val directRemovableKeys =
+                adCasesByKey.keys.filterTo(HashSet(), referencedKeys::contains)
+            if (directRemovableKeys.isEmpty()) return null
+            val rootRecord = record(root, keyFor)
+            val removableKeys = expandRemovableParents(records, referencedKeys, directRemovableKeys)
+
+            val filteredRootChildren =
+                rootList.filterNot { child ->
+                    child != null && keyFor(child) in removableKeys
+                }
+            var replacementRoot = root
+            val filteredRootNode = filterNode(rootRecord, removableKeys)
+            if (filteredRootNode != null) replacementRoot = filteredRootNode
+            val collapsedRoot =
+                !rootRecord.hasContinuation &&
+                    rootRecord.childKeys.isNotEmpty() &&
+                    rootRecord.childKeys.all(removableKeys::contains)
+
+            val replacementNodes = LinkedHashMap<Any?, Any?>(nodeMap)
+            var changedNodes = false
+            for ((key, record) in records) {
+                if (key in removableKeys) continue
+                val replacementNode = filterNode(record, removableKeys) ?: continue
+                replacementNodes[key] = replacementNode
+                changedNodes = true
+            }
+            if (filteredRootChildren.size == rootList.size &&
+                replacementRoot === root &&
+                !changedNodes
+            ) {
+                return null
+            }
+
+            val removedCases =
+                directRemovableKeys.mapNotNull(adCasesByKey::get).toSet().filter(loggedCases::add)
+            if (removedCases.isNotEmpty()) {
+                logger(
+                    Log.INFO,
+                    "removed sponsored cached nodes count=${directRemovableKeys.size} " +
+                        "cases=${removedCases.joinToString(",", transform = classifier::caseName)}",
+                    null,
+                )
+            }
+            val collapsedParentCount =
+                removableKeys.size - directRemovableKeys.size + if (collapsedRoot) 1 else 0
+            if (collapsedParentCount > 0 && collapsedParentsLogged.compareAndSet(false, true)) {
+                val collapsedCases =
+                    buildSet {
+                        (removableKeys - directRemovableKeys).forEach { key ->
+                            records[key]
+                                ?.let { record -> presentationAccessor.invoke(record.node) }
+                                ?.let(classifier::classify)
+                                ?.let(::add)
+                        }
+                        if (collapsedRoot) {
+                            presentationAccessor
+                                .invoke(root)
+                                ?.let(classifier::classify)
+                                ?.let(::add)
+                        }
+                    }
+                logger(
+                    Log.INFO,
+                    "collapsed sponsored cached parents count=$collapsedParentCount " +
+                        "cases=${collapsedCases.joinToString(
+                            ",",
+                            transform = classifier::caseName,
+                        )}",
+                    null,
+                )
+            }
+            return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
+        }
+
+        private fun record(
+            node: Any,
+            keyFor: (Any) -> String,
+        ): NodeRecord {
+            val children = nodeChildrenField.get(node)
+            val childIds =
+                (children?.let(childIdsField::get) as? List<*>)
+                    .orEmpty()
+                    .filterNotNull()
+            val pageBoundaries =
+                (pageBoundariesField.get(node) as? List<*>)
+                    .orEmpty()
+                    .map { value -> value as Int }
+            val hasContinuation =
+                children != null &&
+                    (
+                        childPresenceField.getInt(children) and CONTINUATION_PRESENT != 0 ||
+                            !(childContinuationField.get(children) as? String).isNullOrEmpty()
+                    )
+            return NodeRecord(
+                node = node,
+                children = children,
+                childIds = childIds,
+                childKeys = childIds.map(keyFor),
+                pageBoundaries = pageBoundaries,
+                hasContinuation = hasContinuation,
+            )
+        }
+
+        private fun expandRemovableParents(
+            records: Map<String, NodeRecord>,
+            referencedKeys: Set<String>,
+            directRemovableKeys: Set<String>,
+        ): Set<String> {
+            val removableKeys = HashSet(directRemovableKeys)
+            var changed: Boolean
+            do {
+                changed = false
+                for ((key, record) in records) {
+                    if (key !in referencedKeys || key in removableKeys) continue
+                    if (!record.hasContinuation &&
+                        record.childKeys.isNotEmpty() &&
+                        record.childKeys.all(removableKeys::contains)
+                    ) {
+                        removableKeys += key
+                        changed = true
+                    }
+                }
+            } while (changed)
+            return removableKeys
+        }
+
+        private fun filterNode(
+            record: NodeRecord,
+            removableKeys: Set<String>,
+        ): Any? {
+            val children = record.children ?: return null
+            if (record.childKeys.none(removableKeys::contains)) return null
+            val retained =
+                record.childIds.filterIndexed { index, _ ->
+                    record.childKeys[index] !in removableKeys
+                }
+            val replacementChildren =
+                editor.copy(children) { mutableChildren ->
+                    editor.replaceList(mutableChildren, childIdsField, retained)
+                }
+            val replacementBoundaries = remapBoundaries(record, removableKeys)
+            return editor.copy(record.node) { mutableNode ->
+                nodeChildrenField.set(mutableNode, replacementChildren)
+                editor.replaceList(
+                    owner = mutableNode,
+                    field = pageBoundariesField,
+                    values = replacementBoundaries,
+                    copyMethod = pageBoundariesCopyMethod,
+                )
+            }
+        }
+
+        private fun remapBoundaries(
+            record: NodeRecord,
+            removableKeys: Set<String>,
+        ): List<Int> {
+            var previous = 0
+            var retained = 0
+            return record.pageBoundaries.map { boundary ->
+                require(boundary in previous..record.childIds.size)
+                for (index in previous until boundary) {
+                    if (record.childKeys[index] !in removableKeys) retained++
+                }
+                previous = boundary
+                retained
+            }
+        }
+    }
+
+    private data class NodeRecord(
+        val node: Any,
+        val children: Any?,
+        val childIds: List<Any>,
+        val childKeys: List<String>,
+        val pageBoundaries: List<Int>,
+        val hasContinuation: Boolean,
+    )
+
+    private data class Replacement(
+        val root: Any,
+        val rootChildren: List<*>,
+        val nodes: Map<Any?, Any?>,
+    )
+
+    private const val CONTINUATION_PRESENT = 1
+}

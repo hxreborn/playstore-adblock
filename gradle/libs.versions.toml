@@ -1,0 +1,13 @@
+[versions]
+agp = "9.2.1"
+dexkit = "2.2.0"
+ktlint = "1.8.0"
+libxposedApi = "102.0.0"
+
+[libraries]
+dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
+ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
+libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }

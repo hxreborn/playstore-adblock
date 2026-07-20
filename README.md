@@ -35,7 +35,7 @@
 ## Requirements
 
 - Android 11+ with an arm64-v8a device
-- Xposed manager with libxposed API 101+ (102 recommended), such as LSPosed
+- Xposed manager with libxposed API 101+, such as LSPosed
 
 > [!WARNING]
 > Hooking the Play Store can trip Google's device-certification or billing checks on devices without a working Play Integrity setup. This is inherent to modifying the Play Store.

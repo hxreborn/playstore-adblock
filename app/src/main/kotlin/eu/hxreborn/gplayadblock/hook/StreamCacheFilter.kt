@@ -7,8 +7,6 @@ import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.IdentityHashMap
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamCacheFilter {
     fun install(
@@ -49,13 +47,7 @@ object StreamCacheFilter {
     private class CacheAssemblyInterceptor(
         private val transformer: CacheGraphTransformer,
     ) {
-        private val pathLogged = AtomicBoolean()
-        private val errorLogged = AtomicBoolean()
-
         fun intercept(chain: XposedInterface.Chain): Any? {
-            if (pathLogged.compareAndSet(false, true)) {
-                Logger.info("stream cache assembly path active")
-            }
             val replacement =
                 try {
                     transformer.transform(
@@ -64,9 +56,7 @@ object StreamCacheFilter {
                         nodes = chain.getArg(4),
                     )
                 } catch (exception: Exception) {
-                    if (errorLogged.compareAndSet(false, true)) {
-                        Logger.error("stream cache filtering failed", exception)
-                    }
+                    Logger.error("stream cache filtering failed", exception)
                     null
                 }
             if (replacement == null) return chain.proceed()
@@ -91,9 +81,6 @@ object StreamCacheFilter {
         private val classifier: PresentationClassifier,
         private val editor: ProtoEditor,
     ) {
-        private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
-        private val collapsedParentsLogged = AtomicBoolean()
-
         fun transform(
             root: Any?,
             rootChildren: Any?,
@@ -147,10 +134,6 @@ object StreamCacheFilter {
             var replacementRoot = root
             val filteredRootNode = filterNode(rootRecord, removableKeys)
             if (filteredRootNode != null) replacementRoot = filteredRootNode
-            val collapsedRoot =
-                !rootRecord.hasContinuation &&
-                    rootRecord.childKeys.isNotEmpty() &&
-                    rootRecord.childKeys.all(removableKeys::contains)
 
             val replacementNodes = LinkedHashMap<Any?, Any?>(nodeMap)
             var changedNodes = false
@@ -167,37 +150,6 @@ object StreamCacheFilter {
                 return null
             }
 
-            val removedCases =
-                directRemovableKeys.mapNotNull(adCasesByKey::get).toSet().filter(loggedCases::add)
-            if (removedCases.isNotEmpty()) {
-                Logger.info(
-                    "removed sponsored cached nodes count=${directRemovableKeys.size} " +
-                        "cases=${removedCases.joinToString(",", transform = classifier::caseName)}",
-                )
-            }
-            val collapsedParentCount =
-                removableKeys.size - directRemovableKeys.size + if (collapsedRoot) 1 else 0
-            if (collapsedParentCount > 0 && collapsedParentsLogged.compareAndSet(false, true)) {
-                val collapsedCases =
-                    buildSet {
-                        (removableKeys - directRemovableKeys).forEach { key ->
-                            records[key]
-                                ?.let { record -> presentationAccessor.invoke(record.node) }
-                                ?.let(classifier::classify)
-                                ?.let(::add)
-                        }
-                        if (collapsedRoot) {
-                            presentationAccessor
-                                .invoke(root)
-                                ?.let(classifier::classify)
-                                ?.let(::add)
-                        }
-                    }
-                val cases = collapsedCases.joinToString(",", transform = classifier::caseName)
-                Logger.info(
-                    "collapsed sponsored cached parents count=$collapsedParentCount cases=$cases",
-                )
-            }
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
         }
 

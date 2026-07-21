@@ -82,6 +82,8 @@ object DexKitResolver {
         }
     }
 
+    internal fun hasNativeLoadFailure(): Boolean = nativeLoadFailure != null
+
     fun resolve(apkPaths: List<String>): ResolvedTargets {
         nativeLoadFailure?.let { return ResolvedTargets.Missing(it) }
         val failures = ArrayList<String>()

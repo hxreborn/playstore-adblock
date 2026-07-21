@@ -6,8 +6,6 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.util.IdentityHashMap
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamResponseFilter {
     fun install(
@@ -61,23 +59,15 @@ object StreamResponseFilter {
         private val callbackName: String,
         private val transformer: ResponseTransformer,
     ) {
-        private val pathLogged = AtomicBoolean()
-        private val errorLogged = AtomicBoolean()
-
         fun intercept(chain: XposedInterface.Chain): Any? {
-            if (pathLogged.compareAndSet(false, true)) {
-                Logger.info("stream response path active callback=$callbackName")
-            }
             val replacement =
                 try {
                     chain.getArg(0)?.let(transformer::transform)
                 } catch (exception: Exception) {
-                    if (errorLogged.compareAndSet(false, true)) {
-                        Logger.error(
-                            "stream response filtering failed callback=$callbackName",
-                            exception,
-                        )
-                    }
+                    Logger.error(
+                        "stream response filtering failed callback=$callbackName",
+                        exception,
+                    )
                     null
                 }
             if (replacement == null) return chain.proceed()
@@ -105,12 +95,6 @@ object StreamResponseFilter {
         private val classifier: PresentationClassifier,
         private val editor: ProtoEditor,
     ) {
-        private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
-        private val serializedLogged = AtomicBoolean()
-        private val unreferencedLogged = AtomicBoolean()
-        private val partiallyUnreferencedLogged = AtomicBoolean()
-        private val collapsedParentsLogged = AtomicBoolean()
-
         fun transform(response: Any): Any? {
             val lists =
                 responseListFields.associateWith { field ->
@@ -156,12 +140,7 @@ object StreamResponseFilter {
 
             val directRemovableIds =
                 adCasesById.keys.filterTo(HashSet(), referencedIds::contains)
-            if (directRemovableIds.isEmpty()) {
-                if (unreferencedLogged.compareAndSet(false, true)) {
-                    Logger.warn("sponsored stream nodes were not referenced by response parents")
-                }
-                return null
-            }
+            if (directRemovableIds.isEmpty()) return null
             val removableIds =
                 expandRemovableParents(decodedNodes, referencedIds, directRemovableIds)
 
@@ -200,38 +179,6 @@ object StreamResponseFilter {
                         editor.replaceList(mutableResponse, field, transformed)
                     }
                 }
-            val removedCases =
-                directRemovableIds.mapNotNull(adCasesById::get).toSet().filter(loggedCases::add)
-            val collapsedParentCount = removableIds.size - directRemovableIds.size
-            if (removedCases.isNotEmpty()) {
-                Logger.info(
-                    "removed sponsored response nodes count=${directRemovableIds.size} " +
-                        "cases=${removedCases.joinToString(",", transform = classifier::caseName)}",
-                )
-            }
-            if (collapsedParentCount > 0 && collapsedParentsLogged.compareAndSet(false, true)) {
-                val collapsedCases =
-                    decodedNodes
-                        .filter { (wrapper, _) ->
-                            val id = nodeIdField.get(wrapper)
-                            id != null && id in removableIds && id !in directRemovableIds
-                        }.values
-                        .mapNotNull(nodePresentationField::get)
-                        .map(classifier::classify)
-                        .toSet()
-                val cases = collapsedCases.joinToString(",", transform = classifier::caseName)
-                Logger.info(
-                    "collapsed sponsored response parents count=$collapsedParentCount cases=$cases",
-                )
-            }
-            if (adCasesById.size != directRemovableIds.size &&
-                partiallyUnreferencedLogged.compareAndSet(false, true)
-            ) {
-                Logger.warn(
-                    "retained ${adCasesById.size - directRemovableIds.size} " +
-                        "unreferenced sponsored nodes",
-                )
-            }
             return replacement
         }
 
@@ -370,9 +317,6 @@ object StreamResponseFilter {
 
                 SERIALIZED_PAYLOAD -> {
                     if (payload == null) return null
-                    if (serializedLogged.compareAndSet(false, true)) {
-                        Logger.info("decoding serialized stream response payload")
-                    }
                     editor.parse(defaultInstance, payload)
                 }
 

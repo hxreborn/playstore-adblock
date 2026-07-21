@@ -76,9 +76,15 @@ class PlayStoreAdblockModule : XposedModule() {
         classLoader: ClassLoader,
     ) {
         try {
-            val targetVersionCode =
-                context.packageManager.getPackageInfo(TARGET_PACKAGE, 0).longVersionCode
+            val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
+            val targetVersionCode = packageInfo.longVersionCode
             val moduleVersionCode = BuildConfig.VERSION_CODE.toLong()
+            val status =
+                "Play Store ${packageInfo.versionName} ($targetVersionCode) " +
+                    "module v${BuildConfig.VERSION_NAME}"
+            if (targetVersionCode !in VALIDATED_TARGET_VERSIONS) {
+                Logger.warn("Play Store version untested : $status")
+            }
             val applicationInfo = context.applicationInfo
             val cached =
                 TargetCache.load(
@@ -101,18 +107,26 @@ class PlayStoreAdblockModule : XposedModule() {
                             targets = resolved,
                         )
                     }
+            val source =
+                when {
+                    cached != null -> "from-cache"
+                    DexKitResolver.hasNativeLoadFailure() -> "native-load-failed"
+                    else -> "fresh-scan"
+                }
 
-            val versions = "targetV=$targetVersionCode moduleV=$moduleVersionCode"
             when (targets) {
                 is ResolvedTargets.Missing -> {
-                    Logger.error("target resolution missing $versions reason=${targets.reason}")
+                    Logger.error(
+                        "resolution missing resolved=$source : $status reason=${targets.reason}",
+                    )
                     notifyFilteringUnavailable(context)
                 }
 
                 is ResolvedTargets.Resolved -> {
-                    Logger.info(
-                        "target resolution loaded $versions method=${targets.streamDataMethod}",
-                    )
+                    Logger.debug {
+                        "targets resolved streamMethod=${targets.streamDataMethod.className}." +
+                            targets.streamDataMethod.methodName
+                    }
 
                     fun installGroup(
                         label: String,
@@ -126,25 +140,42 @@ class PlayStoreAdblockModule : XposedModule() {
                             false
                         }
 
-                    installGroup("legacy stream") {
-                        StreamNodeFilter.install(this, classLoader, targets)
-                    }
-                    installGroup("search suggestion") {
-                        SearchSuggestionFilter.install(this, classLoader, targets)
-                    }
-                    val cacheInstalled =
+                    val graph =
+                        installGroup("graph stream") {
+                            StreamNodeFilter.install(this, classLoader, targets)
+                        }
+                    val suggestion =
+                        installGroup("search suggestion") {
+                            SearchSuggestionFilter.install(this, classLoader, targets)
+                        }
+                    val cache =
                         installGroup("stream cache") {
                             StreamCacheFilter.install(this, classLoader, targets)
                         }
-                    val responseInstalled =
+                    val response =
                         installGroup("stream response") {
                             StreamResponseFilter.install(this, classLoader, targets)
                         }
 
-                    if (cacheInstalled && responseInstalled) {
-                        Logger.info("filtering active")
+                    val active =
+                        listOfNotNull(
+                            "graph".takeIf { graph },
+                            "search".takeIf { suggestion },
+                            "cache".takeIf { cache },
+                            "response".takeIf { response },
+                        ).joinToString(",", "[", "]")
+                    if (cache && response) {
+                        Logger.info("hooks installed hooks=$active resolved=$source : $status")
                     } else {
-                        Logger.warn("filtering inactive, required hook groups failed")
+                        val missing =
+                            listOfNotNull(
+                                "cache".takeUnless { cache },
+                                "response".takeUnless { response },
+                            ).joinToString(",", "[", "]")
+                        Logger.warn(
+                            "hooks install incomplete active=$active missing=$missing " +
+                                "resolved=$source : $status",
+                        )
                         notifyFilteringUnavailable(context)
                     }
                 }
@@ -160,6 +191,7 @@ class PlayStoreAdblockModule : XposedModule() {
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
+        val VALIDATED_TARGET_VERSIONS = setOf(85222530L)
 
         fun notifyFilteringUnavailable(context: Context) {
             Handler(Looper.getMainLooper()).postDelayed(

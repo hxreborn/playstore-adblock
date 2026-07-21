@@ -8,8 +8,6 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamNodeFilter {
     fun install(
@@ -67,17 +65,12 @@ object StreamNodeFilter {
         private val streamDataConstructor: Constructor<*>,
         private val hasMoreField: Field,
     ) {
-        private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
-        private val errorLogged = AtomicBoolean()
-
         fun intercept(chain: XposedInterface.Chain): Any? {
             val result = chain.proceed() ?: return null
             return try {
                 filter(chain, result)
             } catch (exception: Exception) {
-                if (errorLogged.compareAndSet(false, true)) {
-                    Logger.error("stream filtering failed", exception)
-                }
+                Logger.error("stream filtering failed", exception)
                 result
             }
         }
@@ -103,14 +96,8 @@ object StreamNodeFilter {
             if (casesById.isEmpty()) return result
 
             val filtered = ArrayList<Any?>(children.size)
-            val removedCases = LinkedHashSet<Int>()
             for (child in children) {
-                val case = casesById[child]
-                if (case == null) {
-                    filtered += child
-                } else {
-                    removedCases += case
-                }
+                if (casesById[child] == null) filtered += child
             }
             if (filtered.size == children.size) return result
 
@@ -118,20 +105,13 @@ object StreamNodeFilter {
             val parentNode = nodeField.get(parent)
             val parentPresentation = presentationAccessor.invoke(parentNode)
             val hasMore = hasMoreField.getBoolean(result)
-            val replacement =
-                streamDataConstructor.newInstance(
-                    parentId,
-                    parentPresentation,
-                    filtered,
-                    hasMore,
-                    chain.getArg(0),
-                )
-            val firstCases = removedCases.filter(loggedCases::add)
-            if (firstCases.isNotEmpty()) {
-                val cases = firstCases.joinToString(",", transform = classifier::caseName)
-                Logger.info("removed sponsored stream nodes cases=$cases")
-            }
-            return replacement
+            return streamDataConstructor.newInstance(
+                parentId,
+                parentPresentation,
+                filtered,
+                hasMore,
+                chain.getArg(0),
+            )
         }
 
         private fun presentationCase(handler: Any): Int {

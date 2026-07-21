@@ -1,6 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
-import android.util.Log
+import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -12,11 +12,10 @@ object SearchSuggestionFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        logger: (Int, String, Throwable?) -> Unit,
     ) {
         val constructor = targets.searchSuggestionConstructor.resolve(classLoader)
         val adInfoField = targets.suggestionAdInfoField.resolve(classLoader)
-        val interceptor = SearchSuggestionInterceptor(adInfoField, logger)
+        val interceptor = SearchSuggestionInterceptor(adInfoField)
         module
             .hook(constructor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
@@ -25,7 +24,6 @@ object SearchSuggestionFilter {
 
     private class SearchSuggestionInterceptor(
         private val adInfoField: Field,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val pathLogged = AtomicBoolean()
         private val mismatchLogged = AtomicBoolean()
@@ -34,14 +32,14 @@ object SearchSuggestionFilter {
 
         fun intercept(chain: XposedInterface.Chain): Any? {
             if (pathLogged.compareAndSet(false, true)) {
-                logger(Log.INFO, "search suggestion path active", null)
+                Logger.info("search suggestion path active")
             }
             val replacement =
                 try {
                     filter(chain)
                 } catch (exception: Exception) {
                     if (errorLogged.compareAndSet(false, true)) {
-                        logger(Log.ERROR, "search suggestion filtering failed", exception)
+                        Logger.error("search suggestion filtering failed", exception)
                     }
                     null
                 }
@@ -69,11 +67,9 @@ object SearchSuggestionFilter {
             val adCount = chain.getArg(2) as? Int ?: return null
             if ((mask and AD_COUNT_MASK) != 0 || adCount != matchCount) {
                 if (mismatchLogged.compareAndSet(false, true)) {
-                    logger(
-                        Log.WARN,
+                    Logger.warn(
                         "search suggestion invariant mismatch mask=$mask " +
                             "adCount=$adCount matches=$matchCount",
-                        null,
                     )
                 }
                 return null
@@ -87,7 +83,7 @@ object SearchSuggestionFilter {
             arguments[0] = filtered
             arguments[2] = 0
             if (removalLogged.compareAndSet(false, true)) {
-                logger(Log.INFO, "removed $matchCount sponsored search suggestions", null)
+                Logger.info("removed $matchCount sponsored search suggestions")
             }
             return arguments
         }

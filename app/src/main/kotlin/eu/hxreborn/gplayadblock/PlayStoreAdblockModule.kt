@@ -1,10 +1,10 @@
 package eu.hxreborn.gplayadblock
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
@@ -17,17 +17,21 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
-import java.io.File
+
+@PublishedApi
+internal lateinit var module: PlayStoreAdblockModule
 
 class PlayStoreAdblockModule : XposedModule() {
     private lateinit var processName: String
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
+        module = this
         processName = param.processName
         if (processName != TARGET_PACKAGE) return
-        log(Log.INFO, TAG, "loaded in $processName")
+        Logger.info("loaded in $processName")
     }
 
+    @SuppressLint("DiscouragedPrivateApi")
     override fun onPackageReady(param: PackageReadyParam) {
         if (param.packageName != TARGET_PACKAGE ||
             processName != TARGET_PACKAGE ||
@@ -43,7 +47,7 @@ class PlayStoreAdblockModule : XposedModule() {
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                 .intercept { chain -> interceptor.intercept(chain) }
         } catch (exception: Exception) {
-            log(Log.ERROR, TAG, "bootstrap hook installation failed", exception)
+            Logger.error("bootstrap hook installation failed", exception)
         }
     }
 
@@ -98,135 +102,77 @@ class PlayStoreAdblockModule : XposedModule() {
                         )
                     }
 
+            val versions = "targetV=$targetVersionCode moduleV=$moduleVersionCode"
             when (targets) {
                 is ResolvedTargets.Missing -> {
-                    log(
-                        Log.ERROR,
-                        TAG,
-                        "target resolution missing targetV=$targetVersionCode " +
-                            "moduleV=$moduleVersionCode reason=${targets.reason}",
-                    )
-                    notifyUnsupported(context, applicationInfo.dataDir, targetVersionCode)
+                    Logger.error("target resolution missing $versions reason=${targets.reason}")
+                    notifyFilteringUnavailable(context)
                 }
 
                 is ResolvedTargets.Resolved -> {
-                    val logger = { priority: Int, message: String, throwable: Throwable? ->
-                        if (throwable == null) {
-                            log(priority, TAG, message)
-                        } else {
-                            log(priority, TAG, message, throwable)
-                        }
-                    }
-
-                    log(
-                        Log.INFO,
-                        TAG,
-                        "target resolution loaded targetV=$targetVersionCode " +
-                            "moduleV=$moduleVersionCode method=${targets.streamDataMethod}",
+                    Logger.info(
+                        "target resolution loaded $versions method=${targets.streamDataMethod}",
                     )
-
-                    val installedGroups = mutableListOf<String>()
-                    val failedRequired = mutableListOf<String>()
-                    val failedSupplementary = mutableListOf<String>()
 
                     fun installGroup(
                         label: String,
-                        required: Boolean,
                         action: () -> Unit,
-                    ) {
+                    ): Boolean =
                         try {
                             action()
-                            installedGroups += label
+                            true
                         } catch (exception: Exception) {
-                            log(Log.ERROR, TAG, "hook group '$label' failed to install", exception)
-                            if (required) failedRequired += label else failedSupplementary += label
+                            Logger.error("hook group '$label' failed to install", exception)
+                            false
                         }
+
+                    installGroup("legacy stream") {
+                        StreamNodeFilter.install(this, classLoader, targets)
                     }
-                    installGroup("legacy stream", required = false) {
-                        StreamNodeFilter.install(this, classLoader, targets, logger)
+                    installGroup("search suggestion") {
+                        SearchSuggestionFilter.install(this, classLoader, targets)
                     }
-                    installGroup("search suggestion", required = false) {
-                        SearchSuggestionFilter.install(this, classLoader, targets, logger)
-                    }
-                    installGroup("stream cache", required = true) {
-                        StreamCacheFilter.install(this, classLoader, targets, logger)
-                    }
-                    installGroup("stream response", required = true) {
-                        StreamResponseFilter.install(this, classLoader, targets, logger)
-                    }
-                    val total =
-                        installedGroups.size + failedRequired.size + failedSupplementary.size
-                    val state =
-                        if (failedRequired.isEmpty()) {
-                            "filtering active"
-                        } else {
-                            "filtering inactive"
+                    val cacheInstalled =
+                        installGroup("stream cache") {
+                            StreamCacheFilter.install(this, classLoader, targets)
                         }
-                    val summary =
-                        buildString {
-                            append("hooks installed (${installedGroups.size}/$total), $state")
-                            if (failedRequired.isNotEmpty()) {
-                                append(", required failed: ${failedRequired.joinToString(", ")}")
-                            }
-                            if (failedSupplementary.isNotEmpty()) {
-                                append(
-                                    ", supplementary failed: " +
-                                        failedSupplementary.joinToString(", "),
-                                )
-                            }
+                    val responseInstalled =
+                        installGroup("stream response") {
+                            StreamResponseFilter.install(this, classLoader, targets)
                         }
-                    log(if (failedRequired.isEmpty()) Log.INFO else Log.WARN, TAG, summary)
-                    if (failedRequired.isNotEmpty()) {
-                        notifyUnsupported(context, applicationInfo.dataDir, targetVersionCode)
+
+                    if (cacheInstalled && responseInstalled) {
+                        Logger.info("filtering active")
+                    } else {
+                        Logger.warn("filtering inactive, required hook groups failed")
+                        notifyFilteringUnavailable(context)
                     }
                 }
             }
         } catch (exception: Exception) {
-            log(Log.ERROR, TAG, "deferred installation failed", exception)
+            Logger.error("deferred installation failed", exception)
+            notifyFilteringUnavailable(context)
         }
     }
 
     private companion object {
-        const val TAG = "PlayStoreAdblock"
-        const val UNSUPPORTED_TOAST_DELAY_MS = 3000L
-        const val UNSUPPORTED_MESSAGE =
-            "Play Store updated to a version this ad blocker does not support. " +
-                "Ads may reappear until the module is updated. This is not a crash. " +
-                "Force-stop Play Store, clear its cache, then reopen."
+        const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
+        const val FILTERING_UNAVAILABLE_MESSAGE =
+            "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
 
-        fun notifyUnsupported(
-            context: Context,
-            dataDir: String,
-            targetVersionCode: Long,
-        ) {
-            val marker = File(dataDir, "files/playstore-adblock/notified-$targetVersionCode.flag")
-            val alreadyNotified =
-                try {
-                    marker.exists()
-                } catch (_: Exception) {
-                    false
-                }
-            if (alreadyNotified) return
-            try {
-                marker.parentFile?.mkdirs()
-                marker.writeText("")
-            } catch (_: Exception) {
-            }
-            try {
-                Handler(Looper.getMainLooper()).postDelayed(
-                    {
-                        try {
-                            Toast
-                                .makeText(context, UNSUPPORTED_MESSAGE, Toast.LENGTH_LONG)
-                                .show()
-                        } catch (_: Exception) {
-                        }
-                    },
-                    UNSUPPORTED_TOAST_DELAY_MS,
-                )
-            } catch (_: Exception) {
-            }
+        fun notifyFilteringUnavailable(context: Context) {
+            Handler(Looper.getMainLooper()).postDelayed(
+                {
+                    try {
+                        Toast
+                            .makeText(context, FILTERING_UNAVAILABLE_MESSAGE, Toast.LENGTH_LONG)
+                            .show()
+                    } catch (_: Exception) {
+                    }
+                },
+                FILTERING_UNAVAILABLE_TOAST_DELAY_MS,
+            )
         }
     }
 }

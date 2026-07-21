@@ -1,6 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
-import android.util.Log
+import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -16,7 +16,6 @@ object StreamNodeFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        logger: (Int, String, Throwable?) -> Unit,
     ) {
         val method = targets.streamDataMethod.resolve(classLoader)
         val streamChildrenField = targets.streamChildrenField.resolve(classLoader)
@@ -77,7 +76,6 @@ object StreamNodeFilter {
                 classifier = classifier,
                 streamDataConstructor = streamDataConstructor,
                 hasMoreField = hasMoreField,
-                logger = logger,
             )
         module
             .hook(method)
@@ -94,7 +92,6 @@ object StreamNodeFilter {
         private val classifier: PresentationClassifier,
         private val streamDataConstructor: Constructor<*>,
         private val hasMoreField: Field,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
         private val errorLogged = AtomicBoolean()
@@ -105,7 +102,7 @@ object StreamNodeFilter {
                 filter(chain, result)
             } catch (exception: Exception) {
                 if (errorLogged.compareAndSet(false, true)) {
-                    logger(Log.ERROR, "stream filtering failed", exception)
+                    Logger.error("stream filtering failed", exception)
                 }
                 result
             }
@@ -157,14 +154,8 @@ object StreamNodeFilter {
                 )
             val firstCases = removedCases.filter(loggedCases::add)
             if (firstCases.isNotEmpty()) {
-                logger(
-                    Log.INFO,
-                    "removed sponsored stream nodes cases=${firstCases.joinToString(
-                        ",",
-                        transform = classifier::caseName,
-                    )}",
-                    null,
-                )
+                val cases = firstCases.joinToString(",", transform = classifier::caseName)
+                Logger.info("removed sponsored stream nodes cases=$cases")
             }
             return replacement
         }

@@ -1,6 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
-import android.util.Log
+import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -14,7 +14,6 @@ object StreamResponseFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        logger: (Int, String, Throwable?) -> Unit,
     ) {
         val cardAdMetadataFields =
             targets.cardAdMetadataFields
@@ -76,7 +75,6 @@ object StreamResponseFilter {
                     ),
                 classifier = classifier,
                 editor = editor,
-                logger = logger,
             )
         targets.responseMethods.forEach { methodRef ->
             val method = methodRef.resolve(classLoader)
@@ -84,7 +82,6 @@ object StreamResponseFilter {
                 ResponseInterceptor(
                     callbackName = methodRef.className,
                     transformer = transformer,
-                    logger = logger,
                 )
             module
                 .hook(method)
@@ -96,22 +93,20 @@ object StreamResponseFilter {
     private class ResponseInterceptor(
         private val callbackName: String,
         private val transformer: ResponseTransformer,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val pathLogged = AtomicBoolean()
         private val errorLogged = AtomicBoolean()
 
         fun intercept(chain: XposedInterface.Chain): Any? {
             if (pathLogged.compareAndSet(false, true)) {
-                logger(Log.INFO, "stream response path active callback=$callbackName", null)
+                Logger.info("stream response path active callback=$callbackName")
             }
             val replacement =
                 try {
                     chain.getArg(0)?.let(transformer::transform)
                 } catch (exception: Exception) {
                     if (errorLogged.compareAndSet(false, true)) {
-                        logger(
-                            Log.ERROR,
+                        Logger.error(
                             "stream response filtering failed callback=$callbackName",
                             exception,
                         )
@@ -142,7 +137,6 @@ object StreamResponseFilter {
         private val rootDefaultInstance: Any,
         private val classifier: PresentationClassifier,
         private val editor: ProtoEditor,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
         private val serializedLogged = AtomicBoolean()
@@ -197,11 +191,7 @@ object StreamResponseFilter {
                 adCasesById.keys.filterTo(HashSet(), referencedIds::contains)
             if (directRemovableIds.isEmpty()) {
                 if (unreferencedLogged.compareAndSet(false, true)) {
-                    logger(
-                        Log.WARN,
-                        "sponsored stream nodes were not referenced by response parents",
-                        null,
-                    )
+                    Logger.warn("sponsored stream nodes were not referenced by response parents")
                 }
                 return null
             }
@@ -247,11 +237,9 @@ object StreamResponseFilter {
                 directRemovableIds.mapNotNull(adCasesById::get).toSet().filter(loggedCases::add)
             val collapsedParentCount = removableIds.size - directRemovableIds.size
             if (removedCases.isNotEmpty()) {
-                logger(
-                    Log.INFO,
+                Logger.info(
                     "removed sponsored response nodes count=${directRemovableIds.size} " +
                         "cases=${removedCases.joinToString(",", transform = classifier::caseName)}",
-                    null,
                 )
             }
             if (collapsedParentCount > 0 && collapsedParentsLogged.compareAndSet(false, true)) {
@@ -264,24 +252,17 @@ object StreamResponseFilter {
                         .mapNotNull(nodePresentationField::get)
                         .map(classifier::classify)
                         .toSet()
-                logger(
-                    Log.INFO,
-                    "collapsed sponsored response parents count=$collapsedParentCount " +
-                        "cases=${collapsedCases.joinToString(
-                            ",",
-                            transform = classifier::caseName,
-                        )}",
-                    null,
+                val cases = collapsedCases.joinToString(",", transform = classifier::caseName)
+                Logger.info(
+                    "collapsed sponsored response parents count=$collapsedParentCount cases=$cases",
                 )
             }
             if (adCasesById.size != directRemovableIds.size &&
                 partiallyUnreferencedLogged.compareAndSet(false, true)
             ) {
-                logger(
-                    Log.WARN,
+                Logger.warn(
                     "retained ${adCasesById.size - directRemovableIds.size} " +
                         "unreferenced sponsored nodes",
-                    null,
                 )
             }
             return replacement
@@ -423,7 +404,7 @@ object StreamResponseFilter {
                 SERIALIZED_PAYLOAD -> {
                     if (payload == null) return null
                     if (serializedLogged.compareAndSet(false, true)) {
-                        logger(Log.INFO, "decoding serialized stream response payload", null)
+                        Logger.info("decoding serialized stream response payload")
                     }
                     editor.parse(defaultInstance, payload)
                 }

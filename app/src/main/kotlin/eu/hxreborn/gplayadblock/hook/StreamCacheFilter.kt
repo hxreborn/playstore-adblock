@@ -1,6 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
-import android.util.Log
+import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -15,7 +15,6 @@ object StreamCacheFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        logger: (Int, String, Throwable?) -> Unit,
     ) {
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
         val cardAdMetadataFields =
@@ -72,9 +71,7 @@ object StreamCacheFilter {
                         childKeyMethod = targets.childKeyMethod.resolve(classLoader),
                         classifier = classifier,
                         editor = editor,
-                        logger = logger,
                     ),
-                logger = logger,
             )
         module
             .hook(method)
@@ -84,14 +81,13 @@ object StreamCacheFilter {
 
     private class CacheAssemblyInterceptor(
         private val transformer: CacheGraphTransformer,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val pathLogged = AtomicBoolean()
         private val errorLogged = AtomicBoolean()
 
         fun intercept(chain: XposedInterface.Chain): Any? {
             if (pathLogged.compareAndSet(false, true)) {
-                logger(Log.INFO, "stream cache assembly path active", null)
+                Logger.info("stream cache assembly path active")
             }
             val replacement =
                 try {
@@ -102,7 +98,7 @@ object StreamCacheFilter {
                     )
                 } catch (exception: Exception) {
                     if (errorLogged.compareAndSet(false, true)) {
-                        logger(Log.ERROR, "stream cache filtering failed", exception)
+                        Logger.error("stream cache filtering failed", exception)
                     }
                     null
                 }
@@ -127,7 +123,6 @@ object StreamCacheFilter {
         private val childKeyMethod: Method,
         private val classifier: PresentationClassifier,
         private val editor: ProtoEditor,
-        private val logger: (Int, String, Throwable?) -> Unit,
     ) {
         private val loggedCases = ConcurrentHashMap.newKeySet<Int>()
         private val collapsedParentsLogged = AtomicBoolean()
@@ -208,11 +203,9 @@ object StreamCacheFilter {
             val removedCases =
                 directRemovableKeys.mapNotNull(adCasesByKey::get).toSet().filter(loggedCases::add)
             if (removedCases.isNotEmpty()) {
-                logger(
-                    Log.INFO,
+                Logger.info(
                     "removed sponsored cached nodes count=${directRemovableKeys.size} " +
                         "cases=${removedCases.joinToString(",", transform = classifier::caseName)}",
-                    null,
                 )
             }
             val collapsedParentCount =
@@ -233,14 +226,9 @@ object StreamCacheFilter {
                                 ?.let(::add)
                         }
                     }
-                logger(
-                    Log.INFO,
-                    "collapsed sponsored cached parents count=$collapsedParentCount " +
-                        "cases=${collapsedCases.joinToString(
-                            ",",
-                            transform = classifier::caseName,
-                        )}",
-                    null,
+                val cases = collapsedCases.joinToString(",", transform = classifier::caseName)
+                Logger.info(
+                    "collapsed sponsored cached parents count=$collapsedParentCount cases=$cases",
                 )
             }
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)

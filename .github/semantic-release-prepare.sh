@@ -3,7 +3,7 @@ set -euo pipefail
 
 VERSION="$1"
 IFS='.' read -r MAJOR MINOR PATCH <<<"$VERSION"
-CODE=$((MAJOR * 10000 + MINOR * 1000 + PATCH))
+CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
 
 sed -i "s/^version\.name=.*/version.name=$VERSION/" gradle.properties
 sed -i "s/^version\.code=.*/version.code=$CODE/" gradle.properties

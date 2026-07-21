@@ -1,0 +1,82 @@
+name: Mirror to Xposed-Modules-Repo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to mirror (e.g., v1.0.0)'
+        required: true
+
+concurrency:
+  group: mirror-release
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG_NAME: ${{ inputs.tag || github.event.release.tag_name }}
+
+    steps:
+      - name: Validate tag
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^v ]]; then
+            echo "::error::Tag must start with 'v'"
+            exit 1
+          fi
+
+      - name: Derive mirror tag
+        id: mirror_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          name=${TAG_NAME#v}
+          code=$(gh api "repos/$REPO/contents/gradle.properties" --jq '.content' | base64 -d \
+            | grep '^version\.code=' | cut -d= -f2)
+          echo "mirror_tag=${code}-${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch release info
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG_NAME" --repo "$REPO" --json name,isPrerelease \
+            --jq '"name=\(.name)\nprerelease=\(.isPrerelease)"' >> "$GITHUB_OUTPUT"
+
+          echo "body<<BODY_EOF" >> "$GITHUB_OUTPUT"
+          gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
+          echo "BODY_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p ./artifacts
+          gh release download "$TAG_NAME" \
+            --repo "$REPO" \
+            --pattern "playstore-adblock-v*.apk" \
+            --dir ./artifacts
+
+          apk_count=$(find ./artifacts -name '*.apk' | wc -l)
+          echo "Found $apk_count APK(s)"
+          [ "$apk_count" -gt 0 ] || { echo "::error::No APK found on release"; exit 1; }
+
+      - name: Create mirror release
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: Xposed-Modules-Repo/eu.hxreborn.gplayadblock
+          token: ${{ secrets.XPOSED_REPO_PAT }}
+          tag_name: ${{ steps.mirror_tag.outputs.mirror_tag }}
+          name: ${{ steps.release.outputs.name }}
+          body: ${{ steps.release.outputs.body }}
+          prerelease: ${{ steps.release.outputs.prerelease }}
+          files: ./artifacts/*.apk
+          fail_on_unmatched_files: true
+          make_latest: true

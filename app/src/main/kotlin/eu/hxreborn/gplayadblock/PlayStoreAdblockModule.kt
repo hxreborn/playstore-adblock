@@ -24,7 +24,8 @@ class PlayStoreAdblockModule : XposedModule() {
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         processName = param.processName
-        log(Log.INFO, TAG, "loaded in ${param.processName}")
+        if (processName != TARGET_PACKAGE) return
+        log(Log.INFO, TAG, "loaded in $processName")
     }
 
     override fun onPackageReady(param: PackageReadyParam) {

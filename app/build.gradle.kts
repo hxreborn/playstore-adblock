@@ -1,10 +1,3 @@
-import org.gradle.api.DefaultTask
-import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.TaskAction
-
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -22,9 +15,10 @@ val versionCodeProvider = providers.gradleProperty("version.code").map(String::t
 android {
     namespace = "eu.hxreborn.gplayadblock"
     compileSdk {
-        version = release(37) {
-            minorApiLevel = 0
-        }
+        version =
+            release(37) {
+                minorApiLevel = 0
+            }
     }
 
     defaultConfig {
@@ -120,21 +114,23 @@ dependencies {
     implementation(libs.dexkit)
 }
 
-val ktlintCheck = tasks.register<JavaExec>("ktlintCheck") {
-    group = "verification"
-    description = "Check Kotlin code style"
-    classpath = ktlint
-    mainClass.set("com.pinterest.ktlint.Main")
-    args("src/**/*.kt")
-}
+val ktlintCheck =
+    tasks.register<JavaExec>("ktlintCheck") {
+        group = "verification"
+        description = "Check Kotlin code style"
+        classpath = ktlint
+        mainClass.set("com.pinterest.ktlint.Main")
+        args("src/**/*.kt")
+    }
 
-val ktlintFormat = tasks.register<JavaExec>("ktlintFormat") {
-    group = "formatting"
-    description = "Format Kotlin code"
-    classpath = ktlint
-    mainClass.set("com.pinterest.ktlint.Main")
-    args("-F", "src/**/*.kt")
-}
+val ktlintFormat =
+    tasks.register<JavaExec>("ktlintFormat") {
+        group = "formatting"
+        description = "Format Kotlin code"
+        classpath = ktlint
+        mainClass.set("com.pinterest.ktlint.Main")
+        args("-F", "src/**/*.kt")
+    }
 
 abstract class GenerateXposedModuleProp : DefaultTask() {
     @get:Input
@@ -191,17 +187,18 @@ abstract class GenerateXposedModuleProp : DefaultTask() {
     }
 }
 
-val generateXposedModuleProp = tasks.register<GenerateXposedModuleProp>("generateXposedModuleProp") {
-    moduleId.set(cfgModuleId)
-    moduleName.set(cfgModuleName)
-    moduleAuthor.set(cfgModuleAuthor)
-    moduleDescription.set(cfgModuleDescription)
-    moduleVersionName.set(versionNameProvider)
-    moduleVersionCode.set(versionCodeProvider)
-    moduleMinApiVersion.set(cfgXposedApiMin)
-    moduleTargetApiVersion.set(cfgXposedApiTarget)
-    targetPackage.set(cfgTargetPackage)
-}
+val generateXposedModuleProp =
+    tasks.register<GenerateXposedModuleProp>("generateXposedModuleProp") {
+        moduleId.set(cfgModuleId)
+        moduleName.set(cfgModuleName)
+        moduleAuthor.set(cfgModuleAuthor)
+        moduleDescription.set(cfgModuleDescription)
+        moduleVersionName.set(versionNameProvider)
+        moduleVersionCode.set(versionCodeProvider)
+        moduleMinApiVersion.set(cfgXposedApiMin)
+        moduleTargetApiVersion.set(cfgXposedApiTarget)
+        targetPackage.set(cfgTargetPackage)
+    }
 
 androidComponents {
     onVariants { variant ->

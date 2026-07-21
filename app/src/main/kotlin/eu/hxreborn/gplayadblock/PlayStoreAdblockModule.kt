@@ -2,7 +2,10 @@ package eu.hxreborn.gplayadblock
 
 import android.app.Application
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
@@ -14,6 +17,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.File
 
 class PlayStoreAdblockModule : XposedModule() {
     private lateinit var processName: String
@@ -101,6 +105,7 @@ class PlayStoreAdblockModule : XposedModule() {
                         "target resolution missing targetV=$targetVersionCode " +
                             "moduleV=$moduleVersionCode reason=${targets.reason}",
                     )
+                    notifyUnsupported(context, applicationInfo.dataDir, targetVersionCode)
                 }
 
                 is ResolvedTargets.Resolved -> {
@@ -112,35 +117,67 @@ class PlayStoreAdblockModule : XposedModule() {
                         }
                     }
 
-                    fun installGroup(
-                        label: String,
-                        action: () -> Unit,
-                    ) {
-                        try {
-                            action()
-                            log(Log.INFO, TAG, "$label installed")
-                        } catch (exception: Exception) {
-                            log(Log.ERROR, TAG, "$label installation failed", exception)
-                        }
-                    }
-                    installGroup("legacy stream hook") {
-                        StreamNodeFilter.install(this, classLoader, targets, logger)
-                    }
-                    installGroup("search suggestion hook") {
-                        SearchSuggestionFilter.install(this, classLoader, targets, logger)
-                    }
-                    installGroup("stream cache hook") {
-                        StreamCacheFilter.install(this, classLoader, targets, logger)
-                    }
-                    installGroup("stream response hooks") {
-                        StreamResponseFilter.install(this, classLoader, targets, logger)
-                    }
                     log(
                         Log.INFO,
                         TAG,
                         "target resolution loaded targetV=$targetVersionCode " +
                             "moduleV=$moduleVersionCode method=${targets.streamDataMethod}",
                     )
+
+                    val installedGroups = mutableListOf<String>()
+                    val failedRequired = mutableListOf<String>()
+                    val failedSupplementary = mutableListOf<String>()
+
+                    fun installGroup(
+                        label: String,
+                        required: Boolean,
+                        action: () -> Unit,
+                    ) {
+                        try {
+                            action()
+                            installedGroups += label
+                        } catch (exception: Exception) {
+                            log(Log.ERROR, TAG, "hook group '$label' failed to install", exception)
+                            if (required) failedRequired += label else failedSupplementary += label
+                        }
+                    }
+                    installGroup("legacy stream", required = false) {
+                        StreamNodeFilter.install(this, classLoader, targets, logger)
+                    }
+                    installGroup("search suggestion", required = false) {
+                        SearchSuggestionFilter.install(this, classLoader, targets, logger)
+                    }
+                    installGroup("stream cache", required = true) {
+                        StreamCacheFilter.install(this, classLoader, targets, logger)
+                    }
+                    installGroup("stream response", required = true) {
+                        StreamResponseFilter.install(this, classLoader, targets, logger)
+                    }
+                    val total =
+                        installedGroups.size + failedRequired.size + failedSupplementary.size
+                    val state =
+                        if (failedRequired.isEmpty()) {
+                            "filtering active"
+                        } else {
+                            "filtering inactive"
+                        }
+                    val summary =
+                        buildString {
+                            append("hooks installed (${installedGroups.size}/$total), $state")
+                            if (failedRequired.isNotEmpty()) {
+                                append(", required failed: ${failedRequired.joinToString(", ")}")
+                            }
+                            if (failedSupplementary.isNotEmpty()) {
+                                append(
+                                    ", supplementary failed: " +
+                                        failedSupplementary.joinToString(", "),
+                                )
+                            }
+                        }
+                    log(if (failedRequired.isEmpty()) Log.INFO else Log.WARN, TAG, summary)
+                    if (failedRequired.isNotEmpty()) {
+                        notifyUnsupported(context, applicationInfo.dataDir, targetVersionCode)
+                    }
                 }
             }
         } catch (exception: Exception) {
@@ -150,6 +187,45 @@ class PlayStoreAdblockModule : XposedModule() {
 
     private companion object {
         const val TAG = "PlayStoreAdblock"
+        const val UNSUPPORTED_TOAST_DELAY_MS = 3000L
+        const val UNSUPPORTED_MESSAGE =
+            "Play Store updated to a version this ad blocker does not support. " +
+                "Ads may reappear until the module is updated. This is not a crash. " +
+                "Force-stop Play Store, clear its cache, then reopen."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
+
+        fun notifyUnsupported(
+            context: Context,
+            dataDir: String,
+            targetVersionCode: Long,
+        ) {
+            val marker = File(dataDir, "files/playstore-adblock/notified-$targetVersionCode.flag")
+            val alreadyNotified =
+                try {
+                    marker.exists()
+                } catch (_: Exception) {
+                    false
+                }
+            if (alreadyNotified) return
+            try {
+                marker.parentFile?.mkdirs()
+                marker.writeText("")
+            } catch (_: Exception) {
+            }
+            try {
+                Handler(Looper.getMainLooper()).postDelayed(
+                    {
+                        try {
+                            Toast
+                                .makeText(context, UNSUPPORTED_MESSAGE, Toast.LENGTH_LONG)
+                                .show()
+                        } catch (_: Exception) {
+                        }
+                    },
+                    UNSUPPORTED_TOAST_DELAY_MS,
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 }

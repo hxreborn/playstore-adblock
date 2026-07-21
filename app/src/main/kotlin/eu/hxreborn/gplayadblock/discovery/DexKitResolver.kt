@@ -767,248 +767,20 @@ object DexKitResolver {
             childKeyMethods.singleOrNull()
                 ?: return missing("child key methods=${childKeyMethods.size}")
 
-        val protobufMessageClass =
-            responseClass.superClass
-                ?: return missing("protobuf message base class missing")
-        val protobufSerializableClass =
-            protobufMessageClass.superClass
-                ?: return missing("protobuf serializable base class missing")
-        val protobufToByteArrayMethods =
-            protobufSerializableClass.methods.filter { method ->
-                !Modifier.isStatic(method.modifiers) &&
-                    method.paramCount == 0 &&
-                    method.returnTypeName == "byte[]"
+        val protobufResult =
+            resolveProtobuf(responseClass, cacheCallbackMethod, clusterCaseField)
+        val protobuf =
+            when (protobufResult) {
+                is Resolution.Success -> protobufResult.value
+                is Resolution.Failure -> return missing(protobufResult.reason)
             }
-        val protobufToByteArrayMethod =
-            protobufToByteArrayMethods.singleOrNull()
-                ?: return missing(
-                    "protobuf byte array methods=${protobufToByteArrayMethods.size}",
-                )
-        val protobufNewBuilderMethods =
-            protobufMessageClass.methods.filter { method ->
-                !Modifier.isStatic(method.modifiers) &&
-                    method.paramCount == 0 &&
-                    method.returnType?.fields?.count { field ->
-                        !field.isStatic && field.typeName == protobufMessageClass.name
-                    } == 2
+        val suggestionResult =
+            resolveSuggestions(bridge, adMetadataClass, adPresenceField)
+        val suggestions =
+            when (suggestionResult) {
+                is Resolution.Success -> suggestionResult.value
+                is Resolution.Failure -> return missing(suggestionResult.reason)
             }
-        val protobufNewBuilderMethod =
-            protobufNewBuilderMethods.singleOrNull()
-                ?: return missing("protobuf new builder methods=${protobufNewBuilderMethods.size}")
-        val protobufBuilderClass =
-            protobufNewBuilderMethod.returnType
-                ?: return missing("protobuf builder class missing")
-        val protobufBuilderMessageFields =
-            protobufBuilderClass.fields.filter { field ->
-                !field.isStatic &&
-                    !Modifier.isFinal(field.modifiers) &&
-                    field.typeName == protobufMessageClass.name
-            }
-        val protobufBuilderMessageField =
-            protobufBuilderMessageFields.singleOrNull()
-                ?: return missing(
-                    "protobuf builder message fields=${protobufBuilderMessageFields.size}",
-                )
-        val protobufMergeMethods =
-            protobufBuilderClass.methods
-                .filter { method ->
-                    !Modifier.isStatic(method.modifiers) &&
-                        method.paramTypeNames == listOf(protobufMessageClass.name) &&
-                        method.returnTypeName == "void" &&
-                        PROTOBUF_MERGE_ANCHOR in method.usingStrings
-                }.distinctBy(MethodData::descriptor)
-        val protobufMergeMethod =
-            protobufMergeMethods.singleOrNull()
-                ?: return missing("protobuf merge methods=${protobufMergeMethods.size}")
-        val protobufBuildMethods =
-            cacheCallbackMethod.invokes
-                .filter { method ->
-                    method.declaredClassName == protobufBuilderClass.name &&
-                        method.paramCount == 0 &&
-                        method.returnTypeName == protobufMessageClass.name
-                }.distinctBy(MethodData::descriptor)
-        val protobufBuildMethod =
-            protobufBuildMethods.singleOrNull()
-                ?: return missing("protobuf build methods=${protobufBuildMethods.size}")
-        val protobufParseMethods =
-            protobufMessageClass.methods.filter { method ->
-                Modifier.isStatic(method.modifiers) &&
-                    method.paramTypeNames.size == 5 &&
-                    method.paramTypeNames[0] == protobufMessageClass.name &&
-                    method.paramTypeNames[1] == "byte[]" &&
-                    method.paramTypeNames[2] == "int" &&
-                    method.paramTypeNames[3] == "int" &&
-                    method.returnTypeName == protobufMessageClass.name
-            }
-        val protobufParseMethod =
-            protobufParseMethods.singleOrNull()
-                ?: return missing("protobuf parse methods=${protobufParseMethods.size}")
-        val registryClass =
-            protobufParseMethod.paramTypes.getOrNull(4)
-                ?: return missing("protobuf registry class missing")
-        val protobufRegistryFactories =
-            registryClass.methods.filter { method ->
-                Modifier.isStatic(method.modifiers) &&
-                    method.paramCount == 0 &&
-                    method.returnTypeName == registryClass.name
-            }
-        val protobufRegistryFactory =
-            protobufRegistryFactories.singleOrNull()
-                ?: return missing("protobuf registry factories=${protobufRegistryFactories.size}")
-
-        val protobufBuilderBaseClass =
-            protobufBuilderClass.superClass
-                ?: return missing("protobuf builder base class missing")
-        val byteStringConsumerMethods =
-            cacheCallbackMethod.invokes
-                .filter { method ->
-                    method.declaredClassName == protobufBuilderBaseClass.name &&
-                        !Modifier.isStatic(method.modifiers) &&
-                        method.paramCount == 1 &&
-                        method.returnTypeName == "void" &&
-                        method.paramTypes.single().methods.any { parameterMethod ->
-                            !Modifier.isStatic(parameterMethod.modifiers) &&
-                                parameterMethod.paramCount == 0 &&
-                                parameterMethod.returnTypeName == "byte[]"
-                        }
-                }.distinctBy(MethodData::descriptor)
-        val byteStringConsumerMethod =
-            byteStringConsumerMethods.singleOrNull()
-                ?: return missing("byte string consumers=${byteStringConsumerMethods.size}")
-        val byteStringClass = byteStringConsumerMethod.paramTypes.single()
-        val byteStringToByteArrayMethods =
-            byteStringClass.methods
-                .filter { method ->
-                    !Modifier.isStatic(method.modifiers) &&
-                        method.paramCount == 0 &&
-                        method.returnTypeName == "byte[]"
-                }.distinctBy(MethodData::descriptor)
-        val byteStringToByteArrayMethod =
-            byteStringToByteArrayMethods.singleOrNull()
-                ?: return missing(
-                    "byte string conversion methods=${byteStringToByteArrayMethods.size}",
-                )
-        val clusterServerLogsFields =
-            clusterCaseField.declaredClass
-                ?.fields
-                .orEmpty()
-                .filter { field ->
-                    !field.isStatic && field.typeName == byteStringClass.name
-                }
-        val clusterServerLogsField =
-            clusterServerLogsFields.singleOrNull()
-                ?: return missing(
-                    "cluster server logs fields=${clusterServerLogsFields.size}",
-                )
-
-        val remoteSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = remoteSuggestionAnchors
-                }
-            }
-        val remoteSuggestionClass =
-            remoteSuggestionClasses.singleOrNull()
-                ?: return missing("remote suggestion candidates=${remoteSuggestionClasses.size}")
-        val remoteSuggestionConstructors =
-            remoteSuggestionClass.methods.filter { method ->
-                method.isConstructor && method.paramTypeNames == remoteSuggestionParameters
-            }
-        val remoteSuggestionConstructor =
-            remoteSuggestionConstructors.singleOrNull()
-                ?: return missing(
-                    "remote suggestion constructors=${remoteSuggestionConstructors.size}",
-                )
-        val remoteConstructorEvidence =
-            bridge.findMethod {
-                matcher {
-                    descriptor = remoteSuggestionConstructor.descriptor
-                    usingNumbers = listOf(-1, 2, 4, 8, 16, 32, 64)
-                }
-            }
-        if (remoteConstructorEvidence.size != 1) {
-            return missing("remote constructor evidence=${remoteConstructorEvidence.size}")
-        }
-        val remoteFieldTypes =
-            remoteSuggestionClass.fields
-                .filter { field -> !field.isStatic }
-                .groupingBy(FieldData::typeName)
-                .eachCount()
-        val expectedRemoteFieldTypes =
-            mapOf(
-                "java.util.List" to 1,
-                "int" to 2,
-                "java.lang.Integer" to 1,
-                "byte[]" to 1,
-                "boolean" to 2,
-            )
-        if (remoteFieldTypes != expectedRemoteFieldTypes) {
-            return missing("remote suggestion field shape=$remoteFieldTypes")
-        }
-
-        val appSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = appSuggestionAnchors
-                }
-            }
-        val appSuggestionClass =
-            appSuggestionClasses.singleOrNull()
-                ?: return missing("app suggestion candidates=${appSuggestionClasses.size}")
-        val appSuggestionConstructors =
-            appSuggestionClass.methods.filter { method ->
-                method.isConstructor &&
-                    method.paramTypeNames.size == 12 &&
-                    method.paramTypeNames[0] == "java.lang.String" &&
-                    method.paramTypeNames[1] == "int" &&
-                    method.paramTypeNames[3] == "int" &&
-                    method.paramTypeNames[5] == "boolean" &&
-                    method.paramTypeNames[6] == "boolean"
-            }
-        val appSuggestionConstructor =
-            appSuggestionConstructors.singleOrNull()
-                ?: return missing("app suggestion constructors=${appSuggestionConstructors.size}")
-        val adInfoType = appSuggestionConstructor.paramTypeNames[11]
-        val suggestionAdInfoFields =
-            appSuggestionClass.fields.filter { field ->
-                !field.isStatic && field.typeName == adInfoType
-            }
-        val suggestionAdInfoField =
-            suggestionAdInfoFields.singleOrNull()
-                ?: return missing("suggestion ad info fields=${suggestionAdInfoFields.size}")
-        val metadataAdInfoFields =
-            adMetadataClass.fields.filter { field ->
-                !field.isStatic && field.typeName == adInfoType
-            }
-        val metadataAdInfoField =
-            metadataAdInfoFields.singleOrNull()
-                ?: return missing("metadata ad info fields=${metadataAdInfoFields.size}")
-        val adInfoAccessorMethods =
-            metadataAdInfoField.readers
-                .filter { method ->
-                    Modifier.isStatic(method.modifiers) &&
-                        method.paramCount == 1 &&
-                        method.returnTypeName == adInfoType &&
-                        method.usingFields.any { usage ->
-                            usage.field.descriptor == adPresenceField.descriptor
-                        }
-                }.distinctBy(MethodData::descriptor)
-        if (adInfoAccessorMethods.size != 1) {
-            return missing("ad info accessor methods=${adInfoAccessorMethods.size}")
-        }
-        val commonSuggestionProducers =
-            remoteSuggestionConstructor.callers
-                .map(MethodData::declaredClassName)
-                .toSet()
-                .intersect(
-                    appSuggestionConstructor.callers
-                        .map(MethodData::declaredClassName)
-                        .filterNot { className -> className == appSuggestionClass.name }
-                        .toSet(),
-                )
-        if (commonSuggestionProducers.size != 1) {
-            return missing("common suggestion producers=${commonSuggestionProducers.size}")
-        }
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -1021,7 +793,7 @@ object DexKitResolver {
             presentationPayloadField = presentationPayloadField.toRef(),
             clusterCaseField = clusterCaseField.toRef(),
             clusterPayloadField = clusterPayloadField.toRef(),
-            clusterServerLogsField = clusterServerLogsField.toRef(),
+            clusterServerLogsField = protobuf.clusterServerLogsField.toRef(),
             cardKindField = cardKindField.toRef(),
             cardPayloadField = cardPayloadField.toRef(),
             cardAdMetadataFields = cardAdMetadataFields.map { field -> field.toRef() },
@@ -1046,19 +818,323 @@ object DexKitResolver {
             cachePageBoundariesField = cachePageBoundariesField.toRef(),
             cachePageBoundariesCopyMethod = cachePageBoundariesCopyMethod.toRef(),
             childKeyMethod = childKeyMethod.toRef(),
-            protobufNewBuilderMethod = protobufNewBuilderMethod.toRef(),
-            protobufMergeMethod = protobufMergeMethod.toRef(),
-            protobufBuildMethod = protobufBuildMethod.toRef(),
-            protobufBuilderMessageField = protobufBuilderMessageField.toRef(),
-            protobufParseMethod = protobufParseMethod.toRef(),
-            protobufRegistryFactory = protobufRegistryFactory.toRef(),
-            byteStringToByteArrayMethod = byteStringToByteArrayMethod.toRef(),
-            protobufToByteArrayMethod = protobufToByteArrayMethod.toRef(),
+            protobufNewBuilderMethod = protobuf.newBuilderMethod.toRef(),
+            protobufMergeMethod = protobuf.mergeMethod.toRef(),
+            protobufBuildMethod = protobuf.buildMethod.toRef(),
+            protobufBuilderMessageField = protobuf.builderMessageField.toRef(),
+            protobufParseMethod = protobuf.parseMethod.toRef(),
+            protobufRegistryFactory = protobuf.registryFactory.toRef(),
+            byteStringToByteArrayMethod = protobuf.byteStringToByteArrayMethod.toRef(),
+            protobufToByteArrayMethod = protobuf.protobufToByteArrayMethod.toRef(),
             repeatedListCopyMethod = repeatedListCopyMethod.toRef(),
-            searchSuggestionConstructor = remoteSuggestionConstructor.toConstructorRef(),
-            suggestionAdInfoField = suggestionAdInfoField.toRef(),
+            searchSuggestionConstructor =
+                suggestions.remoteSuggestionConstructor.toConstructorRef(),
+            suggestionAdInfoField = suggestions.suggestionAdInfoField.toRef(),
         )
     }
+
+    private fun resolveProtobuf(
+        responseClass: ClassData,
+        cacheCallbackMethod: MethodData,
+        clusterCaseField: FieldData,
+    ): Resolution<ProtobufTargets> {
+        val protobufMessageClass =
+            responseClass.superClass
+                ?: return fail("protobuf message base class missing")
+        val protobufSerializableClass =
+            protobufMessageClass.superClass
+                ?: return fail("protobuf serializable base class missing")
+        val protobufToByteArrayMethods =
+            protobufSerializableClass.methods.filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.paramCount == 0 &&
+                    method.returnTypeName == "byte[]"
+            }
+        val protobufToByteArrayMethod =
+            protobufToByteArrayMethods.singleOrNull()
+                ?: return fail(
+                    "protobuf byte array methods=${protobufToByteArrayMethods.size}",
+                )
+        val protobufNewBuilderMethods =
+            protobufMessageClass.methods.filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.paramCount == 0 &&
+                    method.returnType?.fields?.count { field ->
+                        !field.isStatic && field.typeName == protobufMessageClass.name
+                    } == 2
+            }
+        val protobufNewBuilderMethod =
+            protobufNewBuilderMethods.singleOrNull()
+                ?: return fail("protobuf new builder methods=${protobufNewBuilderMethods.size}")
+        val protobufBuilderClass =
+            protobufNewBuilderMethod.returnType
+                ?: return fail("protobuf builder class missing")
+        val protobufBuilderMessageFields =
+            protobufBuilderClass.fields.filter { field ->
+                !field.isStatic &&
+                    !Modifier.isFinal(field.modifiers) &&
+                    field.typeName == protobufMessageClass.name
+            }
+        val protobufBuilderMessageField =
+            protobufBuilderMessageFields.singleOrNull()
+                ?: return fail(
+                    "protobuf builder message fields=${protobufBuilderMessageFields.size}",
+                )
+        val protobufMergeMethods =
+            protobufBuilderClass.methods
+                .filter { method ->
+                    !Modifier.isStatic(method.modifiers) &&
+                        method.paramTypeNames == listOf(protobufMessageClass.name) &&
+                        method.returnTypeName == "void" &&
+                        PROTOBUF_MERGE_ANCHOR in method.usingStrings
+                }.distinctBy(MethodData::descriptor)
+        val protobufMergeMethod =
+            protobufMergeMethods.singleOrNull()
+                ?: return fail("protobuf merge methods=${protobufMergeMethods.size}")
+        val protobufBuildMethods =
+            cacheCallbackMethod.invokes
+                .filter { method ->
+                    method.declaredClassName == protobufBuilderClass.name &&
+                        method.paramCount == 0 &&
+                        method.returnTypeName == protobufMessageClass.name
+                }.distinctBy(MethodData::descriptor)
+        val protobufBuildMethod =
+            protobufBuildMethods.singleOrNull()
+                ?: return fail("protobuf build methods=${protobufBuildMethods.size}")
+        val protobufParseMethods =
+            protobufMessageClass.methods.filter { method ->
+                Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames.size == 5 &&
+                    method.paramTypeNames[0] == protobufMessageClass.name &&
+                    method.paramTypeNames[1] == "byte[]" &&
+                    method.paramTypeNames[2] == "int" &&
+                    method.paramTypeNames[3] == "int" &&
+                    method.returnTypeName == protobufMessageClass.name
+            }
+        val protobufParseMethod =
+            protobufParseMethods.singleOrNull()
+                ?: return fail("protobuf parse methods=${protobufParseMethods.size}")
+        val registryClass =
+            protobufParseMethod.paramTypes.getOrNull(4)
+                ?: return fail("protobuf registry class missing")
+        val protobufRegistryFactories =
+            registryClass.methods.filter { method ->
+                Modifier.isStatic(method.modifiers) &&
+                    method.paramCount == 0 &&
+                    method.returnTypeName == registryClass.name
+            }
+        val protobufRegistryFactory =
+            protobufRegistryFactories.singleOrNull()
+                ?: return fail("protobuf registry factories=${protobufRegistryFactories.size}")
+
+        val protobufBuilderBaseClass =
+            protobufBuilderClass.superClass
+                ?: return fail("protobuf builder base class missing")
+        val byteStringConsumerMethods =
+            cacheCallbackMethod.invokes
+                .filter { method ->
+                    method.declaredClassName == protobufBuilderBaseClass.name &&
+                        !Modifier.isStatic(method.modifiers) &&
+                        method.paramCount == 1 &&
+                        method.returnTypeName == "void" &&
+                        method.paramTypes.single().methods.any { parameterMethod ->
+                            !Modifier.isStatic(parameterMethod.modifiers) &&
+                                parameterMethod.paramCount == 0 &&
+                                parameterMethod.returnTypeName == "byte[]"
+                        }
+                }.distinctBy(MethodData::descriptor)
+        val byteStringConsumerMethod =
+            byteStringConsumerMethods.singleOrNull()
+                ?: return fail("byte string consumers=${byteStringConsumerMethods.size}")
+        val byteStringClass = byteStringConsumerMethod.paramTypes.single()
+        val byteStringToByteArrayMethods =
+            byteStringClass.methods
+                .filter { method ->
+                    !Modifier.isStatic(method.modifiers) &&
+                        method.paramCount == 0 &&
+                        method.returnTypeName == "byte[]"
+                }.distinctBy(MethodData::descriptor)
+        val byteStringToByteArrayMethod =
+            byteStringToByteArrayMethods.singleOrNull()
+                ?: return fail(
+                    "byte string conversion methods=${byteStringToByteArrayMethods.size}",
+                )
+        val clusterServerLogsFields =
+            clusterCaseField.declaredClass
+                ?.fields
+                .orEmpty()
+                .filter { field ->
+                    !field.isStatic && field.typeName == byteStringClass.name
+                }
+        val clusterServerLogsField =
+            clusterServerLogsFields.singleOrNull()
+                ?: return fail(
+                    "cluster server logs fields=${clusterServerLogsFields.size}",
+                )
+        return Resolution.Success(
+            ProtobufTargets(
+                newBuilderMethod = protobufNewBuilderMethod,
+                mergeMethod = protobufMergeMethod,
+                buildMethod = protobufBuildMethod,
+                builderMessageField = protobufBuilderMessageField,
+                parseMethod = protobufParseMethod,
+                registryFactory = protobufRegistryFactory,
+                byteStringToByteArrayMethod = byteStringToByteArrayMethod,
+                protobufToByteArrayMethod = protobufToByteArrayMethod,
+                clusterServerLogsField = clusterServerLogsField,
+            ),
+        )
+    }
+
+    private fun resolveSuggestions(
+        bridge: DexKitBridge,
+        adMetadataClass: ClassData,
+        adPresenceField: FieldData,
+    ): Resolution<SuggestionTargets> {
+        val remoteSuggestionClasses =
+            bridge.findClass {
+                matcher {
+                    usingStrings = remoteSuggestionAnchors
+                }
+            }
+        val remoteSuggestionClass =
+            remoteSuggestionClasses.singleOrNull()
+                ?: return fail("remote suggestion candidates=${remoteSuggestionClasses.size}")
+        val remoteSuggestionConstructors =
+            remoteSuggestionClass.methods.filter { method ->
+                method.isConstructor && method.paramTypeNames == remoteSuggestionParameters
+            }
+        val remoteSuggestionConstructor =
+            remoteSuggestionConstructors.singleOrNull()
+                ?: return fail(
+                    "remote suggestion constructors=${remoteSuggestionConstructors.size}",
+                )
+        val remoteConstructorEvidence =
+            bridge.findMethod {
+                matcher {
+                    descriptor = remoteSuggestionConstructor.descriptor
+                    usingNumbers = listOf(-1, 2, 4, 8, 16, 32, 64)
+                }
+            }
+        if (remoteConstructorEvidence.size != 1) {
+            return fail("remote constructor evidence=${remoteConstructorEvidence.size}")
+        }
+        val remoteFieldTypes =
+            remoteSuggestionClass.fields
+                .filter { field -> !field.isStatic }
+                .groupingBy(FieldData::typeName)
+                .eachCount()
+        val expectedRemoteFieldTypes =
+            mapOf(
+                "java.util.List" to 1,
+                "int" to 2,
+                "java.lang.Integer" to 1,
+                "byte[]" to 1,
+                "boolean" to 2,
+            )
+        if (remoteFieldTypes != expectedRemoteFieldTypes) {
+            return fail("remote suggestion field shape=$remoteFieldTypes")
+        }
+
+        val appSuggestionClasses =
+            bridge.findClass {
+                matcher {
+                    usingStrings = appSuggestionAnchors
+                }
+            }
+        val appSuggestionClass =
+            appSuggestionClasses.singleOrNull()
+                ?: return fail("app suggestion candidates=${appSuggestionClasses.size}")
+        val appSuggestionConstructors =
+            appSuggestionClass.methods.filter { method ->
+                method.isConstructor &&
+                    method.paramTypeNames.size == 12 &&
+                    method.paramTypeNames[0] == "java.lang.String" &&
+                    method.paramTypeNames[1] == "int" &&
+                    method.paramTypeNames[3] == "int" &&
+                    method.paramTypeNames[5] == "boolean" &&
+                    method.paramTypeNames[6] == "boolean"
+            }
+        val appSuggestionConstructor =
+            appSuggestionConstructors.singleOrNull()
+                ?: return fail("app suggestion constructors=${appSuggestionConstructors.size}")
+        val adInfoType = appSuggestionConstructor.paramTypeNames[11]
+        val suggestionAdInfoFields =
+            appSuggestionClass.fields.filter { field ->
+                !field.isStatic && field.typeName == adInfoType
+            }
+        val suggestionAdInfoField =
+            suggestionAdInfoFields.singleOrNull()
+                ?: return fail("suggestion ad info fields=${suggestionAdInfoFields.size}")
+        val metadataAdInfoFields =
+            adMetadataClass.fields.filter { field ->
+                !field.isStatic && field.typeName == adInfoType
+            }
+        val metadataAdInfoField =
+            metadataAdInfoFields.singleOrNull()
+                ?: return fail("metadata ad info fields=${metadataAdInfoFields.size}")
+        val adInfoAccessorMethods =
+            metadataAdInfoField.readers
+                .filter { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.paramCount == 1 &&
+                        method.returnTypeName == adInfoType &&
+                        method.usingFields.any { usage ->
+                            usage.field.descriptor == adPresenceField.descriptor
+                        }
+                }.distinctBy(MethodData::descriptor)
+        if (adInfoAccessorMethods.size != 1) {
+            return fail("ad info accessor methods=${adInfoAccessorMethods.size}")
+        }
+        val commonSuggestionProducers =
+            remoteSuggestionConstructor.callers
+                .map(MethodData::declaredClassName)
+                .toSet()
+                .intersect(
+                    appSuggestionConstructor.callers
+                        .map(MethodData::declaredClassName)
+                        .filterNot { className -> className == appSuggestionClass.name }
+                        .toSet(),
+                )
+        if (commonSuggestionProducers.size != 1) {
+            return fail("common suggestion producers=${commonSuggestionProducers.size}")
+        }
+        return Resolution.Success(
+            SuggestionTargets(
+                remoteSuggestionConstructor = remoteSuggestionConstructor,
+                suggestionAdInfoField = suggestionAdInfoField,
+            ),
+        )
+    }
+
+    private fun fail(reason: String): Resolution<Nothing> = Resolution.Failure(reason)
+
+    private sealed interface Resolution<out T> {
+        data class Success<T>(
+            val value: T,
+        ) : Resolution<T>
+
+        data class Failure(
+            val reason: String,
+        ) : Resolution<Nothing>
+    }
+
+    private class ProtobufTargets(
+        val newBuilderMethod: MethodData,
+        val mergeMethod: MethodData,
+        val buildMethod: MethodData,
+        val builderMessageField: FieldData,
+        val parseMethod: MethodData,
+        val registryFactory: MethodData,
+        val byteStringToByteArrayMethod: MethodData,
+        val protobufToByteArrayMethod: MethodData,
+        val clusterServerLogsField: FieldData,
+    )
+
+    private class SuggestionTargets(
+        val remoteSuggestionConstructor: MethodData,
+        val suggestionAdInfoField: FieldData,
+    )
 
     private fun streamDataConstructor(method: MethodData): MethodData? =
         method.returnType?.methods?.singleOrNull { constructor ->

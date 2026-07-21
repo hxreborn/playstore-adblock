@@ -1,8 +1,7 @@
 <h1 align="center">
   <picture>
-    <!-- banner source: assets/banner_dark_v3.psd -->
-    <source media="(prefers-color-scheme: dark)" srcset="assets/banner_dark.png">
-    <img src="assets/banner_light.png" alt="Google Play Store Adblock">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/banner_dark.png">
+    <img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/banner_light.png" alt="Google Play Store Adblock">
   </picture>
 </h1>
 
@@ -25,8 +24,8 @@
     <th>Patched</th>
   </tr>
   <tr>
-    <td><img src="assets/before.png" width="250" alt="Stock: sponsored app above the real result"></td>
-    <td><img src="assets/after.png" width="250" alt="Patched: sponsored app removed"></td>
+    <td><img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/before.png" width="250" alt="Stock: sponsored app above the real result"></td>
+    <td><img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/after.png" width="250" alt="Patched: sponsored app removed"></td>
   </tr>
 </table>
 
@@ -42,7 +41,7 @@
 
 ## Install
 
-1. Install APK from [Releases](../../releases)
+1. Install APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases)
 2. Enable the module in your Xposed manager, scoped to Google Play Store (`com.android.vending`)
 3. Force-stop the Play Store so it restarts with the module active
 
@@ -55,4 +54,4 @@ Also dislike ads in Google Discover, the launcher's -1 screen, or Google News? T
 
 ## License
 
-[![GPL-3.0-only](https://img.shields.io/badge/LICENSE-GPL--3.0--only-%23A42E2B?style=for-the-badge&logo=gnu&logoColor=white&logoPosition=right)](LICENSE)
+[![GPL-3.0-only](https://img.shields.io/badge/LICENSE-GPL--3.0--only-%23A42E2B?style=for-the-badge&logo=gnu&logoColor=white&logoPosition=right)](https://github.com/hxreborn/playstore-adblock/blob/master/LICENSE)

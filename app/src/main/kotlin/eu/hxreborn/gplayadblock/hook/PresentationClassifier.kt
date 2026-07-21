@@ -72,15 +72,19 @@ class PresentationClassifier(
     private fun hasAdSlotMetadata(cluster: Any): Boolean {
         val serverLogs = clusterServerLogsField.get(cluster) ?: return false
         val bytes = byteStringToByteArrayMethod.invoke(serverLogs) as? ByteArray ?: return false
-        val marker =
-            lengthDelimitedField(bytes, 37)
-                ?.let { value -> lengthDelimitedField(value, 2) }
-                ?.let { value -> lengthDelimitedField(value, 4) }
-                ?.let { value -> lengthDelimitedField(value, 1) }
-                ?.let { value -> lengthDelimitedField(value, 1) }
-                ?.toString(Charsets.UTF_8)
-                ?: return false
-        return marker.contains("ads_slot_") || marker.contains("sponsored_cluster")
+        return bytes.containsSubsequence(AD_SLOT_MARKER) ||
+            bytes.containsSubsequence(SPONSORED_CLUSTER_MARKER)
+    }
+
+    private fun ByteArray.containsSubsequence(needle: ByteArray): Boolean {
+        if (needle.isEmpty() || needle.size > size) return false
+        outer@ for (start in 0..size - needle.size) {
+            for (offset in needle.indices) {
+                if (this[start + offset] != needle[offset]) continue@outer
+            }
+            return true
+        }
+        return false
     }
 
     private fun lengthDelimitedField(
@@ -210,6 +214,8 @@ class PresentationClassifier(
         const val GENERIC_AD_CLUSTER = -2
         const val GENERIC_AD_DISCLOSURE_CLUSTER = -3
         const val AD_OVERFLOW_ENUM = 3
+        val AD_SLOT_MARKER = "ads_slot_".toByteArray(Charsets.US_ASCII)
+        val SPONSORED_CLUSTER_MARKER = "sponsored_cluster".toByteArray(Charsets.US_ASCII)
     }
 
     private data class Varint(

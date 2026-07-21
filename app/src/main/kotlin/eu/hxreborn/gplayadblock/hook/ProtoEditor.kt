@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 
@@ -49,5 +50,25 @@ class ProtoEditor(
         mutable.clear()
         mutable.addAll(values)
         field.set(owner, mutable)
+    }
+
+    companion object {
+        fun from(
+            classLoader: ClassLoader,
+            targets: ResolvedTargets.Resolved,
+        ): ProtoEditor =
+            ProtoEditor(
+                newBuilderMethod = targets.protobufNewBuilderMethod.resolve(classLoader),
+                mergeMethod = targets.protobufMergeMethod.resolve(classLoader),
+                buildMethod = targets.protobufBuildMethod.resolve(classLoader),
+                builderMessageField = targets.protobufBuilderMessageField.resolve(classLoader),
+                parseMethod = targets.protobufParseMethod.resolve(classLoader),
+                registry =
+                    requireNotNull(
+                        targets.protobufRegistryFactory.resolve(classLoader).invoke(null),
+                    ),
+                toByteArrayMethod = targets.byteStringToByteArrayMethod.resolve(classLoader),
+                repeatedListCopyMethod = targets.repeatedListCopyMethod.resolve(classLoader),
+            )
     }
 }

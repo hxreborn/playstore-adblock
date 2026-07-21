@@ -17,41 +17,8 @@ object StreamCacheFilter {
         targets: ResolvedTargets.Resolved,
     ) {
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
-        val cardAdMetadataFields =
-            targets.cardAdMetadataFields
-                .map { field -> field.resolve(classLoader) }
-                .groupBy(Field::getDeclaringClass)
-        val classifier =
-            PresentationClassifier(
-                presentationKindField = targets.presentationKindField.resolve(classLoader),
-                presentationPayloadField = targets.presentationPayloadField.resolve(classLoader),
-                clusterCaseField = targets.clusterCaseField.resolve(classLoader),
-                clusterPayloadField = targets.clusterPayloadField.resolve(classLoader),
-                clusterServerLogsField =
-                    targets.clusterServerLogsField.resolve(classLoader),
-                byteStringToByteArrayMethod =
-                    targets.byteStringToByteArrayMethod.resolve(classLoader),
-                protobufToByteArrayMethod =
-                    targets.protobufToByteArrayMethod.resolve(classLoader),
-                cardKindField = targets.cardKindField.resolve(classLoader),
-                cardPayloadField = targets.cardPayloadField.resolve(classLoader),
-                cardAdMetadataFields = cardAdMetadataFields,
-                adPresenceField = targets.adPresenceField.resolve(classLoader),
-            )
-        val editor =
-            ProtoEditor(
-                newBuilderMethod = targets.protobufNewBuilderMethod.resolve(classLoader),
-                mergeMethod = targets.protobufMergeMethod.resolve(classLoader),
-                buildMethod = targets.protobufBuildMethod.resolve(classLoader),
-                builderMessageField = targets.protobufBuilderMessageField.resolve(classLoader),
-                parseMethod = targets.protobufParseMethod.resolve(classLoader),
-                registry =
-                    requireNotNull(
-                        targets.protobufRegistryFactory.resolve(classLoader).invoke(null),
-                    ),
-                toByteArrayMethod = targets.byteStringToByteArrayMethod.resolve(classLoader),
-                repeatedListCopyMethod = targets.repeatedListCopyMethod.resolve(classLoader),
-            )
+        val classifier = PresentationClassifier.from(classLoader, targets)
+        val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =
             CacheAssemblyInterceptor(
                 transformer =

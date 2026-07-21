@@ -23,33 +23,7 @@ object StreamNodeFilter {
         val childIdField = targets.childIdField.resolve(classLoader)
         val nodeField = targets.nodeField.resolve(classLoader)
         val presentationAccessor = targets.presentationAccessor.resolve(classLoader)
-        val presentationKindField = targets.presentationKindField.resolve(classLoader)
-        val presentationPayloadField = targets.presentationPayloadField.resolve(classLoader)
-        val clusterCaseField = targets.clusterCaseField.resolve(classLoader)
-        val cardKindField = targets.cardKindField.resolve(classLoader)
-        val cardPayloadField = targets.cardPayloadField.resolve(classLoader)
-        val cardAdMetadataFields =
-            targets.cardAdMetadataFields
-                .map { field -> field.resolve(classLoader) }
-                .groupBy(Field::getDeclaringClass)
-        val adPresenceField = targets.adPresenceField.resolve(classLoader)
-        val classifier =
-            PresentationClassifier(
-                presentationKindField = presentationKindField,
-                presentationPayloadField = presentationPayloadField,
-                clusterCaseField = clusterCaseField,
-                clusterPayloadField = targets.clusterPayloadField.resolve(classLoader),
-                clusterServerLogsField =
-                    targets.clusterServerLogsField.resolve(classLoader),
-                byteStringToByteArrayMethod =
-                    targets.byteStringToByteArrayMethod.resolve(classLoader),
-                protobufToByteArrayMethod =
-                    targets.protobufToByteArrayMethod.resolve(classLoader),
-                cardKindField = cardKindField,
-                cardPayloadField = cardPayloadField,
-                cardAdMetadataFields = cardAdMetadataFields,
-                adPresenceField = adPresenceField,
-            )
+        val classifier = PresentationClassifier.from(classLoader, targets)
         val streamDataClass = classLoader.loadClass(targets.streamDataMethod.returnTypeName)
         val streamDataConstructor =
             streamDataClass

@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.Collections
@@ -211,7 +212,29 @@ class PresentationClassifier(
         }
     }
 
-    private companion object {
+    companion object {
+        fun from(
+            classLoader: ClassLoader,
+            targets: ResolvedTargets.Resolved,
+        ): PresentationClassifier =
+            PresentationClassifier(
+                presentationKindField = targets.presentationKindField.resolve(classLoader),
+                presentationPayloadField = targets.presentationPayloadField.resolve(classLoader),
+                clusterCaseField = targets.clusterCaseField.resolve(classLoader),
+                clusterPayloadField = targets.clusterPayloadField.resolve(classLoader),
+                clusterServerLogsField = targets.clusterServerLogsField.resolve(classLoader),
+                byteStringToByteArrayMethod =
+                    targets.byteStringToByteArrayMethod.resolve(classLoader),
+                protobufToByteArrayMethod = targets.protobufToByteArrayMethod.resolve(classLoader),
+                cardKindField = targets.cardKindField.resolve(classLoader),
+                cardPayloadField = targets.cardPayloadField.resolve(classLoader),
+                cardAdMetadataFields =
+                    targets.cardAdMetadataFields
+                        .map { field -> field.resolve(classLoader) }
+                        .groupBy(Field::getDeclaringClass),
+                adPresenceField = targets.adPresenceField.resolve(classLoader),
+            )
+
         val AD_CLUSTER_CASES = setOf(69, 85, 86, 224)
         const val CLUSTER_PRESENTATION = 1
         const val CARD_PRESENTATION = 2

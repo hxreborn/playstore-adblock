@@ -50,7 +50,7 @@
 
 ## Related
 
-Also dislike ads in Google Discover, the launcher's -1 screen, or Google News? Try [discover-ads-filter](https://github.com/hxreborn/discover-ads-filter), a sister module.
+Also dislike ads in Google Discover, the launcher's -1 screen, or Google News? Try <a href="https://github.com/hxreborn/discover-ads-filter"><img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/discover-ads-filter.png" height="16" alt=""> discover-ads-filter</a>, a sister module.
 
 ## License
 

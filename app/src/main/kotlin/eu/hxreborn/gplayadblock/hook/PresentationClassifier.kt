@@ -51,9 +51,16 @@ class PresentationClassifier(
         if (payload == null || !clusterCaseField.declaringClass.isInstance(payload)) return 0
         val case = clusterCaseField.getInt(payload)
         return when {
-            case != GENERIC_CLUSTER -> case
+            case in AD_CLUSTER_CASES -> case
+
             hasAdSlotMetadata(payload) -> GENERIC_AD_CLUSTER
-            hasAdDisclosureMetadata(payload) -> GENERIC_AD_DISCLOSURE_CLUSTER
+
+            case == GENERIC_CLUSTER &&
+                hasAdDisclosureMetadata(
+                    payload,
+                )
+            -> GENERIC_AD_DISCLOSURE_CLUSTER
+
             else -> case
         }
     }

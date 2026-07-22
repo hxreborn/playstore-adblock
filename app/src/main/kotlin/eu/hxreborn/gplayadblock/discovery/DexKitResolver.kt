@@ -290,9 +290,17 @@ object DexKitResolver {
         val genericCardPayloadClass =
             genericCardAccessor.returnType
                 ?: return missing("generic card payload class missing")
+        val builderReadFields =
+            genericCardBuilder.usingFields
+                .filter { usage -> usage.usingType.isRead() }
+                .map { usage -> usage.field.descriptor }
+                .toSet()
         val adMetadataFields =
             genericCardPayloadClass.fields.filter { field ->
-                !field.isStatic && field.typeName !in primitiveTypes
+                !field.isStatic &&
+                    field.typeName !in primitiveTypes &&
+                    field.descriptor in builderReadFields &&
+                    field.type?.superClass?.name == genericCardPayloadClass.superClass?.name
             }
         val genericAdMetadataField =
             adMetadataFields.singleOrNull()
@@ -305,31 +313,13 @@ object DexKitResolver {
                 ?: return missing("ad metadata base class missing")
         val adPresenceFields =
             adMetadataClass.fields.filter { field ->
-                !field.isStatic && field.typeName == "int"
+                !field.isStatic &&
+                    field.typeName == "int" &&
+                    field.descriptor in builderReadFields
             }
         val adPresenceField =
             adPresenceFields.singleOrNull()
                 ?: return missing("ad presence fields=${adPresenceFields.size}")
-        val genericCardEvidenceMethods =
-            bridge.findMethod {
-                matcher {
-                    descriptor = genericCardBuilder.descriptor
-                    usingStrings = listOf("#ad")
-                    usingNumbers = listOf(2)
-                }
-            }
-        if (genericCardEvidenceMethods.size != 1) {
-            return missing("generic card evidence methods=${genericCardEvidenceMethods.size}")
-        }
-        val genericCardEvidenceFields =
-            genericCardBuilder.usingFields
-                .map { usage -> usage.field.descriptor }
-                .toSet()
-        if (genericAdMetadataField.descriptor !in genericCardEvidenceFields ||
-            adPresenceField.descriptor !in genericCardEvidenceFields
-        ) {
-            return missing("generic card evidence fields missing")
-        }
 
         val cardWrapperCandidates =
             genericCardAccessor.usingFields
@@ -405,17 +395,16 @@ object DexKitResolver {
         val cacheManagerClass =
             cacheManagerClasses.singleOrNull()
                 ?: return missing("cache manager candidates=${cacheManagerClasses.size}")
-        val cacheCallbackConstructors =
+        val hasCacheManagerConstructor =
             cacheCallbackMethod.declaredClass
                 ?.methods
-                ?.filter { method ->
+                ?.any { method ->
                     method.isConstructor &&
-                        method.paramTypeNames.size == 4 &&
-                        method.paramTypeNames[0] == "java.lang.String" &&
-                        method.paramTypeNames[1] == cacheManagerClass.name
-                }.orEmpty()
-        if (cacheCallbackConstructors.size != 1) {
-            return missing("cache callback constructors=${cacheCallbackConstructors.size}")
+                        method.paramTypeNames.firstOrNull() == "java.lang.String" &&
+                        cacheManagerClass.name in method.paramTypeNames
+                } == true
+        if (!hasCacheManagerConstructor) {
+            return missing("cache callback constructor evidence missing")
         }
 
         val dataStoreWorkerMethods =
@@ -472,10 +461,14 @@ object DexKitResolver {
         }
 
         val responseListFields =
-            cacheCallbackMethod.usingFields
-                .map { usage -> usage.field }
+            responseClass.fields
                 .filter { field ->
-                    !field.isStatic && field.declaredClassName == responseClass.name
+                    !field.isStatic &&
+                        field.type?.methods?.any { method ->
+                            !Modifier.isStatic(method.modifiers) &&
+                                method.paramTypeNames == listOf("int") &&
+                                method.returnTypeName == field.typeName
+                        } == true
                 }.distinctBy(FieldData::descriptor)
         if (responseListFields.size != 2 ||
             responseListFields.map(FieldData::typeName).distinct().size != 1
@@ -750,7 +743,7 @@ object DexKitResolver {
                     method.returnTypeName == "void" &&
                     method.declaredClassName != cacheAssemblyMethod.declaredClassName
             }
-        if (cacheReaderCallers.size != 1) {
+        if (cacheReaderCallers.isEmpty()) {
             return missing("cache reader callers=${cacheReaderCallers.size}")
         }
         val childKeyMethods =
@@ -857,7 +850,7 @@ object DexKitResolver {
                 ?: return fail(
                     "protobuf byte array methods=${protobufToByteArrayMethods.size}",
                 )
-        val protobufNewBuilderMethods =
+        val protobufBuilderFactories =
             protobufMessageClass.methods.filter { method ->
                 !Modifier.isStatic(method.modifiers) &&
                     method.paramCount == 0 &&
@@ -865,9 +858,27 @@ object DexKitResolver {
                         !field.isStatic && field.typeName == protobufMessageClass.name
                     } == 2
             }
+        val builderFactoryDescriptors =
+            protobufBuilderFactories.map(MethodData::descriptor).toSet()
+        val prototypeInvokedFactories =
+            protobufMessageClass.methods
+                .asSequence()
+                .filter { method ->
+                    !Modifier.isStatic(method.modifiers) &&
+                        method.paramTypeNames == listOf(protobufMessageClass.name)
+                }.flatMap { helper -> helper.invokes.asSequence() }
+                .map(MethodData::descriptor)
+                .filterTo(HashSet()) { descriptor -> descriptor in builderFactoryDescriptors }
+        val protobufNewBuilderMethods =
+            protobufBuilderFactories.filter { method ->
+                method.descriptor in prototypeInvokedFactories
+            }
         val protobufNewBuilderMethod =
             protobufNewBuilderMethods.singleOrNull()
-                ?: return fail("protobuf new builder methods=${protobufNewBuilderMethods.size}")
+                ?: return fail(
+                    "protobuf new builder factories=${protobufBuilderFactories.size} " +
+                        "invoked=${protobufNewBuilderMethods.size}",
+                )
         val protobufBuilderClass =
             protobufNewBuilderMethod.returnType
                 ?: return fail("protobuf builder class missing")
@@ -1011,30 +1022,17 @@ object DexKitResolver {
                 ?: return fail(
                     "remote suggestion constructors=${remoteSuggestionConstructors.size}",
                 )
-        val remoteConstructorEvidence =
-            bridge.findMethod {
-                matcher {
-                    descriptor = remoteSuggestionConstructor.descriptor
-                    usingNumbers = listOf(-1, 2, 4, 8, 16, 32, 64)
-                }
-            }
-        if (remoteConstructorEvidence.size != 1) {
-            return fail("remote constructor evidence=${remoteConstructorEvidence.size}")
-        }
         val remoteFieldTypes =
             remoteSuggestionClass.fields
                 .filter { field -> !field.isStatic }
                 .groupingBy(FieldData::typeName)
                 .eachCount()
-        val expectedRemoteFieldTypes =
-            mapOf(
-                "java.util.List" to 1,
-                "int" to 2,
-                "java.lang.Integer" to 1,
-                "byte[]" to 1,
-                "boolean" to 2,
-            )
-        if (remoteFieldTypes != expectedRemoteFieldTypes) {
+        val hasRemoteSuggestionShape =
+            (remoteFieldTypes["java.util.List"] ?: 0) >= 1 &&
+                (remoteFieldTypes["byte[]"] ?: 0) >= 1 &&
+                (remoteFieldTypes["java.lang.Integer"] ?: 0) >= 1 &&
+                (remoteFieldTypes["int"] ?: 0) >= 2
+        if (!hasRemoteSuggestionShape) {
             return fail("remote suggestion field shape=$remoteFieldTypes")
         }
 
@@ -1050,7 +1048,7 @@ object DexKitResolver {
         val appSuggestionConstructors =
             appSuggestionClass.methods.filter { method ->
                 method.isConstructor &&
-                    method.paramTypeNames.size == 12 &&
+                    method.paramTypeNames.size >= 7 &&
                     method.paramTypeNames[0] == "java.lang.String" &&
                     method.paramTypeNames[1] == "int" &&
                     method.paramTypeNames[3] == "int" &&
@@ -1060,7 +1058,7 @@ object DexKitResolver {
         val appSuggestionConstructor =
             appSuggestionConstructors.singleOrNull()
                 ?: return fail("app suggestion constructors=${appSuggestionConstructors.size}")
-        val adInfoType = appSuggestionConstructor.paramTypeNames[11]
+        val adInfoType = appSuggestionConstructor.paramTypeNames.last()
         val suggestionAdInfoFields =
             appSuggestionClass.fields.filter { field ->
                 !field.isStatic && field.typeName == adInfoType

@@ -54,7 +54,7 @@ jobs:
 
       - id: state
         name: Restore notification state
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .playstore-seen
           key: playstore-seen-${{ steps.check.outputs.version }}

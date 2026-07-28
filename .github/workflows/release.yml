@@ -40,6 +40,8 @@ jobs:
             echo "RELEASE_STORE_FILE=$GITHUB_WORKSPACE/release.keystore" >> "$GITHUB_ENV"
           fi
 
+      # The preset major is pinned. Under 10 the release notes render their header
+      # and drop every commit entry, so an unpinned resolve ships empty notes.
       - name: Semantic release
         run: >
           npx --yes
@@ -47,7 +49,7 @@ jobs:
           -p @semantic-release/exec
           -p @semantic-release/changelog
           -p @semantic-release/git
-          -p conventional-changelog-conventionalcommits
+          -p conventional-changelog-conventionalcommits@9
           semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}

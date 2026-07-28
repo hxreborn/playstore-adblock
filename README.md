@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/banner_dark.png">
-    <img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/banner_light.png" alt="Google Play Store Adblock">
+    <img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/banner_light.png" alt="Play Store Adblock">
   </picture>
 </h1>
 
@@ -60,11 +60,14 @@ test device receives.
 | 52.3.32-31 | 85233230 | 2026-07-22 |
 | 52.4.41-34 | 85244140 | 2026-07-28 |
 
-Your version name is under Play Store → Settings → About. The exact code:
+Find your build either in Play Store → Settings → About or with:
 
 ```
 adb shell dumpsys package com.android.vending | grep -E 'versionName|versionCode'
 ```
+
+dumpsys prints two pairs. The first is the running build, the second is the factory copy Android
+keeps for system apps.
 
 Builds not listed here are usually still compatible, since the module adapts to changes between
 Play Store releases. If sponsored content appears, [open an issue](https://github.com/hxreborn/playstore-adblock/issues)

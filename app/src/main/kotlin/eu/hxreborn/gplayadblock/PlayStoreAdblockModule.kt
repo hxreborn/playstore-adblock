@@ -200,7 +200,7 @@ class PlayStoreAdblockModule : XposedModule() {
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
-        val VALIDATED_TARGET_VERSIONS = setOf(85222530L, 85233230L)
+        val VALIDATED_TARGET_VERSIONS = setOf(85222530L, 85233230L, 85244140L)
 
         fun notifyFilteringUnavailable(context: Context) {
             Handler(Looper.getMainLooper()).postDelayed(

@@ -45,6 +45,7 @@ jobs:
           npx --yes
           -p semantic-release
           -p @semantic-release/exec
+          -p @semantic-release/changelog
           -p @semantic-release/git
           -p conventional-changelog-conventionalcommits
           semantic-release

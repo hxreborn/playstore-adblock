@@ -5,9 +5,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    groups:
-      gradle:
-        patterns: ["*"]
     commit-message:
       prefix: "build(deps)"
 
@@ -16,8 +13,5 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    groups:
-      actions:
-        patterns: ["*"]
     commit-message:
       prefix: "build(deps)"

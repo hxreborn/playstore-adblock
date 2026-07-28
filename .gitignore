@@ -39,3 +39,4 @@ analysis/
 *.md
 *.markdown
 !/README.md
+!/CHANGELOG.md

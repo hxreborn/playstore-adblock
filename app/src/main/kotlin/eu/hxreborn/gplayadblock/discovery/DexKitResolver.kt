@@ -696,35 +696,37 @@ object DexKitResolver {
                     "cache page boundary copy methods=${cachePageBoundariesCopyMethods.size}",
                 )
 
-        val cacheAssemblyMethods =
-            bridge
-                .findMethod {
-                    matcher {
-                        paramTypes =
-                            listOf(
-                                null,
-                                "java.lang.String",
-                                nodeClass.name,
-                                "java.util.List",
-                                "java.util.Map",
-                                null,
-                                "boolean",
-                                "boolean",
-                                null,
-                                "java.util.Map",
-                                "java.lang.String",
-                                "java.lang.String",
-                                null,
-                                "int",
-                            )
-                    }
-                }.filter { method ->
-                    Modifier.isStatic(method.modifiers) &&
-                        method.paramTypeNames[0] == method.declaredClassName
+        val handlerFactories =
+            bridge.findMethod {
+                matcher {
+                    returnType = handlerClass.name
                 }
+            }
+        val cacheAssemblyHolder =
+            handlerFactories.singleOrNull()?.declaredClass
+                ?: return missing("cache assembly holders=${handlerFactories.size}")
+        val cacheAssemblyMethods =
+            cacheAssemblyHolder.methods.filter { method ->
+                Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames.firstOrNull() == method.declaredClassName &&
+                    nodeClass.name in method.paramTypeNames
+            }
         val cacheAssemblyMethod =
             cacheAssemblyMethods.singleOrNull()
                 ?: return missing("cache assembly methods=${cacheAssemblyMethods.size}")
+        val assembledCacheClass =
+            cacheAssemblyMethod.returnType
+                ?: return missing("assembled cache class not found")
+        val assembledCacheFieldTypes =
+            assembledCacheClass.fields
+                .filter { field -> !field.isStatic }
+                .map(FieldData::typeName)
+        if (nodeClass.name !in assembledCacheFieldTypes ||
+            "${handlerClass.name}[]" !in assembledCacheFieldTypes ||
+            handlerSuperClass.name !in assembledCacheFieldTypes
+        ) {
+            return missing("assembled cache shape mismatch class=${assembledCacheClass.name}")
+        }
         val cacheReaderCallers =
             cacheAssemblyMethod.callers.filter { method ->
                 !Modifier.isStatic(method.modifiers) &&
@@ -1137,13 +1139,13 @@ object DexKitResolver {
     )
 
     private fun streamDataConstructor(method: MethodData): MethodData? =
-        method.returnType?.methods?.singleOrNull { constructor ->
-            constructor.isConstructor &&
-                constructor.paramTypeNames.size == 5 &&
-                constructor.paramTypeNames[2] == "java.util.List" &&
-                constructor.paramTypeNames[3] == "boolean" &&
-                constructor.paramTypeNames[4] == "java.lang.Throwable"
-        }
+        method.invokes
+            .filter { constructor ->
+                constructor.isConstructor &&
+                    constructor.declaredClassName == method.returnTypeName
+            }.distinctBy(MethodData::descriptor)
+            .singleOrNull()
+            ?.takeIf { constructor -> constructor.paramCount >= 2 }
 
     private fun missing(reason: String): ResolvedTargets.Missing = ResolvedTargets.Missing(reason)
 

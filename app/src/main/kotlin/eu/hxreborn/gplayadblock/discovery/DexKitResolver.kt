@@ -49,17 +49,6 @@ object DexKitResolver {
             ", itemClientStateFlow=",
             ", itemAdInfo=",
         )
-    private val remoteSuggestionParameters =
-        listOf(
-            "java.util.List",
-            "int",
-            "int",
-            "java.lang.Integer",
-            "byte[]",
-            "boolean",
-            "boolean",
-            "int",
-        )
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -1013,27 +1002,29 @@ object DexKitResolver {
         val remoteSuggestionClass =
             remoteSuggestionClasses.singleOrNull()
                 ?: return fail("remote suggestion candidates=${remoteSuggestionClasses.size}")
+        val remoteFields = remoteSuggestionClass.fields.filter { field -> !field.isStatic }
+        val remoteFieldTypeNames = remoteFields.map(FieldData::typeName)
+        val remoteFieldDescriptors = remoteFields.mapTo(mutableSetOf(), FieldData::descriptor)
         val remoteSuggestionConstructors =
-            remoteSuggestionClass.methods.filter { method ->
-                method.isConstructor && method.paramTypeNames == remoteSuggestionParameters
-            }
+            remoteSuggestionClass.methods
+                .filter { method ->
+                    method.isConstructor && method.writesAllOf(remoteFieldDescriptors)
+                }.groupBy(MethodData::paramCount)
+                .minByOrNull { (paramCount, _) -> paramCount }
+                ?.value
+                .orEmpty()
         val remoteSuggestionConstructor =
             remoteSuggestionConstructors.singleOrNull()
                 ?: return fail(
                     "remote suggestion constructors=${remoteSuggestionConstructors.size}",
                 )
-        val remoteFieldTypes =
-            remoteSuggestionClass.fields
-                .filter { field -> !field.isStatic }
-                .groupingBy(FieldData::typeName)
-                .eachCount()
-        val hasRemoteSuggestionShape =
-            (remoteFieldTypes["java.util.List"] ?: 0) >= 1 &&
-                (remoteFieldTypes["byte[]"] ?: 0) >= 1 &&
-                (remoteFieldTypes["java.lang.Integer"] ?: 0) >= 1 &&
-                (remoteFieldTypes["int"] ?: 0) >= 2
-        if (!hasRemoteSuggestionShape) {
-            return fail("remote suggestion field shape=$remoteFieldTypes")
+        if (remoteSuggestionConstructor.paramTypeNames.take(remoteFieldTypeNames.size) !=
+            remoteFieldTypeNames
+        ) {
+            return fail(
+                "remote suggestion constructor shape=" +
+                    "${remoteSuggestionConstructor.paramTypeNames} fields=$remoteFieldTypeNames",
+            )
         }
 
         val appSuggestionClasses =
@@ -1169,4 +1160,11 @@ object DexKitResolver {
 
     private val FieldData.isStatic: Boolean
         get() = Modifier.isStatic(modifiers)
+
+    private fun MethodData.writesAllOf(fieldDescriptors: Set<String>): Boolean =
+        usingFields
+            .asSequence()
+            .filter { usage -> usage.usingType.isWrite() }
+            .mapTo(mutableSetOf()) { usage -> usage.field.descriptor }
+            .containsAll(fieldDescriptors)
 }

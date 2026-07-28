@@ -11,10 +11,10 @@ object SearchSuggestionFilter {
     fun install(
         module: XposedModule,
         classLoader: ClassLoader,
-        targets: ResolvedTargets.Resolved,
+        targets: ResolvedTargets.Suggestion,
     ) {
-        val constructor = targets.searchSuggestionConstructor.resolve(classLoader)
-        val adInfoField = targets.suggestionAdInfoField.resolve(classLoader)
+        val constructor = targets.constructor.resolve(classLoader)
+        val adInfoField = targets.adInfoField.resolve(classLoader)
         val fieldCount =
             constructor.declaringClass.declaredFields.count { field ->
                 !Modifier.isStatic(field.modifiers)

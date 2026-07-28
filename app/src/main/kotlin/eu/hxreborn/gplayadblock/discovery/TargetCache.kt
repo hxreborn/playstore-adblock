@@ -125,10 +125,8 @@ object TargetCache {
             ).put(
                 "repeatedListCopyMethod",
                 encodeMethod(targets.repeatedListCopyMethod),
-            ).put(
-                "searchSuggestionConstructor",
-                encodeConstructor(targets.searchSuggestionConstructor),
-            ).put("suggestionAdInfoField", encodeField(targets.suggestionAdInfoField))
+            ).putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
+            .putOpt("suggestionFailure", targets.suggestionFailure)
 
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
@@ -186,9 +184,19 @@ object TargetCache {
                 decodeMethod(value.getJSONObject("protobufToByteArrayMethod")),
             repeatedListCopyMethod =
                 decodeMethod(value.getJSONObject("repeatedListCopyMethod")),
-            searchSuggestionConstructor =
-                decodeConstructor(value.getJSONObject("searchSuggestionConstructor")),
-            suggestionAdInfoField = decodeField(value.getJSONObject("suggestionAdInfoField")),
+            suggestion = value.optJSONObject("suggestion")?.let(::decodeSuggestion),
+            suggestionFailure = value.optString("suggestionFailure").ifEmpty { null },
+        )
+
+    private fun encodeSuggestion(value: ResolvedTargets.Suggestion): JSONObject =
+        JSONObject()
+            .put("constructor", encodeConstructor(value.constructor))
+            .put("adInfoField", encodeField(value.adInfoField))
+
+    private fun decodeSuggestion(value: JSONObject): ResolvedTargets.Suggestion =
+        ResolvedTargets.Suggestion(
+            constructor = decodeConstructor(value.getJSONObject("constructor")),
+            adInfoField = decodeField(value.getJSONObject("adInfoField")),
         )
 
     private fun encodeConstructor(value: ConstructorRef): JSONObject =

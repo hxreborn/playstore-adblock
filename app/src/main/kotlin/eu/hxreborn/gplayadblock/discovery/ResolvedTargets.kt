@@ -1,6 +1,11 @@
 package eu.hxreborn.gplayadblock.discovery
 
 sealed interface ResolvedTargets {
+    data class Suggestion(
+        val constructor: ConstructorRef,
+        val adInfoField: FieldRef,
+    )
+
     data class Resolved(
         val streamDataMethod: MethodRef,
         val streamChildrenField: FieldRef,
@@ -46,8 +51,8 @@ sealed interface ResolvedTargets {
         val byteStringToByteArrayMethod: MethodRef,
         val protobufToByteArrayMethod: MethodRef,
         val repeatedListCopyMethod: MethodRef,
-        val searchSuggestionConstructor: ConstructorRef,
-        val suggestionAdInfoField: FieldRef,
+        val suggestion: Suggestion?,
+        val suggestionFailure: String?,
     ) : ResolvedTargets
 
     data class Missing(

@@ -760,10 +760,20 @@ object DexKitResolver {
             }
         val suggestionResult =
             resolveSuggestions(bridge, adMetadataClass, adPresenceField)
-        val suggestions =
+        val suggestion =
             when (suggestionResult) {
-                is Resolution.Success -> suggestionResult.value
-                is Resolution.Failure -> return missing(suggestionResult.reason)
+                is Resolution.Success -> {
+                    ResolvedTargets.Suggestion(
+                        constructor =
+                            suggestionResult.value.remoteSuggestionConstructor
+                                .toConstructorRef(),
+                        adInfoField = suggestionResult.value.suggestionAdInfoField.toRef(),
+                    )
+                }
+
+                is Resolution.Failure -> {
+                    null
+                }
             }
 
         return ResolvedTargets.Resolved(
@@ -811,9 +821,8 @@ object DexKitResolver {
             byteStringToByteArrayMethod = protobuf.byteStringToByteArrayMethod.toRef(),
             protobufToByteArrayMethod = protobuf.protobufToByteArrayMethod.toRef(),
             repeatedListCopyMethod = repeatedListCopyMethod.toRef(),
-            searchSuggestionConstructor =
-                suggestions.remoteSuggestionConstructor.toConstructorRef(),
-            suggestionAdInfoField = suggestions.suggestionAdInfoField.toRef(),
+            suggestion = suggestion,
+            suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
         )
     }
 

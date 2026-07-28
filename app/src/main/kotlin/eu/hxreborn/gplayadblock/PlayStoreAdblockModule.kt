@@ -144,10 +144,19 @@ class PlayStoreAdblockModule : XposedModule() {
                         installGroup("graph stream") {
                             StreamNodeFilter.install(this, classLoader, targets)
                         }
+                    targets.suggestionFailure?.let { reason ->
+                        Logger.warn("search suggestion targets unresolved reason=$reason")
+                    }
                     val suggestion =
-                        installGroup("search suggestion") {
-                            SearchSuggestionFilter.install(this, classLoader, targets)
-                        }
+                        targets.suggestion?.let { suggestionTargets ->
+                            installGroup("search suggestion") {
+                                SearchSuggestionFilter.install(
+                                    this,
+                                    classLoader,
+                                    suggestionTargets,
+                                )
+                            }
+                        } ?: false
                     val cache =
                         installGroup("stream cache") {
                             StreamCacheFilter.install(this, classLoader, targets)

@@ -84,9 +84,9 @@ jobs:
             "$header" \
             "$VERSION" \
             "$DETECTED" \
-            "$SOURCE_NAME" \
+            "$SOURCE_URL" \
             "A new version name has appeared in the monitored APK index. Google may distribute multiple builds and version codes under the same version name." \
-            "If this update has reached your device, please report whether sponsored content is still hidden and include the version code when possible." \
+            "If sponsored content reappears after this update, report it with the full version string from Play Store Settings > About. Verified builds are listed at $PROJECT_URL#verified-builds." \
             "$REPORT_URL" \
             "This is an availability notice, not an incompatibility warning.")
 

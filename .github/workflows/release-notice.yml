@@ -42,13 +42,14 @@ jobs:
         run: |
           gh release view "$TAG_NAME" --repo "$REPO" --json url --jq '"url=\(.url)"' >> "$GITHUB_OUTPUT"
 
-          echo "body<<BODY_EOF" >> "$GITHUB_OUTPUT"
-          gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
-          echo "BODY_EOF" >> "$GITHUB_OUTPUT"
+          gh release view "$TAG_NAME" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | test("^playstore-adblock-v.*-arm64-v8a\\.apk$")) | "apk_name=\(.name)\napk_url=\(.url)"' \
+            >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ env.TAG_NAME }}
+          delim="BODY_EOF_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          echo "body<<$delim" >> "$GITHUB_OUTPUT"
+          gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
+          echo "$delim" >> "$GITHUB_OUTPUT"
 
       - name: Notify about release
         env:
@@ -56,39 +57,86 @@ jobs:
           TG_CHAT: ${{ secrets.TG_WATCH_CHAT }}
           BODY: ${{ steps.release.outputs.body }}
           RELEASE_URL: ${{ steps.release.outputs.url }}
+          APK_NAME: ${{ steps.release.outputs.apk_name }}
+          APK_URL: ${{ steps.release.outputs.apk_url }}
           IS_DRY: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
 
-          bullets=$(printf '%s\n' "$BODY" | tr -d '\r' \
-            | sed -n 's/^\* //p' \
-            | sed -E 's/\*\*([^*]*)\*\*/\1/g; s/ \(\[[^]]*\]\([^)]*\)\)//g' \
-            | grep . || true)
-          total=$(printf '%s\n' "$bullets" | grep -c . || true)
-          shown=$(printf '%s\n' "$bullets" | head -6 | sed 's/^/• /')
+          html_escape() {
+            printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+          }
 
-          codes=$(grep -oE '8[0-9]{7}' \
-            app/src/main/kotlin/eu/hxreborn/gplayadblock/PlayStoreAdblockModule.kt \
-            | sort -n | tr '\n' ',' | sed 's/,$//; s/,/, /g' || true)
+          first_line="${BODY%%$'\n'*}"
+          compare_url=$(printf '%s' "$first_line" | sed -nE 's/^## \[[^]]*\]\(([^)]*)\).*/\1/p')
+          [ -z "$compare_url" ] && compare_url="$RELEASE_URL"
+          compare_url_esc=$(html_escape "$compare_url")
+          tag_esc=$(html_escape "$TAG_NAME")
+          apk_name_esc=$(html_escape "$APK_NAME")
+          apk_url_esc=$(html_escape "$APK_URL")
 
-          text="New stable release"$'\n\n'"Play Store Adblock ${TAG_NAME}"
-          if [ -n "$bullets" ]; then
-            text+=$'\n\n'"What's changed:"$'\n'"$shown"
-            if [ "$total" -gt 6 ]; then
-              text+=$'\n'"…and $((total - 6)) more"
+          esc=$(printf '%s\n' "$BODY" | tr -d '\r' \
+            | sed -E 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+          declare -A emoji=(
+            ["Features"]="✨" ["Bug Fixes"]="🐛" ["Performance Improvements"]="⚡"
+            ["Security"]="🔒" ["Refactor"]="♻️" ["Reverts"]="⏪" ["Tests"]="🧪"
+            ["Build System"]="🧱"
+          )
+
+          declare -A groups
+          order=()
+          section="_none_"
+          count=0
+          cap=6
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^###[[:space:]]+(.*)$ ]]; then
+              section="${BASH_REMATCH[1]:-_none_}"
+              continue
+            fi
+            if [[ "$line" =~ ^\*[[:space:]]+(.*)$ ]]; then
+              if [ "$count" -ge "$cap" ]; then
+                count=$((count + 1))
+                continue
+              fi
+              desc="${BASH_REMATCH[1]}"
+              desc=$(printf '%s' "$desc" \
+                | sed -E 's/ \(\[[0-9a-f]{7}\]\([^)]*\)\)//g' \
+                | sed -E 's|\[([^]]*)\]\(([^)]*)\)|<a href="\2">\1</a>|g' \
+                | sed -E 's|\*\*([^*]*)\*\*|<code>\1</code>|g')
+              if [[ -z "${groups[$section]+x}" ]]; then
+                order+=("$section")
+                groups[$section]=""
+              fi
+              groups[$section]+=$'\n'"• $desc"
+              count=$((count + 1))
+            fi
+          done <<< "$esc"
+
+          shown=""
+          for section in "${order[@]}"; do
+            e="${emoji[$section]:-}"
+            shown+=$'\n'"<blockquote>${e:+$e }<b>${section}</b>${groups[$section]}</blockquote>"$'\n'
+          done
+          shown="${shown#$'\n'}"
+          shown="${shown%$'\n'}"
+          total=$count
+
+          text="<b>New stable release</b>"$'\n\n'"Play Store Adblock <b>${tag_esc}</b>"
+          if [ -n "$shown" ]; then
+            text+=$'\n\n'"$shown"
+            if [ "$total" -gt "$cap" ]; then
+              text+=$'\n'"…and $((total - cap)) more"
             fi
           fi
-          if [ -n "$codes" ]; then
-            text+=$'\n\n'"Verified Play Store builds: $codes"
+          text+=$'\n\n'"<a href=\"${compare_url_esc}\">See full changelog</a>"
+          if [ -n "$APK_URL" ]; then
+            text+=$'\n\n'"<b>Download</b>"$'\n'"📦 <a href=\"${apk_url_esc}\">${apk_name_esc}</a>"
           fi
-
-          keyboard=$(jq -nc --arg url "$RELEASE_URL" \
-            '{inline_keyboard: [[{text: "Download from GitHub Releases", url: $url}]]}')
 
           if [ "$IS_DRY" = "true" ]; then
             echo "Dry run. The notification would be:"
             printf '%s\n' "$text"
-            echo "Button: $RELEASE_URL"
             exit 0
           fi
 
@@ -101,7 +149,8 @@ jobs:
           curl -sS --fail-with-body --max-time 20 \
             "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
             -d chat_id="$TG_CHAT" \
-            --data-urlencode text="$text" \
-            --data-urlencode reply_markup="$keyboard" > /dev/null
+            -d parse_mode=HTML \
+            -d disable_web_page_preview=true \
+            --data-urlencode text="$text" > /dev/null
 
           echo "Notification sent for $TAG_NAME."

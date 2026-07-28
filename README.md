@@ -51,8 +51,7 @@
 ## Verified builds
 
 Google ships each Play Store version as several parallel builds, one per device class, each with
-its own version code. Every release here is verified against one exact code, the phone build the
-test device receives.
+its own version code. Each entry below is verified against one exact code.
 
 | Play Store version | Version code | Verified |
 | --- | ---: | --- |
@@ -65,9 +64,6 @@ Find your build either in Play Store → Settings → About or with:
 ```
 adb shell dumpsys package com.android.vending | grep -E 'versionName|versionCode'
 ```
-
-dumpsys prints two pairs. The first is the running build, the second is the factory copy Android
-keeps for system apps.
 
 Builds not listed here are usually still compatible, since the module adapts to changes between
 Play Store releases. If sponsored content appears, [open an issue](https://github.com/hxreborn/playstore-adblock/issues)

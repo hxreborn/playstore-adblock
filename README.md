@@ -48,6 +48,28 @@
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
+## Verified builds
+
+Google ships each Play Store version as several parallel builds, one per device class, each with
+its own version code. Every release here is verified against one exact code, the phone build the
+test device receives.
+
+| Play Store version | Version code | Verified |
+| --- | ---: | --- |
+| 52.2.25-31 | 85222530 | 2026-07-21 |
+| 52.3.32-31 | 85233230 | 2026-07-22 |
+| 52.4.41-34 | 85244140 | 2026-07-28 |
+
+Your version name is under Play Store → Settings → About. The exact code:
+
+```
+adb shell dumpsys package com.android.vending | grep -E 'versionName|versionCode'
+```
+
+Builds not listed here are usually still compatible, since the module adapts to changes between
+Play Store releases. If sponsored content appears, [open an issue](https://github.com/hxreborn/playstore-adblock/issues)
+and include the version name and version code.
+
 ## Related
 
 Also dislike ads in Google Discover, the launcher's -1 screen, or Google News? Try <a href="https://github.com/hxreborn/discover-ads-filter"><img src="https://raw.githubusercontent.com/hxreborn/playstore-adblock/master/assets/discover-ads-filter.png" height="16" alt=""> discover-ads-filter</a>, a sister module.

@@ -1,0 +1,107 @@
+name: Telegram release notice
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to announce (e.g., v1.0.0)'
+        required: true
+      dry_run:
+        description: 'Print the notification instead of sending it'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-notice
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      TAG_NAME: ${{ inputs.tag || github.event.release.tag_name }}
+
+    steps:
+      - name: Validate tag
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^v ]]; then
+            echo "::error::Tag must start with 'v'"
+            exit 1
+          fi
+
+      - name: Fetch release info
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG_NAME" --repo "$REPO" --json url --jq '"url=\(.url)"' >> "$GITHUB_OUTPUT"
+
+          echo "body<<BODY_EOF" >> "$GITHUB_OUTPUT"
+          gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
+          echo "BODY_EOF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG_NAME }}
+
+      - name: Notify about release
+        env:
+          TG_TOKEN: ${{ secrets.TG_WATCH_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_WATCH_CHAT }}
+          BODY: ${{ steps.release.outputs.body }}
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          IS_DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          bullets=$(printf '%s\n' "$BODY" | tr -d '\r' \
+            | sed -n 's/^\* //p' \
+            | sed -E 's/\*\*([^*]*)\*\*/\1/g; s/ \(\[[^]]*\]\([^)]*\)\)//g' \
+            | grep . || true)
+          total=$(printf '%s\n' "$bullets" | grep -c . || true)
+          shown=$(printf '%s\n' "$bullets" | head -6 | sed 's/^/• /')
+
+          codes=$(grep -oE '8[0-9]{7}' \
+            app/src/main/kotlin/eu/hxreborn/gplayadblock/PlayStoreAdblockModule.kt \
+            | sort -n | tr '\n' ',' | sed 's/,$//; s/,/, /g' || true)
+
+          text="New stable release"$'\n\n'"Play Store Adblock ${TAG_NAME}"
+          if [ -n "$bullets" ]; then
+            text+=$'\n\n'"What's changed:"$'\n'"$shown"
+            if [ "$total" -gt 6 ]; then
+              text+=$'\n'"…and $((total - 6)) more"
+            fi
+          fi
+          if [ -n "$codes" ]; then
+            text+=$'\n\n'"Verified Play Store builds: $codes"
+          fi
+
+          keyboard=$(jq -nc --arg url "$RELEASE_URL" \
+            '{inline_keyboard: [[{text: "Download from GitHub Releases", url: $url}]]}')
+
+          if [ "$IS_DRY" = "true" ]; then
+            echo "Dry run. The notification would be:"
+            printf '%s\n' "$text"
+            echo "Button: $RELEASE_URL"
+            exit 0
+          fi
+
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
+            echo "::error::TG_TOKEN or TG_CHAT is not configured."
+            exit 1
+          fi
+
+          # Retries can double-post
+          curl -sS --fail-with-body --max-time 20 \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="$TG_CHAT" \
+            --data-urlencode text="$text" \
+            --data-urlencode reply_markup="$keyboard" > /dev/null
+
+          echo "Notification sent for $TAG_NAME."

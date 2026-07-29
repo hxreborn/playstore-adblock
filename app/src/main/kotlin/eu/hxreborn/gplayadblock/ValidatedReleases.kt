@@ -3,6 +3,7 @@ package eu.hxreborn.gplayadblock
 object ValidatedReleases {
     val keys =
         setOf(
+            843918L,
             852225L,
             852332L,
             852441L,

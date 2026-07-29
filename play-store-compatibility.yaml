@@ -38,6 +38,11 @@ releases:
     tested_on: 2026-07-29
     module_version_code: 10200
     failure: GenericCardUiModel absent
+  - version_name: "43.9.18-31 [0] [PR] 700761362"
+    version_code: 84391830
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
   - version_name: "49.9.21-23 [0] [PR] 864439599"
     version_code: 84992100
     status: untested

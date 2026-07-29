@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.discovery
 
+import eu.hxreborn.gplayadblock.hook.StreamCacheFilter
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -43,20 +44,22 @@ class ArgumentContractTest {
         val positional =
             listOf(
                 0 to "java.lang.String",
-                2 to "java.util.List",
-                3 to "java.util.Map",
+                StreamCacheFilter.ROOT_CHILDREN_OFFSET to "java.util.List",
+                StreamCacheFilter.NODES_OFFSET to "java.util.Map",
             ).mapNotNull { (index, type) ->
                 val actual = parameters.getOrNull(index)
                 "cacheAssemblyMethod arg${index + offset} is $actual, expected $type"
                     .takeIf { actual != type }
             }
-        val rootWrapper = parameters.getOrNull(1)
+        val rootWrapper = parameters.getOrNull(StreamCacheFilter.ROOT_OFFSET)
         val rootWrapperIsClass =
             rootWrapper != null && rootWrapper !in PRIMITIVES && '.' !in rootWrapper
         return positional +
             listOfNotNull(
-                "cacheAssemblyMethod arg${offset + 1} is $rootWrapper, expected a class"
-                    .takeUnless { rootWrapperIsClass },
+                (
+                    "cacheAssemblyMethod arg${offset + StreamCacheFilter.ROOT_OFFSET} is " +
+                        "$rootWrapper, expected a class"
+                ).takeUnless { rootWrapperIsClass },
             )
     }
 

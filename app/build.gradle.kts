@@ -118,6 +118,7 @@ dependencies {
     add(ktlint.name, libs.ktlint.cli)
     compileOnly(libs.libxposed.api)
     implementation(libs.dexkit)
+    testCompileOnly(libs.libxposed.api)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.snakeyaml)

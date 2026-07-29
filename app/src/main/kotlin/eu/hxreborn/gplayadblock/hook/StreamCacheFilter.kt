@@ -15,15 +15,24 @@ object StreamCacheFilter {
         targets: ResolvedTargets.Resolved,
     ) {
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
+        val argOffset = targets.cacheAssemblyMethod.syntheticSelfParameters
+        val nodeClass = classLoader.loadClass(targets.presentationAccessor.className)
+        val parameterTypes = method.parameterTypes
+        require(
+            parameterTypes.getOrNull(argOffset + ROOT_OFFSET) == nodeClass &&
+                parameterTypes.getOrNull(argOffset + ROOT_CHILDREN_OFFSET) == List::class.java &&
+                parameterTypes.getOrNull(argOffset + NODES_OFFSET) == Map::class.java,
+        ) {
+            "cache assembly signature ${parameterTypes.map(Class<*>::getName)} offset=$argOffset"
+        }
         val classifier = PresentationClassifier.from(classLoader, targets)
         val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =
             CacheAssemblyInterceptor(
-                argOffset = targets.cacheAssemblyMethod.syntheticSelfParameters,
+                argOffset = argOffset,
                 transformer =
                     CacheGraphTransformer(
-                        nodeClass =
-                            classLoader.loadClass(targets.presentationAccessor.className),
+                        nodeClass = nodeClass,
                         presentationAccessor = targets.presentationAccessor.resolve(classLoader),
                         nodeChildrenField = targets.cacheNodeChildrenField.resolve(classLoader),
                         pageBoundariesField =

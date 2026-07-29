@@ -24,11 +24,8 @@ object DexKitResolver {
             "END OF STREAM",
             "Something went wrong creating ResolvedStream for StreamNode.",
         )
-    private val streamHandlerAnchors =
-        listOf(
-            "Should not call fetchStreamNode() twice.",
-            "StreamNodeHandler has already been initialized.",
-        )
+    private const val STREAM_HANDLER_ANCHOR =
+        "StreamNodeHandler has already been initialized."
     private val adPresentationAnchors =
         listOf(
             "ADS_DETAIL_FORMAT_CLUSTER_PRESENTATION",
@@ -100,7 +97,7 @@ object DexKitResolver {
         val handlerClasses =
             bridge.findClass {
                 matcher {
-                    usingStrings = streamHandlerAnchors
+                    usingStrings = listOf(STREAM_HANDLER_ANCHOR)
                 }
             }
         val handlerClass =

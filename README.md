@@ -12,6 +12,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 11+">
   <img src="https://img.shields.io/badge/libxposed-API_101%2B-ff69b4?style=for-the-badge" alt="libxposed API 101+">
+  <a href="https://t.me/PlayStoreAdblock"><img src="https://img.shields.io/badge/Updates-Telegram-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Updates on Telegram"></a>
 </p>
 
 ## Screenshots

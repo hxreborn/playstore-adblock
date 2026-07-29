@@ -88,7 +88,7 @@ jobs:
           order=()
           section="_none_"
           count=0
-          cap=6
+          cap=25
           while IFS= read -r line; do
             if [[ "$line" =~ ^###[[:space:]]+(.*)$ ]]; then
               section="${BASH_REMATCH[1]:-_none_}"

@@ -41,6 +41,7 @@ object TargetCache {
                 .put("moduleVersionCode", moduleVersionCode)
         when (targets) {
             is ResolvedTargets.Missing -> {
+                if (targets.retryable) return
                 root.put("status", "missing")
                 root.put("reason", targets.reason)
             }

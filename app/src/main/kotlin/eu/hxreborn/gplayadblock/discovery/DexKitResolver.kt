@@ -74,8 +74,9 @@ object DexKitResolver {
     internal fun hasNativeLoadFailure(): Boolean = nativeLoadFailure != null
 
     fun resolve(apkPaths: List<String>): ResolvedTargets {
-        nativeLoadFailure?.let { return ResolvedTargets.Missing(it) }
+        nativeLoadFailure?.let { return ResolvedTargets.Missing(it, retryable = true) }
         val failures = ArrayList<String>()
+        var retryable = false
         for (apkPath in apkPaths.distinct()) {
             try {
                 DexKitBridge.create(apkPath).use { bridge ->
@@ -86,9 +87,13 @@ object DexKitResolver {
                 }
             } catch (exception: Exception) {
                 failures += "$apkPath: ${exception.javaClass.simpleName}: ${exception.message}"
+                retryable = true
             }
         }
-        return ResolvedTargets.Missing(failures.joinToString(" | ").ifBlank { "no APK paths" })
+        return ResolvedTargets.Missing(
+            failures.joinToString(" | ").ifBlank { "no APK paths" },
+            retryable = retryable,
+        )
     }
 
     private fun resolve(bridge: DexKitBridge): ResolvedTargets {

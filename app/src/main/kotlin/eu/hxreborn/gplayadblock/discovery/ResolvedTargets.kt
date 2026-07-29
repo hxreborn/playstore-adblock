@@ -57,5 +57,6 @@ sealed interface ResolvedTargets {
 
     data class Missing(
         val reason: String,
+        val retryable: Boolean = false,
     ) : ResolvedTargets
 }

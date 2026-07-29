@@ -31,7 +31,6 @@ object DexKitResolver {
             "ADS_DETAIL_FORMAT_CLUSTER_PRESENTATION",
             "ADS_DETAIL_FORMAT_VERTICAL_CLUSTER_PRESENTATION",
             "SEARCH_LIST_VIEW_AD_CLUSTER_PRESENTATION",
-            "SPONSORED_BANNER_CLUSTER_PRESENTATION",
         )
     private val remoteSuggestionAnchors =
         listOf(

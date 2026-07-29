@@ -1,0 +1,70 @@
+# Play Store releases this module has been exercised against.
+#
+# supported    installed and run: sponsored content gone, organic intact, paired control
+# partial      some sponsored surfaces filtered, others confirmed not
+# unsupported  does not work, no fix shipped
+# untested     never run on a device
+#
+# Only supported means verified, and never by inference from a neighbouring release.
+# ValidatedReleases.keys is version_code / 100 of every supported entry.
+# An absent release is not necessarily broken.
+
+schema_version: 1
+
+# First public release of each major, to measure how far behind a major this module ran.
+major_releases:
+  "42": 2024-07-22
+  "43": 2024-09-30
+  "44": 2024-12-09
+  "45": 2025-02-17
+  "46": 2025-04-28
+  "47": 2025-07-07
+  "48": 2025-09-15
+  "49": 2025-11-24
+  "50": 2026-02-06
+  "51": 2026-04-13
+  "52": 2026-06-30
+
+releases:
+  - version_name: "41.9.18-31 [0] [PR] 652636737"
+    version_code: 84191830
+    status: unsupported
+    tested_on: 2026-07-29
+    module_version_code: 10200
+    failure: GenericCardUiModel absent
+  - version_name: "42.9.17-31 [0] [PR] 677880302"
+    version_code: 84291730
+    status: unsupported
+    tested_on: 2026-07-29
+    module_version_code: 10200
+    failure: GenericCardUiModel absent
+  - version_name: "49.9.21-23 [0] [PR] 864439599"
+    version_code: 84992100
+    status: untested
+    tested_on: 2026-07-29
+    module_version_code: 10200
+    notes: 32-bit-only upload, no test device can install it
+  - version_name: "52.2.25-31 [0] [PR] 945188457"
+    version_code: 85222530
+    status: supported
+    tested_on: 2026-07-21
+    module_version_code: 10000
+    notes: no longer installed, cannot be re-verified
+  - version_name: "52.3.32-31 [0] [PR] 949272982"
+    version_code: 85233230
+    status: supported
+    tested_on: 2026-07-22
+    module_version_code: 10000
+    module_commit: b76e332
+    notes: no longer installed, cannot be re-verified
+  - version_name: "52.4.41-31 [0] [PR] 953053140"
+    version_code: 85244130
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
+  - version_name: "52.4.41-34 [0] [PR] 953053140"
+    version_code: 85244140
+    status: supported
+    tested_on: 2026-07-28
+    module_version_code: 10100
+    module_commit: c0392f1

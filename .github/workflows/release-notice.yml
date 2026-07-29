@@ -122,7 +122,7 @@ jobs:
           shown="${shown%$'\n'}"
           total=$count
 
-          text="<b>New stable release</b>"$'\n\n'"Play Store Adblock <b>${tag_esc}</b>"
+          text="<b>New stable release</b>"$'\n\n'"<b>Play Store Adblock ${tag_esc}</b>"
           if [ -n "$shown" ]; then
             text+=$'\n\n'"$shown"
             if [ "$total" -gt "$cap" ]; then

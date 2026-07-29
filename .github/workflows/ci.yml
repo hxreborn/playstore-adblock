@@ -27,4 +27,12 @@ jobs:
           cache: gradle
 
       - name: Check and build
-        run: ./gradlew :app:ktlintCheck :app:assembleDebug :app:lintRelease
+        run: ./gradlew :app:ktlintCheck :app:testDebugUnitTest :app:assembleDebug :app:lintRelease
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Test the release detector
+        working-directory: tools
+        run: python3 -m unittest discover -p 'test_*.py' -v

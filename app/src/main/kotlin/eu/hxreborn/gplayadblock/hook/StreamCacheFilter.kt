@@ -6,6 +6,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
 
 object StreamCacheFilter {
@@ -19,6 +20,7 @@ object StreamCacheFilter {
         val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =
             CacheAssemblyInterceptor(
+                argOffset = syntheticSelfParameters(method),
                 transformer =
                     CacheGraphTransformer(
                         nodeClass =
@@ -44,16 +46,26 @@ object StreamCacheFilter {
             .intercept { chain -> interceptor.intercept(chain) }
     }
 
+    private fun syntheticSelfParameters(method: Method): Int =
+        if (Modifier.isStatic(method.modifiers) &&
+            method.parameterTypes.firstOrNull() == method.declaringClass
+        ) {
+            1
+        } else {
+            0
+        }
+
     private class CacheAssemblyInterceptor(
+        private val argOffset: Int,
         private val transformer: CacheGraphTransformer,
     ) {
         fun intercept(chain: XposedInterface.Chain): Any? {
             val replacement =
                 try {
                     transformer.transform(
-                        root = chain.getArg(2),
-                        rootChildren = chain.getArg(3),
-                        nodes = chain.getArg(4),
+                        root = chain.getArg(argOffset + 1),
+                        rootChildren = chain.getArg(argOffset + 2),
+                        nodes = chain.getArg(argOffset + 3),
                     )
                 } catch (exception: Exception) {
                     Logger.error("stream cache filtering failed", exception)

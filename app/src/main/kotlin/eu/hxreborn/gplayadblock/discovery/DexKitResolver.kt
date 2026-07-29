@@ -707,26 +707,21 @@ object DexKitResolver {
                 ?: return missing("cache assembly holders=${handlerFactories.size}")
         val cacheAssemblyMethods =
             cacheAssemblyHolder.methods.filter { method ->
-                Modifier.isStatic(method.modifiers) &&
-                    method.paramTypeNames.firstOrNull() == method.declaredClassName &&
-                    nodeClass.name in method.paramTypeNames
+                nodeClass.name in method.paramTypeNames &&
+                    method.returnType
+                        ?.fields
+                        .orEmpty()
+                        .filter { field -> !field.isStatic }
+                        .map(FieldData::typeName)
+                        .let { types ->
+                            nodeClass.name in types &&
+                                "${handlerClass.name}[]" in types &&
+                                handlerSuperClass.name in types
+                        }
             }
         val cacheAssemblyMethod =
             cacheAssemblyMethods.singleOrNull()
                 ?: return missing("cache assembly methods=${cacheAssemblyMethods.size}")
-        val assembledCacheClass =
-            cacheAssemblyMethod.returnType
-                ?: return missing("assembled cache class not found")
-        val assembledCacheFieldTypes =
-            assembledCacheClass.fields
-                .filter { field -> !field.isStatic }
-                .map(FieldData::typeName)
-        if (nodeClass.name !in assembledCacheFieldTypes ||
-            "${handlerClass.name}[]" !in assembledCacheFieldTypes ||
-            handlerSuperClass.name !in assembledCacheFieldTypes
-        ) {
-            return missing("assembled cache shape mismatch class=${assembledCacheClass.name}")
-        }
         val cacheReaderCallers =
             cacheAssemblyMethod.callers.filter { method ->
                 !Modifier.isStatic(method.modifiers) &&
@@ -894,13 +889,14 @@ object DexKitResolver {
                     "protobuf builder message fields=${protobufBuilderMessageFields.size}",
                 )
         val protobufMergeMethods =
-            protobufBuilderClass.methods
+            generateSequence(protobufBuilderClass, ClassData::superClass)
+                .flatMap { type -> type.methods.asSequence() }
                 .filter { method ->
                     !Modifier.isStatic(method.modifiers) &&
-                        method.paramTypeNames == listOf(protobufMessageClass.name) &&
-                        method.returnTypeName == "void" &&
+                        method.paramCount == 1 &&
                         PROTOBUF_MERGE_ANCHOR in method.usingStrings
                 }.distinctBy(MethodData::descriptor)
+                .toList()
         val protobufMergeMethod =
             protobufMergeMethods.singleOrNull()
                 ?: return fail("protobuf merge methods=${protobufMergeMethods.size}")

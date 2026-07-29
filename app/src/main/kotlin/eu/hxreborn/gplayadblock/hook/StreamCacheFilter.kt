@@ -45,6 +45,20 @@ object StreamCacheFilter {
             .intercept { chain -> interceptor.intercept(chain) }
     }
 
+    internal fun rewriteArguments(
+        original: List<Any?>,
+        argOffset: Int,
+        root: Any,
+        rootChildren: List<*>,
+        nodes: Map<*, *>,
+    ): Array<Any?> {
+        val arguments = original.toTypedArray()
+        arguments[argOffset + ROOT_OFFSET] = root
+        arguments[argOffset + ROOT_CHILDREN_OFFSET] = rootChildren
+        arguments[argOffset + NODES_OFFSET] = nodes
+        return arguments
+    }
+
     private class CacheAssemblyInterceptor(
         private val argOffset: Int,
         private val transformer: CacheGraphTransformer,
@@ -53,20 +67,24 @@ object StreamCacheFilter {
             val replacement =
                 try {
                     transformer.transform(
-                        root = chain.getArg(argOffset + 1),
-                        rootChildren = chain.getArg(argOffset + 2),
-                        nodes = chain.getArg(argOffset + 3),
+                        root = chain.getArg(argOffset + ROOT_OFFSET),
+                        rootChildren = chain.getArg(argOffset + ROOT_CHILDREN_OFFSET),
+                        nodes = chain.getArg(argOffset + NODES_OFFSET),
                     )
                 } catch (exception: Exception) {
                     Logger.error("stream cache filtering failed", exception)
                     null
                 }
             if (replacement == null) return chain.proceed()
-            val arguments = chain.args.toTypedArray()
-            arguments[2] = replacement.root
-            arguments[3] = replacement.rootChildren
-            arguments[4] = replacement.nodes
-            return chain.proceed(arguments)
+            return chain.proceed(
+                rewriteArguments(
+                    original = chain.args,
+                    argOffset = argOffset,
+                    root = replacement.root,
+                    rootChildren = replacement.rootChildren,
+                    nodes = replacement.nodes,
+                ),
+            )
         }
     }
 
@@ -266,4 +284,8 @@ object StreamCacheFilter {
     )
 
     private const val CONTINUATION_PRESENT = 1
+
+    internal const val ROOT_OFFSET = 1
+    internal const val ROOT_CHILDREN_OFFSET = 2
+    internal const val NODES_OFFSET = 3
 }

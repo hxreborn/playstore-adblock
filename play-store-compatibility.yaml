@@ -48,38 +48,38 @@ releases:
     version_code: 84492030
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "45.9.19-31 [0] [PR] 749105629"
     version_code: 84591930
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "46.9.20-31 [0] [PR] 776704244"
     version_code: 84692030
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: no cache removal observed from an ad-bearing cache
   - version_name: "47.0.13-31 [0] [PR] 778616651"
     version_code: 84701330
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "48.5.23-31 [0] [PR] 820926732"
     version_code: 84852330
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: home surface and cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "49.9.19-31 [0] [PR] 863324324"
     version_code: 84991930
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: no cache removal observed from an ad-bearing cache
   - version_name: "49.9.21-23 [0] [PR] 864439599"
     version_code: 84992100
     status: untested
@@ -96,8 +96,8 @@ releases:
     version_code: 85013330
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "50.7.37-31 [0] [PR] 912671916"
     version_code: 85073730
     status: supported
@@ -108,8 +108,8 @@ releases:
     version_code: 85101930
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
-    notes: cache filtering not tested
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "51.9.18-31 [0] [PR] 931412096"
     version_code: 85191830
     status: supported

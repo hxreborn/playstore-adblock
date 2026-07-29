@@ -63,6 +63,12 @@ releases:
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+  - version_name: "48.5.23-31 [0] [PR] 820926732"
+    version_code: 84852330
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
+    notes: home surface not exercised
   - version_name: "49.9.21-23 [0] [PR] 864439599"
     version_code: 84992100
     status: untested

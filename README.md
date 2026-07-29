@@ -59,6 +59,7 @@
 | 45.9.19-XX | 845919XX | supported |
 | 46.9.20-XX | 846920XX | supported |
 | 47.0.13-XX | 847013XX | supported |
+| 48.5.23-XX | 848523XX | supported |
 | 49.9.21-XX | 849921XX | untested |
 | 52.2.25-XX | 852225XX | supported |
 | 52.3.32-XX | 852332XX | supported |

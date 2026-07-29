@@ -8,6 +8,7 @@ object ValidatedReleases {
             845919L,
             846920L,
             847013L,
+            848523L,
             852225L,
             852332L,
             852441L,

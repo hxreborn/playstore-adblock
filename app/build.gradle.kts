@@ -66,6 +66,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            ndk {
+                abiFilters += "x86_64"
+            }
+        }
+
         release {
             signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
             isMinifyEnabled = true

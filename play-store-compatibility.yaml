@@ -101,9 +101,9 @@ releases:
   - version_name: "50.7.37-31 [0] [PR] 912671916"
     version_code: 85073730
     status: supported
-    tested_on: 2026-07-28
-    module_version_code: 10200
-    notes: cache filtering not tested
+    tested_on: 2026-07-29
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "51.0.19-31 [0] [PR] 897988648"
     version_code: 85101930
     status: supported

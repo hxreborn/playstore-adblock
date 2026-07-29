@@ -31,7 +31,8 @@
       }
     }],
     ["@semantic-release/exec", {
-      "prepareCmd": "bash .github/semantic-release-prepare.sh ${nextRelease.version}"
+      "prepareCmd": "bash .github/semantic-release-prepare.sh ${nextRelease.version}",
+      "generateNotesCmd": "printf '\\n---\\n\\n📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.\\n'"
     }],
     "@semantic-release/changelog",
     ["@semantic-release/git", {

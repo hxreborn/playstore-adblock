@@ -8,6 +8,9 @@ data class MethodRef(
     val returnTypeName: String,
     val paramTypeNames: List<String>,
 ) {
+    val syntheticSelfParameters: Int
+        get() = if (paramTypeNames.firstOrNull() == className) 1 else 0
+
     fun resolve(classLoader: ClassLoader): Method {
         val declaringClass = classLoader.loadClass(className)
         val parameterTypes = paramTypeNames.map { resolveType(classLoader, it) }.toTypedArray()

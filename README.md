@@ -62,6 +62,7 @@
 | 48.5.23-XX | 848523XX | supported |
 | 49.9.19-XX | 849919XX | supported |
 | 49.9.21-XX | 849921XX | untested |
+| 50.1.33-XX | 850133XX | supported |
 | 52.2.25-XX | 852225XX | supported |
 | 52.3.32-XX | 852332XX | supported |
 | 52.4.41-XX | 852441XX | supported |

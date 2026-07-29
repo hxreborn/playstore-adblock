@@ -80,6 +80,16 @@ releases:
     tested_on: 2026-07-29
     module_version_code: 10200
     notes: 32-bit-only upload, no test device can install it
+  - version_name: "50.1.33-29 [0] [PR] 867780628"
+    version_code: 85013320
+    status: supported
+    tested_on: 2026-07-28
+    module_version_code: 10200
+  - version_name: "50.1.33-31 [0] [PR] 867780628"
+    version_code: 85013330
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
   - version_name: "52.2.25-31 [0] [PR] 945188457"
     version_code: 85222530
     status: supported

@@ -33,9 +33,12 @@ Thumbs.db
 *.log
 hs_err_pid*.log
 
+__pycache__/
+*.pyc
+
 analysis/
 
-# Only the root README is tracked as Markdown; local docs stay untracked
+# Only the root README is tracked as Markdown
 *.md
 *.markdown
 !/README.md

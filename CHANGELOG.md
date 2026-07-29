@@ -1,3 +1,15 @@
+## [1.3.1](https://github.com/hxreborn/playstore-adblock/compare/v1.3.0...v1.3.1) (2026-07-29)
+
+### Bug Fixes
+
+* **hook:** skip cache filtering on builds it cannot handle safely ([1934dd4](https://github.com/hxreborn/playstore-adblock/commit/1934dd4a37002a0cb3b4d54f59d17e6f3a1b891b))
+* **hook:** stop breaking Play Store when filtering a cached page ([98ac065](https://github.com/hxreborn/playstore-adblock/commit/98ac065e97645aadbdfca4607bcd3e8502c57eb8))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.3.0](https://github.com/hxreborn/playstore-adblock/compare/v1.2.0...v1.3.0) (2026-07-29)
 
 ### Features

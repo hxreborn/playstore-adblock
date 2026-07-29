@@ -4,6 +4,7 @@ object ValidatedReleases {
     val keys =
         setOf(
             843918L,
+            844920L,
             852225L,
             852332L,
             852441L,

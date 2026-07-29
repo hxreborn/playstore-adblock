@@ -82,7 +82,7 @@ class PlayStoreAdblockModule : XposedModule() {
             val status =
                 "Play Store ${packageInfo.versionName} ($targetVersionCode) " +
                     "module v${BuildConfig.VERSION_NAME}"
-            if (targetVersionCode !in VALIDATED_TARGET_VERSIONS) {
+            if (!ValidatedReleases.accepts(targetVersionCode)) {
                 Logger.warn("Play Store version untested : $status")
             }
             val applicationInfo = context.applicationInfo
@@ -127,62 +127,15 @@ class PlayStoreAdblockModule : XposedModule() {
                         "targets resolved streamMethod=${targets.streamDataMethod.className}." +
                             targets.streamDataMethod.methodName
                     }
-
-                    fun installGroup(
-                        label: String,
-                        action: () -> Unit,
-                    ): Boolean =
-                        try {
-                            action()
-                            true
-                        } catch (exception: Exception) {
-                            Logger.error("hook group '$label' failed to install", exception)
-                            false
-                        }
-
-                    val graph =
-                        installGroup("graph stream") {
-                            StreamNodeFilter.install(this, classLoader, targets)
-                        }
-                    targets.suggestionFailure?.let { reason ->
-                        Logger.warn("search suggestion targets unresolved reason=$reason")
-                    }
-                    val suggestion =
-                        targets.suggestion?.let { suggestionTargets ->
-                            installGroup("search suggestion") {
-                                SearchSuggestionFilter.install(
-                                    this,
-                                    classLoader,
-                                    suggestionTargets,
-                                )
-                            }
-                        } ?: false
-                    val cache =
-                        installGroup("stream cache") {
-                            StreamCacheFilter.install(this, classLoader, targets)
-                        }
-                    val response =
-                        installGroup("stream response") {
-                            StreamResponseFilter.install(this, classLoader, targets)
-                        }
-
-                    val active =
-                        listOfNotNull(
-                            "graph".takeIf { graph },
-                            "search".takeIf { suggestion },
-                            "cache".takeIf { cache },
-                            "response".takeIf { response },
-                        ).joinToString(",", "[", "]")
-                    if (cache && response) {
+                    val installed = installHookGroups(classLoader, targets)
+                    val active = installed.joinToString(",", "[", "]")
+                    val missing = REQUIRED_HOOK_GROUPS - installed
+                    if (missing.isEmpty()) {
                         Logger.info("hooks installed hooks=$active resolved=$source : $status")
                     } else {
-                        val missing =
-                            listOfNotNull(
-                                "cache".takeUnless { cache },
-                                "response".takeUnless { response },
-                            ).joinToString(",", "[", "]")
                         Logger.warn(
-                            "hooks install incomplete active=$active missing=$missing " +
+                            "hooks install incomplete active=$active " +
+                                "missing=${missing.joinToString(",", "[", "]")} " +
                                 "resolved=$source : $status",
                         )
                         notifyFilteringUnavailable(context)
@@ -195,12 +148,49 @@ class PlayStoreAdblockModule : XposedModule() {
         }
     }
 
+    private fun installHookGroups(
+        classLoader: ClassLoader,
+        targets: ResolvedTargets.Resolved,
+    ): Set<String> {
+        targets.suggestionFailure?.let { reason ->
+            Logger.warn("search suggestion targets unresolved reason=$reason")
+        }
+        return listOfNotNull(
+            installHookGroup("graph") {
+                StreamNodeFilter.install(this, classLoader, targets)
+            },
+            targets.suggestion?.let { suggestion ->
+                installHookGroup("search") {
+                    SearchSuggestionFilter.install(this, classLoader, suggestion)
+                }
+            },
+            installHookGroup("cache") {
+                StreamCacheFilter.install(this, classLoader, targets)
+            },
+            installHookGroup("response") {
+                StreamResponseFilter.install(this, classLoader, targets)
+            },
+        ).toSet()
+    }
+
+    private fun installHookGroup(
+        label: String,
+        install: () -> Unit,
+    ): String? =
+        try {
+            install()
+            label
+        } catch (exception: Exception) {
+            Logger.error("hook group '$label' failed to install", exception)
+            null
+        }
+
     private companion object {
+        val REQUIRED_HOOK_GROUPS = setOf("cache", "response")
         const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
-        val VALIDATED_TARGET_VERSIONS = setOf(85222530L, 85233230L, 85244140L)
 
         fun notifyFilteringUnavailable(context: Context) {
             Handler(Looper.getMainLooper()).postDelayed(

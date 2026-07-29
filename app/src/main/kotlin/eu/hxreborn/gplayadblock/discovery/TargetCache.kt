@@ -52,13 +52,20 @@ object TargetCache {
             }
         }
         try {
-            file.parentFile?.mkdirs()
-            val temporary = File(file.parentFile, "${file.name}.tmp")
+            val directory = file.parentFile
+            directory?.mkdirs()
+            directory
+                ?.listFiles { candidate ->
+                    candidate.name.startsWith(FILE_PREFIX) && candidate.name != file.name
+                }?.forEach(File::delete)
+            val temporary = File(directory, "${file.name}.tmp")
             temporary.writeText(root.toString())
             if (!temporary.renameTo(file)) temporary.delete()
         } catch (_: Exception) {
         }
     }
+
+    private const val FILE_PREFIX = "targets-"
 
     private fun cacheFile(
         dataDir: String,
@@ -67,7 +74,7 @@ object TargetCache {
     ): File =
         File(
             dataDir,
-            "files/playstore-adblock/targets-$targetVersionCode-$moduleVersionCode.json",
+            "files/playstore-adblock/$FILE_PREFIX$targetVersionCode-$moduleVersionCode.json",
         )
 
     private fun encodeResolved(targets: ResolvedTargets.Resolved): JSONObject =

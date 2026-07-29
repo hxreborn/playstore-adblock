@@ -1,0 +1,14 @@
+package eu.hxreborn.gplayadblock
+
+object ValidatedReleases {
+    val keys =
+        setOf(
+            852225L,
+            852332L,
+            852441L,
+        )
+
+    fun releaseKey(versionCode: Long): Long = versionCode / 100
+
+    fun accepts(versionCode: Long): Boolean = releaseKey(versionCode) in keys
+}

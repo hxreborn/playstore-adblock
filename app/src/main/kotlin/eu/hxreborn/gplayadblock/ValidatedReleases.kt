@@ -13,6 +13,7 @@ object ValidatedReleases {
             850133L,
             850737L,
             851019L,
+            851918L,
             852225L,
             852332L,
             852441L,

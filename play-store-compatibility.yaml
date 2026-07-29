@@ -100,6 +100,11 @@ releases:
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+  - version_name: "51.9.18-31 [0] [PR] 931412096"
+    version_code: 85191830
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
   - version_name: "52.2.25-31 [0] [PR] 945188457"
     version_code: 85222530
     status: supported

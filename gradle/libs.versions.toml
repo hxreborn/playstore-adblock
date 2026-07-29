@@ -1,13 +1,19 @@
 [versions]
 agp = "9.3.1"
 dexkit = "2.2.0"
+json = "20260719"
+junit = "4.13.2"
 ktlint = "1.8.0"
 libxposedApi = "101.0.1"
+snakeyaml = "2.6"
 
 [libraries]
 dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
+json = { module = "org.json:json", version.ref = "json" }
+junit = { module = "junit:junit", version.ref = "junit" }
 ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

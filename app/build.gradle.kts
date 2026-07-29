@@ -118,6 +118,39 @@ dependencies {
     add(ktlint.name, libs.ktlint.cli)
     compileOnly(libs.libxposed.api)
     implementation(libs.dexkit)
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
+    testImplementation(libs.snakeyaml)
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("java.library.path", rootDir.resolve("analysis/tools/dexkit-host").absolutePath)
+    systemProperty(
+        "gplayadblock.releaseFixtures",
+        rootDir.resolve("analysis/release-fixtures").absolutePath,
+    )
+    systemProperty(
+        "gplayadblock.compatibilityMetadata",
+        rootDir.resolve("play-store-compatibility.yaml").absolutePath,
+    )
+    testLogging { showStandardStreams = true }
+}
+
+tasks.register<JavaExec>("recordFingerprints") {
+    group = "verification"
+    description = "Rewrite the recorded target set of every release fixture"
+    dependsOn("compileDebugUnitTestSources")
+    classpath = files(provider { tasks.named<Test>("testDebugUnitTest").get().classpath })
+    mainClass.set("eu.hxreborn.gplayadblock.discovery.RecordFingerprintsKt")
+    systemProperty("java.library.path", rootDir.resolve("analysis/tools/dexkit-host").absolutePath)
+    systemProperty(
+        "gplayadblock.releaseFixtures",
+        rootDir.resolve("analysis/release-fixtures").absolutePath,
+    )
+    systemProperty(
+        "gplayadblock.fingerprints",
+        layout.projectDirectory.dir("src/test/resources/fingerprints").asFile.absolutePath,
+    )
 }
 
 val ktlintCheck =

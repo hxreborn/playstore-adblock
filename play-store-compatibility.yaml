@@ -42,38 +42,44 @@ releases:
     version_code: 84391830
     status: supported
     tested_on: 2026-07-29
-    module_version_code: 10200
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "44.9.20-31 [0] [PR] 725719186"
     version_code: 84492030
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "45.9.19-31 [0] [PR] 749105629"
     version_code: 84591930
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "46.9.20-31 [0] [PR] 776704244"
     version_code: 84692030
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "47.0.13-31 [0] [PR] 778616651"
     version_code: 84701330
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "48.5.23-31 [0] [PR] 820926732"
     version_code: 84852330
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
-    notes: home surface not exercised
+    notes: home surface and cache filtering not tested
   - version_name: "49.9.19-31 [0] [PR] 863324324"
     version_code: 84991930
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "49.9.21-23 [0] [PR] 864439599"
     version_code: 84992100
     status: untested
@@ -83,23 +89,27 @@ releases:
   - version_name: "50.1.33-29 [0] [PR] 867780628"
     version_code: 85013320
     status: supported
-    tested_on: 2026-07-28
-    module_version_code: 10200
+    tested_on: 2026-07-29
+    module_version_code: 10300
+    notes: cache filtering tested from an ad-bearing cache
   - version_name: "50.1.33-31 [0] [PR] 867780628"
     version_code: 85013330
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "50.7.37-31 [0] [PR] 912671916"
     version_code: 85073730
     status: supported
     tested_on: 2026-07-28
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "51.0.19-31 [0] [PR] 897988648"
     version_code: 85101930
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+    notes: cache filtering not tested
   - version_name: "51.9.18-31 [0] [PR] 931412096"
     version_code: 85191830
     status: supported
@@ -110,14 +120,12 @@ releases:
     status: supported
     tested_on: 2026-07-21
     module_version_code: 10000
-    notes: no longer installed, cannot be re-verified
   - version_name: "52.3.32-31 [0] [PR] 949272982"
     version_code: 85233230
     status: supported
     tested_on: 2026-07-22
     module_version_code: 10000
     module_commit: b76e332
-    notes: no longer installed, cannot be re-verified
   - version_name: "52.4.41-31 [0] [PR] 953053140"
     version_code: 85244130
     status: supported

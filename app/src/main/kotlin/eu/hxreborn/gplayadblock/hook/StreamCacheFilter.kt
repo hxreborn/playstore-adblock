@@ -179,6 +179,11 @@ object StreamCacheFilter {
                 return null
             }
 
+            Logger.debug {
+                "cache removal removable=${removableKeys.size} " +
+                    "children=${rootList.size}->${filteredRootChildren.size} " +
+                    "nodes=${nodeMap.size}"
+            }
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
         }
 

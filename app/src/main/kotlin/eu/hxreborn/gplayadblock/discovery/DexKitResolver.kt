@@ -93,66 +93,20 @@ object DexKitResolver {
     }
 
     private fun resolve(bridge: DexKitBridge): ResolvedTargets {
-        val handlerClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = listOf(STREAM_HANDLER_ANCHOR)
-                }
+        val stream =
+            when (val streamResult = resolveStreamChain(bridge)) {
+                is Resolution.Success -> streamResult.value
+                is Resolution.Failure -> return missing(streamResult.reason)
             }
-        val handlerClass =
-            handlerClasses.singleOrNull()
-                ?: return missing("stream handler candidates=${handlerClasses.size}")
-        val handlerSuperClass =
-            handlerClass.superClass
-                ?: return missing("stream handler has no dex superclass")
-
-        val streamMethods =
-            handlerClass.methods.filter { method ->
-                Modifier.isPrivate(method.modifiers) &&
-                    method.paramTypeNames == listOf("java.lang.Throwable") &&
-                    streamDataConstructor(method) != null
-            }
-        val streamMethod =
-            streamMethods.singleOrNull()
-                ?: return missing("stream data method candidates=${streamMethods.size}")
-        val streamConstructor =
-            streamDataConstructor(streamMethod)
-                ?: return missing("stream data constructor not found")
-        val streamDataClass =
-            streamMethod.returnType
-                ?: return missing("stream data class not found")
-        val streamChildConsumers =
-            bridge
-                .findMethod {
-                    matcher {
-                        usingStrings = listOf(STREAM_CHILD_CONSUMER_ANCHOR)
-                    }
-                }.filter { method ->
-                    method.paramTypeNames == listOf(streamDataClass.name)
-                }
-        val streamChildConsumer =
-            streamChildConsumers.singleOrNull()
-                ?: return missing("stream child consumers=${streamChildConsumers.size}")
-        val streamChildrenFields =
-            streamChildConsumer.usingFields
-                .filter { usage -> usage.usingType.isRead() }
-                .map { usage -> usage.field }
-                .filter { field ->
-                    !field.isStatic && field.declaredClassName == streamDataClass.name
-                }.distinctBy(FieldData::descriptor)
-        val streamChildrenField =
-            streamChildrenFields.singleOrNull()
-                ?: return missing("stream children fields=${streamChildrenFields.size}")
-
-        val childHandlersField =
-            handlerSuperClass.fields.singleOrNull { field ->
-                !field.isStatic && field.typeName == "${handlerClass.name}[]"
-            } ?: return missing("child handler array field not found")
-        val childIdType = streamConstructor.paramTypeNames[0]
-        val childIdField =
-            handlerClass.fields.singleOrNull { field ->
-                !field.isStatic && field.typeName == childIdType
-            } ?: return missing("child ID field not found")
+        val handlerClass = stream.handlerClass
+        val handlerSuperClass = stream.handlerSuperClass
+        val streamMethod = stream.streamMethod
+        val streamConstructor = stream.streamConstructor
+        val streamDataClass = stream.streamDataClass
+        val streamChildrenField = stream.streamChildrenField
+        val childHandlersField = stream.childHandlersField
+        val childIdField = stream.childIdField
+        val childIdType = childIdField.typeName
 
         val nodeAccessors =
             streamMethod.invokes
@@ -194,107 +148,28 @@ object DexKitResolver {
                 !field.isStatic && field.typeName == "java.lang.Object"
             } ?: return missing("presentation payload field not found")
 
-        val caseFieldReaders =
-            resolvePresentationMapper(bridge)?.callers
-                ?: presentationKindField.readers
-        val caseFieldScores =
-            caseFieldReaders
-                .asSequence()
-                .flatMap { caller ->
-                    caller.usingFields
-                        .asSequence()
-                        .map { usingField -> usingField.field }
-                        .filter { field ->
-                            !field.isStatic &&
-                                field.typeName == "int" &&
-                                field.declaredClass.fields.count { declaredField ->
-                                    !declaredField.isStatic && declaredField.typeName == "int"
-                                } >= 2
-                        }
-                }.groupingBy(FieldData::descriptor)
-                .eachCount()
-        val caseFieldsByDescriptor =
-            caseFieldReaders
-                .asSequence()
-                .flatMap { caller -> caller.usingFields.asSequence() }
-                .map { usingField -> usingField.field }
-                .associateBy(FieldData::descriptor)
-        val rankedCaseFields =
-            caseFieldScores.entries.sortedByDescending(Map.Entry<String, Int>::value)
-        val topCaseField = rankedCaseFields.firstOrNull()
-        if (topCaseField == null || rankedCaseFields.getOrNull(1)?.value == topCaseField.value) {
-            return missing("cluster case field was not unique")
-        }
-        val clusterCaseField =
-            caseFieldsByDescriptor[topCaseField.key]
-                ?: return missing("cluster case field metadata missing")
-        val clusterPayloadFields =
-            clusterCaseField.declaredClass
-                ?.fields
-                .orEmpty()
-                .filter { field ->
-                    !field.isStatic && field.typeName == "java.lang.Object"
-                }
-        val clusterPayloadField =
-            clusterPayloadFields.singleOrNull()
-                ?: return missing("cluster payload fields=${clusterPayloadFields.size}")
+        val cluster =
+            when (val clusterResult = resolveClusterCase(bridge, presentationKindField)) {
+                is Resolution.Success -> clusterResult.value
+                is Resolution.Failure -> return missing(clusterResult.reason)
+            }
+        val clusterCaseField = cluster.caseField
+        val clusterPayloadField = cluster.payloadField
 
         val genericCardModel =
             bridge.getClassData(GENERIC_CARD_MODEL)
                 ?: return missing("generic card model missing")
-        val genericCardConstructors = genericCardModel.methods.filter(MethodData::isConstructor)
-        val genericCardConstructor =
-            genericCardConstructors.singleOrNull()
-                ?: return missing("generic card constructors=${genericCardConstructors.size}")
-        val genericCardBuilders = genericCardConstructor.callers
-        val genericCardBuilder =
-            genericCardBuilders.singleOrNull()
-                ?: return missing("generic card builders=${genericCardBuilders.size}")
-        val genericCardAccessors =
-            genericCardBuilder.invokes
-                .filter { method ->
-                    method.declaredClassName == genericCardBuilder.declaredClassName &&
-                        Modifier.isPrivate(method.modifiers) &&
-                        Modifier.isStatic(method.modifiers) &&
-                        method.paramTypeNames == listOf(streamMethod.returnTypeName) &&
-                        method.returnTypeName !in primitiveTypes
-                }.distinctBy(MethodData::descriptor)
-        val genericCardAccessor =
-            genericCardAccessors.singleOrNull()
-                ?: return missing("generic card accessors=${genericCardAccessors.size}")
-        val genericCardPayloadClass =
-            genericCardAccessor.returnType
-                ?: return missing("generic card payload class missing")
-        val builderReadFields =
-            genericCardBuilder.usingFields
-                .filter { usage -> usage.usingType.isRead() }
-                .map { usage -> usage.field.descriptor }
-                .toSet()
-        val adMetadataFields =
-            genericCardPayloadClass.fields.filter { field ->
-                !field.isStatic &&
-                    field.typeName !in primitiveTypes &&
-                    field.descriptor in builderReadFields &&
-                    field.type?.superClass?.name == genericCardPayloadClass.superClass?.name
+        val card =
+            when (val cardResult = resolveGenericCard(genericCardModel, streamMethod)) {
+                is Resolution.Success -> cardResult.value
+                is Resolution.Failure -> return missing(cardResult.reason)
             }
-        val genericAdMetadataField =
-            adMetadataFields.singleOrNull()
-                ?: return missing("generic ad metadata fields=${adMetadataFields.size}")
-        val adMetadataClass =
-            genericAdMetadataField.type
-                ?: return missing("ad metadata class missing")
-        val adMetadataBaseClass =
-            adMetadataClass.superClass
-                ?: return missing("ad metadata base class missing")
-        val adPresenceFields =
-            adMetadataClass.fields.filter { field ->
-                !field.isStatic &&
-                    field.typeName == "int" &&
-                    field.descriptor in builderReadFields
-            }
-        val adPresenceField =
-            adPresenceFields.singleOrNull()
-                ?: return missing("ad presence fields=${adPresenceFields.size}")
+        val genericCardAccessor = card.accessor
+        val genericCardPayloadClass = card.payloadClass
+        val genericAdMetadataField = card.adMetadataField
+        val adMetadataClass = card.adMetadataClass
+        val adMetadataBaseClass = card.adMetadataBaseClass
+        val adPresenceField = card.adPresenceField
 
         val cardWrapperCandidates =
             genericCardAccessor.usingFields
@@ -809,6 +684,206 @@ object DexKitResolver {
         )
     }
 
+    private fun resolveStreamChain(bridge: DexKitBridge): Resolution<StreamChain> {
+        val handlerClasses =
+            bridge.findClass {
+                matcher {
+                    usingStrings = listOf(STREAM_HANDLER_ANCHOR)
+                }
+            }
+        val handlerClass =
+            handlerClasses.singleOrNull()
+                ?: return fail("stream handler candidates=${handlerClasses.size}")
+        val handlerSuperClass =
+            handlerClass.superClass
+                ?: return fail("stream handler has no dex superclass")
+
+        val streamMethods =
+            handlerClass.methods.filter { method ->
+                Modifier.isPrivate(method.modifiers) &&
+                    method.paramTypeNames == listOf("java.lang.Throwable") &&
+                    streamDataConstructor(method) != null
+            }
+        val streamMethod =
+            streamMethods.singleOrNull()
+                ?: return fail("stream data method candidates=${streamMethods.size}")
+        val streamConstructor =
+            streamDataConstructor(streamMethod)
+                ?: return fail("stream data constructor not found")
+        val streamDataClass =
+            streamMethod.returnType
+                ?: return fail("stream data class not found")
+        val streamChildConsumers =
+            bridge
+                .findMethod {
+                    matcher {
+                        usingStrings = listOf(STREAM_CHILD_CONSUMER_ANCHOR)
+                    }
+                }.filter { method ->
+                    method.paramTypeNames == listOf(streamDataClass.name)
+                }
+        val streamChildConsumer =
+            streamChildConsumers.singleOrNull()
+                ?: return fail("stream child consumers=${streamChildConsumers.size}")
+        val streamChildrenFields =
+            streamChildConsumer.usingFields
+                .filter { usage -> usage.usingType.isRead() }
+                .map { usage -> usage.field }
+                .filter { field ->
+                    !field.isStatic && field.declaredClassName == streamDataClass.name
+                }.distinctBy(FieldData::descriptor)
+        val streamChildrenField =
+            streamChildrenFields.singleOrNull()
+                ?: return fail("stream children fields=${streamChildrenFields.size}")
+
+        val childHandlersField =
+            handlerSuperClass.fields.singleOrNull { field ->
+                !field.isStatic && field.typeName == "${handlerClass.name}[]"
+            } ?: return fail("child handler array field not found")
+        val childIdType = streamConstructor.paramTypeNames[0]
+        val childIdField =
+            handlerClass.fields.singleOrNull { field ->
+                !field.isStatic && field.typeName == childIdType
+            } ?: return fail("child ID field not found")
+
+        return Resolution.Success(
+            StreamChain(
+                handlerClass = handlerClass,
+                handlerSuperClass = handlerSuperClass,
+                streamMethod = streamMethod,
+                streamConstructor = streamConstructor,
+                streamDataClass = streamDataClass,
+                streamChildrenField = streamChildrenField,
+                childHandlersField = childHandlersField,
+                childIdField = childIdField,
+            ),
+        )
+    }
+
+    private fun resolveGenericCard(
+        genericCardModel: ClassData,
+        streamMethod: MethodData,
+    ): Resolution<GenericCard> {
+        val genericCardConstructors = genericCardModel.methods.filter(MethodData::isConstructor)
+        val genericCardConstructor =
+            genericCardConstructors.singleOrNull()
+                ?: return fail("generic card constructors=${genericCardConstructors.size}")
+        val genericCardBuilders = genericCardConstructor.callers
+        val genericCardBuilder =
+            genericCardBuilders.singleOrNull()
+                ?: return fail("generic card builders=${genericCardBuilders.size}")
+        val genericCardAccessors =
+            genericCardBuilder.invokes
+                .filter { method ->
+                    method.declaredClassName == genericCardBuilder.declaredClassName &&
+                        Modifier.isPrivate(method.modifiers) &&
+                        Modifier.isStatic(method.modifiers) &&
+                        method.paramTypeNames == listOf(streamMethod.returnTypeName) &&
+                        method.returnTypeName !in primitiveTypes
+                }.distinctBy(MethodData::descriptor)
+        val genericCardAccessor =
+            genericCardAccessors.singleOrNull()
+                ?: return fail("generic card accessors=${genericCardAccessors.size}")
+        val genericCardPayloadClass =
+            genericCardAccessor.returnType
+                ?: return fail("generic card payload class missing")
+        val builderReadFields =
+            genericCardBuilder.usingFields
+                .filter { usage -> usage.usingType.isRead() }
+                .map { usage -> usage.field.descriptor }
+                .toSet()
+        val adMetadataFields =
+            genericCardPayloadClass.fields.filter { field ->
+                !field.isStatic &&
+                    field.typeName !in primitiveTypes &&
+                    field.descriptor in builderReadFields &&
+                    field.type?.superClass?.name == genericCardPayloadClass.superClass?.name
+            }
+        val genericAdMetadataField =
+            adMetadataFields.singleOrNull()
+                ?: return fail("generic ad metadata fields=${adMetadataFields.size}")
+        val adMetadataClass =
+            genericAdMetadataField.type
+                ?: return fail("ad metadata class missing")
+        val adMetadataBaseClass =
+            adMetadataClass.superClass
+                ?: return fail("ad metadata base class missing")
+        val adPresenceFields =
+            adMetadataClass.fields.filter { field ->
+                !field.isStatic &&
+                    field.typeName == "int" &&
+                    field.descriptor in builderReadFields
+            }
+        val adPresenceField =
+            adPresenceFields.singleOrNull()
+                ?: return fail("ad presence fields=${adPresenceFields.size}")
+
+        return Resolution.Success(
+            GenericCard(
+                accessor = genericCardAccessor,
+                payloadClass = genericCardPayloadClass,
+                adMetadataField = genericAdMetadataField,
+                adMetadataClass = adMetadataClass,
+                adMetadataBaseClass = adMetadataBaseClass,
+                adPresenceField = adPresenceField,
+            ),
+        )
+    }
+
+    private fun resolveClusterCase(
+        bridge: DexKitBridge,
+        presentationKindField: FieldData,
+    ): Resolution<ClusterCase> {
+        val caseFieldReaders =
+            resolvePresentationMapper(bridge)?.callers
+                ?: presentationKindField.readers
+        val caseFieldScores =
+            caseFieldReaders
+                .asSequence()
+                .flatMap { caller ->
+                    caller.usingFields
+                        .asSequence()
+                        .map { usingField -> usingField.field }
+                        .filter { field ->
+                            !field.isStatic &&
+                                field.typeName == "int" &&
+                                field.declaredClass.fields.count { declaredField ->
+                                    !declaredField.isStatic && declaredField.typeName == "int"
+                                } >= 2
+                        }
+                }.groupingBy(FieldData::descriptor)
+                .eachCount()
+        val caseFieldsByDescriptor =
+            caseFieldReaders
+                .asSequence()
+                .flatMap { caller -> caller.usingFields.asSequence() }
+                .map { usingField -> usingField.field }
+                .associateBy(FieldData::descriptor)
+        val rankedCaseFields =
+            caseFieldScores.entries.sortedByDescending(Map.Entry<String, Int>::value)
+        val topCaseField = rankedCaseFields.firstOrNull()
+        if (topCaseField == null || rankedCaseFields.getOrNull(1)?.value == topCaseField.value) {
+            return fail("cluster case field was not unique")
+        }
+        val clusterCaseField =
+            caseFieldsByDescriptor[topCaseField.key]
+                ?: return fail("cluster case field metadata missing")
+        val clusterPayloadFields =
+            clusterCaseField.declaredClass
+                ?.fields
+                .orEmpty()
+                .filter { field ->
+                    !field.isStatic && field.typeName == "java.lang.Object"
+                }
+        val clusterPayloadField =
+            clusterPayloadFields.singleOrNull()
+                ?: return fail("cluster payload fields=${clusterPayloadFields.size}")
+
+        return Resolution.Success(
+            ClusterCase(caseField = clusterCaseField, payloadField = clusterPayloadField),
+        )
+    }
+
     private fun resolvePresentationMapper(bridge: DexKitBridge): MethodData? {
         val enumClass =
             bridge
@@ -1118,6 +1193,31 @@ object DexKitResolver {
             val reason: String,
         ) : Resolution<Nothing>
     }
+
+    private class ClusterCase(
+        val caseField: FieldData,
+        val payloadField: FieldData,
+    )
+
+    private class GenericCard(
+        val accessor: MethodData,
+        val payloadClass: ClassData,
+        val adMetadataField: FieldData,
+        val adMetadataClass: ClassData,
+        val adMetadataBaseClass: ClassData,
+        val adPresenceField: FieldData,
+    )
+
+    private class StreamChain(
+        val handlerClass: ClassData,
+        val handlerSuperClass: ClassData,
+        val streamMethod: MethodData,
+        val streamConstructor: MethodData,
+        val streamDataClass: ClassData,
+        val streamChildrenField: FieldData,
+        val childHandlersField: FieldData,
+        val childIdField: FieldData,
+    )
 
     private class ProtobufTargets(
         val newBuilderMethod: MethodData,

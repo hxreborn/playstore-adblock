@@ -58,6 +58,11 @@ releases:
     status: supported
     tested_on: 2026-07-29
     module_version_code: 10200
+  - version_name: "47.0.13-31 [0] [PR] 778616651"
+    version_code: 84701330
+    status: supported
+    tested_on: 2026-07-29
+    module_version_code: 10200
   - version_name: "49.9.21-23 [0] [PR] 864439599"
     version_code: 84992100
     status: untested

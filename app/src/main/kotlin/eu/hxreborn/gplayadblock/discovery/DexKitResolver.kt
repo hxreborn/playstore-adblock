@@ -194,26 +194,11 @@ object DexKitResolver {
                 !field.isStatic && field.typeName == "java.lang.Object"
             } ?: return missing("presentation payload field not found")
 
-        val enumClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = adPresentationAnchors
-                }
-            }
-        val enumClass =
-            enumClasses.singleOrNull()
-                ?: return missing("ad presentation enum candidates=${enumClasses.size}")
-        val enumMappers =
-            enumClass.methods.filter { method ->
-                Modifier.isStatic(method.modifiers) &&
-                    method.paramTypeNames == listOf("int") &&
-                    method.returnTypeName == enumClass.name
-            }
-        val enumMapper =
-            enumMappers.singleOrNull()
-                ?: return missing("presentation mapper candidates=${enumMappers.size}")
+        val caseFieldReaders =
+            resolvePresentationMapper(bridge)?.callers
+                ?: presentationKindField.readers
         val caseFieldScores =
-            enumMapper.callers
+            caseFieldReaders
                 .asSequence()
                 .flatMap { caller ->
                     caller.usingFields
@@ -229,7 +214,7 @@ object DexKitResolver {
                 }.groupingBy(FieldData::descriptor)
                 .eachCount()
         val caseFieldsByDescriptor =
-            enumMapper.callers
+            caseFieldReaders
                 .asSequence()
                 .flatMap { caller -> caller.usingFields.asSequence() }
                 .map { usingField -> usingField.field }
@@ -822,6 +807,22 @@ object DexKitResolver {
             suggestion = suggestion,
             suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
         )
+    }
+
+    private fun resolvePresentationMapper(bridge: DexKitBridge): MethodData? {
+        val enumClass =
+            bridge
+                .findClass {
+                    matcher { usingStrings = adPresentationAnchors }
+                }.singleOrNull()
+                ?.takeIf { type -> type.superClass?.name == "java.lang.Enum" }
+                ?: return null
+        return enumClass.methods
+            .filter { method ->
+                Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames == listOf("int") &&
+                    method.returnTypeName == enumClass.name
+            }.singleOrNull()
     }
 
     private fun resolveProtobuf(

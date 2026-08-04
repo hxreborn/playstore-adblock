@@ -27,32 +27,6 @@ class CompatibilityMetadataTest {
     }
 
     @Test
-    fun `the supported releases are exactly the set the module warns from`() {
-        val supported =
-            metadata.releases
-                .filter { release -> release["status"] == "supported" }
-                .map { release -> ValidatedReleases.releaseKey(versionCode(release)) }
-                .toSet()
-        assertEquals(
-            "play-store-compatibility.yaml and ValidatedReleases disagree. A release joins that " +
-                "set only once it is recorded supported here.",
-            supported,
-            ValidatedReleases.keys,
-        )
-    }
-
-    @Test
-    fun `a release that is not supported stays out of the validated set`() {
-        val leaked =
-            metadata.releases
-                .filterNot { release -> release["status"] == "supported" }
-                .filter { release ->
-                    ValidatedReleases.releaseKey(versionCode(release)) in ValidatedReleases.keys
-                }.map { release -> release["version_code"] }
-        assertTrue("$leaked are validated without being supported", leaked.isEmpty())
-    }
-
-    @Test
     fun `version codes are unique and ordered so the file appends cleanly`() {
         val codes = metadata.releases.map { release -> release["version_code"] as Int }
         assertEquals("version codes must be unique", codes.distinct(), codes)
@@ -89,8 +63,6 @@ class CompatibilityMetadataTest {
         val unused = metadata.majorReleases.keys - majors
         assertTrue("$unused have launch dates but no release entry", unused.isEmpty())
     }
-
-    private fun versionCode(release: Map<*, *>): Long = (release["version_code"] as Int).toLong()
 
     private companion object {
         val REQUIRED_FIELDS =

@@ -82,9 +82,6 @@ class PlayStoreAdblockModule : XposedModule() {
             val status =
                 "Play Store ${packageInfo.versionName} ($targetVersionCode) " +
                     "module v${BuildConfig.VERSION_NAME}"
-            if (!ValidatedReleases.accepts(targetVersionCode)) {
-                Logger.warn("Play Store version untested : $status")
-            }
             val applicationInfo = context.applicationInfo
             val cached =
                 TargetCache.load(

@@ -6,7 +6,7 @@
 # untested     never run on a device
 #
 # Only supported means verified, and never by inference from a neighbouring release.
-# ValidatedReleases.keys is version_code / 100 of every supported entry.
+# This file gates nothing: the module runs on any release and fails open per hook group.
 # An absent release is not necessarily broken.
 
 schema_version: 1
@@ -137,3 +137,9 @@ releases:
     tested_on: 2026-07-28
     module_version_code: 10100
     module_commit: c0392f1
+  - version_name: "52.5.22-34 [0] [PR] 956697021"
+    version_code: 85252240
+    status: supported
+    tested_on: 2026-08-04
+    module_version_code: 10301
+    notes: cache filtering tested from an ad-bearing cache

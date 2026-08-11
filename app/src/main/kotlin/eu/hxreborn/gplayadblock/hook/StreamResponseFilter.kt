@@ -95,6 +95,9 @@ object StreamResponseFilter {
         private val classifier: PresentationClassifier,
         private val editor: ProtoEditor,
     ) {
+        private val nodeWrapperClass: Class<*> = nodeWrapperKindField.declaringClass
+        private val rootWrapperClass: Class<*> = rootWrapperKindField.declaringClass
+
         fun transform(response: Any): Any? {
             val lists =
                 responseListFields.associateWith { field ->
@@ -105,7 +108,7 @@ object StreamResponseFilter {
                     .asSequence()
                     .flatMap(List<*>::asSequence)
                     .filterNotNull()
-                    .filter(nodeWrapperKindField.declaringClass::isInstance)
+                    .filter(nodeWrapperClass::isInstance)
                     .toList()
             if (nodeWrappers.isEmpty()) return null
 
@@ -127,48 +130,36 @@ object StreamResponseFilter {
                 .asSequence()
                 .flatMap(List<*>::asSequence)
                 .filterNotNull()
-                .filter(rootWrapperKindField.declaringClass::isInstance)
+                .filter(rootWrapperClass::isInstance)
                 .forEach { wrapper ->
                     decodeRoot(wrapper)?.let { decoded -> decodedRoots[wrapper] = decoded }
                 }
 
             val removableIds = RemovableNodes.select(adCasesById.keys, parents(decodedNodes))
-
             val replacement =
                 editor.copy(response) { mutableResponse ->
                     for ((field, originalList) in lists) {
                         if (originalList.isEmpty()) continue
                         val transformed =
-                            when {
-                                originalList.all { item ->
-                                    item != null &&
-                                        nodeWrapperKindField.declaringClass.isInstance(item)
-                                } -> {
-                                    transformNodes(
-                                        wrappers = originalList.filterNotNull(),
-                                        decodedNodes = decodedNodes,
-                                        removableIds = removableIds,
-                                    )
-                                }
+                            originalList.mapNotNull { item ->
+                                when {
+                                    nodeWrapperClass.isInstance(item) -> {
+                                        transformNode(item!!, decodedNodes, removableIds)
+                                    }
 
-                                originalList.all { item ->
-                                    item != null &&
-                                        rootWrapperKindField.declaringClass.isInstance(item)
-                                } -> {
-                                    transformRoots(
-                                        wrappers = originalList.filterNotNull(),
-                                        decodedRoots = decodedRoots,
-                                        removableIds = removableIds,
-                                    )
-                                }
+                                    rootWrapperClass.isInstance(item) -> {
+                                        transformRoot(item!!, decodedRoots, removableIds)
+                                    }
 
-                                else -> {
-                                    originalList
+                                    else -> {
+                                        item
+                                    }
                                 }
                             }
                         editor.replaceList(mutableResponse, field, transformed)
                     }
                 }
+
             return replacement
         }
 
@@ -194,57 +185,42 @@ object StreamResponseFilter {
             childPresenceField.getInt(children) and CONTINUATION_PRESENT != 0 ||
                 !(childContinuationField.get(children) as? String).isNullOrEmpty()
 
-        private fun transformNodes(
-            wrappers: List<Any>,
+        private fun transformNode(
+            wrapper: Any,
             decodedNodes: IdentityHashMap<Any, Any>,
             removableIds: Set<Any>,
-        ): List<Any> {
-            val result = ArrayList<Any>(wrappers.size)
-            for (wrapper in wrappers) {
-                val id = nodeIdField.get(wrapper)
-                if (id != null && id in removableIds) continue
-                val decoded = decodedNodes[wrapper] ?: decodeNode(wrapper)
-                if (decoded == null) {
-                    result += wrapper
-                    continue
+        ): Any? {
+            if (nodeIdField.get(wrapper) in removableIds) return null
+            val decoded = decodedNodes[wrapper] ?: decodeNode(wrapper) ?: return wrapper
+            val filteredChildren =
+                filterChildren(nodeChildrenField.get(decoded), removableIds) ?: return wrapper
+            val rebuiltNode =
+                editor.copy(decoded) { mutableNode ->
+                    nodeChildrenField.set(mutableNode, filteredChildren)
                 }
-                val children = nodeChildrenField.get(decoded)
-                val filteredChildren = filterChildren(children, removableIds)
-                if (filteredChildren == null) {
-                    result += wrapper
-                    continue
-                }
-                val rebuiltNode =
-                    editor.copy(decoded) { mutableNode ->
-                        nodeChildrenField.set(mutableNode, filteredChildren)
-                    }
-                result +=
-                    editor.copy(wrapper) { mutableWrapper ->
-                        nodeWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
-                        nodeWrapperPayloadField.set(mutableWrapper, rebuiltNode)
-                    }
+            return editor.copy(wrapper) { mutableWrapper ->
+                nodeWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
+                nodeWrapperPayloadField.set(mutableWrapper, rebuiltNode)
             }
-            return result
         }
 
-        private fun transformRoots(
-            wrappers: List<Any>,
+        private fun transformRoot(
+            wrapper: Any,
             decodedRoots: IdentityHashMap<Any, Any>,
             removableIds: Set<Any>,
-        ): List<Any> =
-            wrappers.map { wrapper ->
-                val decoded = decodedRoots[wrapper] ?: decodeRoot(wrapper) ?: return@map wrapper
-                val children = rootChildrenField.get(decoded)
-                val filteredChildren = filterChildren(children, removableIds) ?: return@map wrapper
-                val rebuiltRoot =
-                    editor.copy(decoded) { mutableRoot ->
-                        rootChildrenField.set(mutableRoot, filteredChildren)
-                    }
-                editor.copy(wrapper) { mutableWrapper ->
-                    rootWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
-                    rootWrapperPayloadField.set(mutableWrapper, rebuiltRoot)
+        ): Any {
+            val decoded = decodedRoots[wrapper] ?: decodeRoot(wrapper) ?: return wrapper
+            val filteredChildren =
+                filterChildren(rootChildrenField.get(decoded), removableIds) ?: return wrapper
+            val rebuiltRoot =
+                editor.copy(decoded) { mutableRoot ->
+                    rootChildrenField.set(mutableRoot, filteredChildren)
                 }
+            return editor.copy(wrapper) { mutableWrapper ->
+                rootWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
+                rootWrapperPayloadField.set(mutableWrapper, rebuiltRoot)
             }
+        }
 
         private fun filterChildren(
             children: Any?,

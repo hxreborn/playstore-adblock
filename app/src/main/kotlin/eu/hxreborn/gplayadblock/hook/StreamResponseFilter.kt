@@ -160,8 +160,32 @@ object StreamResponseFilter {
                     }
                 }
 
+            val survivors = sponsoredSurvivors(replacement, removableIds)
+            if (survivors > 0) {
+                Logger.error("response rewrite left $survivors sponsored nodes in place")
+                return null
+            }
+            Logger.debug {
+                "response rewrite removed=${removableIds.size} " +
+                    "sponsored=${adCasesById.size} " +
+                    "collapsed=${(removableIds - adCasesById.keys).size} " +
+                    "nodes=${nodeWrappers.size} roots=${decodedRoots.size} " +
+                    "cases=${adCasesById.values.map(classifier::caseName).groupingBy { it }
+                        .eachCount()}"
+            }
             return replacement
         }
+
+        private fun sponsoredSurvivors(
+            response: Any,
+            removableIds: Set<Any>,
+        ): Int =
+            responseListFields
+                .asSequence()
+                .mapNotNull { field -> field.get(response) as? List<*> }
+                .flatMap(List<*>::asSequence)
+                .filter(nodeWrapperClass::isInstance)
+                .count { wrapper -> nodeIdField.get(wrapper) in removableIds }
 
         private fun parents(
             decodedNodes: IdentityHashMap<Any, Any>,

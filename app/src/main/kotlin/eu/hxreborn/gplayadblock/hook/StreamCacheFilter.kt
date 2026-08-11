@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock.hook
 
 import eu.hxreborn.gplayadblock.Logger
+import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -14,22 +15,18 @@ object StreamCacheFilter {
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
     ) {
+        val positions =
+            requireNotNull(HookGroup.cacheArguments(targets)) {
+                "cache assembly arguments not derivable from " +
+                    "${targets.cacheAssemblyMethod.paramTypeNames}"
+            }
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
-        val argOffset = targets.cacheAssemblyMethod.syntheticSelfParameters
         val nodeClass = classLoader.loadClass(targets.presentationAccessor.className)
-        val parameterTypes = method.parameterTypes
-        require(
-            parameterTypes.getOrNull(argOffset + ROOT_OFFSET) == nodeClass &&
-                parameterTypes.getOrNull(argOffset + ROOT_CHILDREN_OFFSET) == List::class.java &&
-                parameterTypes.getOrNull(argOffset + NODES_OFFSET) == Map::class.java,
-        ) {
-            "cache assembly signature ${parameterTypes.map(Class<*>::getName)} offset=$argOffset"
-        }
         val classifier = PresentationClassifier.from(classLoader, targets)
         val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =
             CacheAssemblyInterceptor(
-                argOffset = argOffset,
+                positions = positions,
                 transformer =
                     CacheGraphTransformer(
                         nodeClass = nodeClass,
@@ -56,29 +53,29 @@ object StreamCacheFilter {
 
     internal fun rewriteArguments(
         original: List<Any?>,
-        argOffset: Int,
+        positions: HookGroup.Companion.CacheArguments,
         root: Any,
         rootChildren: List<*>,
         nodes: Map<*, *>,
     ): Array<Any?> {
         val arguments = original.toTypedArray()
-        arguments[argOffset + ROOT_OFFSET] = root
-        arguments[argOffset + ROOT_CHILDREN_OFFSET] = rootChildren
-        arguments[argOffset + NODES_OFFSET] = nodes
+        arguments[positions.root] = root
+        arguments[positions.rootChildren] = rootChildren
+        arguments[positions.nodes] = nodes
         return arguments
     }
 
     private class CacheAssemblyInterceptor(
-        private val argOffset: Int,
+        private val positions: HookGroup.Companion.CacheArguments,
         private val transformer: CacheGraphTransformer,
     ) {
         fun intercept(chain: XposedInterface.Chain): Any? {
             val replacement =
                 try {
                     transformer.transform(
-                        root = chain.getArg(argOffset + ROOT_OFFSET),
-                        rootChildren = chain.getArg(argOffset + ROOT_CHILDREN_OFFSET),
-                        nodes = chain.getArg(argOffset + NODES_OFFSET),
+                        root = chain.getArg(positions.root),
+                        rootChildren = chain.getArg(positions.rootChildren),
+                        nodes = chain.getArg(positions.nodes),
                     )
                 } catch (exception: Exception) {
                     Logger.error("stream cache filtering failed", exception)
@@ -88,7 +85,7 @@ object StreamCacheFilter {
             return chain.proceed(
                 rewriteArguments(
                     original = chain.args,
-                    argOffset = argOffset,
+                    positions = positions,
                     root = replacement.root,
                     rootChildren = replacement.rootChildren,
                     nodes = replacement.nodes,
@@ -282,7 +279,4 @@ object StreamCacheFilter {
     )
 
     private const val CONTINUATION_PRESENT = 1
-    internal const val ROOT_OFFSET = 1
-    internal const val ROOT_CHILDREN_OFFSET = 2
-    internal const val NODES_OFFSET = 3
 }

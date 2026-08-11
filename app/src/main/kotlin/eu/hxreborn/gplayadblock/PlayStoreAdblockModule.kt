@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
+import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
@@ -152,38 +153,48 @@ class PlayStoreAdblockModule : XposedModule() {
         targets.suggestionFailure?.let { reason ->
             Logger.warn("search suggestion targets unresolved reason=$reason")
         }
+        val mismatches = HookGroup.inputMismatches(targets)
         return listOfNotNull(
-            installHookGroup("graph") {
+            install(HookGroup.GRAPH, mismatches) {
                 StreamNodeFilter.install(this, classLoader, targets)
             },
             targets.suggestion?.let { suggestion ->
-                installHookGroup("search") {
+                install(HookGroup.SEARCH, mismatches) {
                     SearchSuggestionFilter.install(this, classLoader, suggestion)
                 }
             },
-            installHookGroup("cache") {
+            install(HookGroup.CACHE, mismatches) {
                 StreamCacheFilter.install(this, classLoader, targets)
             },
-            installHookGroup("response") {
+            install(HookGroup.RESPONSE, mismatches) {
                 StreamResponseFilter.install(this, classLoader, targets)
             },
         ).toSet()
     }
 
-    private fun installHookGroup(
-        label: String,
+    private fun install(
+        group: HookGroup,
+        mismatches: Map<HookGroup, List<String>>,
         install: () -> Unit,
-    ): String? =
-        try {
+    ): String? {
+        mismatches[group]?.let { reasons ->
+            Logger.error(
+                "hook group '${group.label}' refused, its arguments moved: " +
+                    reasons.joinToString("; "),
+            )
+            return null
+        }
+        return try {
             install()
-            label
+            group.label
         } catch (exception: Exception) {
-            Logger.error("hook group '$label' failed to install", exception)
+            Logger.error("hook group '${group.label}' failed to install", exception)
             null
         }
+    }
 
     private companion object {
-        val REQUIRED_HOOK_GROUPS = setOf("cache", "response")
+        val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
         const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."

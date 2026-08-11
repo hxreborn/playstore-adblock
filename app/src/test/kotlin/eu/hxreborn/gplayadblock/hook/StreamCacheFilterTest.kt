@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.discovery.HookGroup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,7 +15,7 @@ class StreamCacheFilterTest {
             val rewritten =
                 StreamCacheFilter.rewriteArguments(
                     original = signature.map(::sample),
-                    argOffset = argOffset,
+                    positions = positions(argOffset),
                     root = Node(),
                     rootChildren = listOf(Node()),
                     nodes = mapOf("key" to Node()),
@@ -37,17 +38,14 @@ class StreamCacheFilterTest {
             val rewritten =
                 StreamCacheFilter.rewriteArguments(
                     original = original,
-                    argOffset = argOffset,
+                    positions = positions(argOffset),
                     root = Node(),
                     rootChildren = listOf(Node()),
                     nodes = mapOf("key" to Node()),
                 )
+            val positions = positions(argOffset)
             val rewrittenIndices =
-                setOf(
-                    argOffset + StreamCacheFilter.ROOT_OFFSET,
-                    argOffset + StreamCacheFilter.ROOT_CHILDREN_OFFSET,
-                    argOffset + StreamCacheFilter.NODES_OFFSET,
-                )
+                setOf(positions.root, positions.rootChildren, positions.nodes)
             original.indices.filterNot(rewrittenIndices::contains).forEach { index ->
                 assertEquals(
                     "offset $argOffset argument $index changed",
@@ -57,6 +55,13 @@ class StreamCacheFilterTest {
             }
         }
     }
+
+    private fun positions(argOffset: Int): HookGroup.Companion.CacheArguments =
+        HookGroup.Companion.CacheArguments(
+            root = argOffset + 1,
+            rootChildren = argOffset + 2,
+            nodes = argOffset + 3,
+        )
 
     private fun signature(argOffset: Int): List<Class<*>> =
         List<Class<*>>(argOffset) { Node::class.java } +

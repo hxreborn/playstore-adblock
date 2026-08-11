@@ -1,3 +1,25 @@
+## [1.4.0](https://github.com/hxreborn/playstore-adblock/compare/v1.3.1...v1.4.0) (2026-08-11)
+
+### Features
+
+* **compat:** support Play Store 52.6.26 ([d2213e2](https://github.com/hxreborn/playstore-adblock/commit/d2213e28744783d59fe1fc6804ffc251797358e4))
+
+### Bug Fixes
+
+* **hook:** keep the original page when sponsored content cannot be fully removed ([98da285](https://github.com/hxreborn/playstore-adblock/commit/98da2854215e69a325841589a6aa406389d8317e))
+* **hook:** remove sponsored cards in result lists that were previously skipped ([1b8d179](https://github.com/hxreborn/playstore-adblock/commit/1b8d17949e9037e32ed8c38bbe24abff03e09046))
+* **hook:** remove sponsored shelves no other shelf links to ([7274dd5](https://github.com/hxreborn/playstore-adblock/commit/7274dd59e490af9ce3133e7e48c08dd6aa4121de))
+
+### Refactor
+
+* drop the validated release list ([493eaf2](https://github.com/hxreborn/playstore-adblock/commit/493eaf2c33a89da0a0eb2d11fadafe3ecd4b3185))
+* **hook:** locate cache filter arguments by type instead of fixed position ([04cbf88](https://github.com/hxreborn/playstore-adblock/commit/04cbf88774cc459fa0b5f8b4843c670bde2c3c31))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.3.1](https://github.com/hxreborn/playstore-adblock/compare/v1.3.0...v1.3.1) (2026-07-29)
 
 ### Bug Fixes

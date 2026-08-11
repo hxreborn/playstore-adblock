@@ -143,3 +143,9 @@ releases:
     tested_on: 2026-08-04
     module_version_code: 10301
     notes: cache filtering tested from an ad-bearing cache
+  - version_name: "52.6.26-34 [0] [PR] 959312099"
+    version_code: 85262640
+    status: supported
+    tested_on: 2026-08-11
+    module_version_code: 10400
+    notes: sponsored subtree roots survived until the reachability gate was removed

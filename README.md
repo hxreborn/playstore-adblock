@@ -71,6 +71,7 @@
 | 52.3.32-XX | 852332XX | supported |
 | 52.4.41-XX | 852441XX | supported |
 | 52.5.22-XX | 852522XX | supported |
+| 52.6.26-XX | 852626XX | supported |
 
 Find your build either in Play Store → Settings → About or with:
 

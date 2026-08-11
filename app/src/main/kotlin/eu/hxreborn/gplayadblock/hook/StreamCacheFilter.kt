@@ -145,16 +145,23 @@ object StreamCacheFilter {
                 val case = classifier.classify(presentation)
                 if (classifier.isAd(case)) adCasesByKey[key] = case
             }
+            val rootCase = presentationAccessor.invoke(root)?.let(classifier::classify) ?: 0
+            if (classifier.isAd(rootCase)) {
+                Logger.warn(
+                    "cache assembly root is sponsored case=${classifier.caseName(rootCase)} " +
+                        "and cannot be removed by rewriting this call",
+                )
+            }
             if (adCasesByKey.isEmpty()) return null
 
-            val referencedKeys = HashSet<String>()
-            rootList.filterNotNull().mapTo(referencedKeys, keyFor)
-            records.values.flatMapTo(referencedKeys) { record -> record.childKeys }
-            val directRemovableKeys =
-                adCasesByKey.keys.filterTo(HashSet(), referencedKeys::contains)
-            if (directRemovableKeys.isEmpty()) return null
             val rootRecord = record(root, keyFor)
-            val removableKeys = expandRemovableParents(records, referencedKeys, directRemovableKeys)
+            val removableKeys =
+                RemovableNodes.select(
+                    adCasesByKey.keys,
+                    records.mapValues { (_, record) ->
+                        RemovableNodes.Parent(record.childKeys, record.hasContinuation)
+                    },
+                )
 
             val filteredRootChildren =
                 rootList.filterNot { child ->
@@ -165,7 +172,7 @@ object StreamCacheFilter {
             if (filteredRootNode != null) replacementRoot = filteredRootNode
 
             val replacementNodes = LinkedHashMap<Any?, Any?>(nodeMap)
-            var changedNodes = false
+            var changedNodes = replacementNodes.keys.removeAll(removableKeys)
             for ((key, record) in records) {
                 if (key in removableKeys) continue
                 val replacementNode = filterNode(record, removableKeys) ?: continue
@@ -214,29 +221,6 @@ object StreamCacheFilter {
                 pageBoundaries = pageBoundaries,
                 hasContinuation = hasContinuation,
             )
-        }
-
-        private fun expandRemovableParents(
-            records: Map<String, NodeRecord>,
-            referencedKeys: Set<String>,
-            directRemovableKeys: Set<String>,
-        ): Set<String> {
-            val removableKeys = HashSet(directRemovableKeys)
-            var changed: Boolean
-            do {
-                changed = false
-                for ((key, record) in records) {
-                    if (key !in referencedKeys || key in removableKeys) continue
-                    if (!record.hasContinuation &&
-                        record.childKeys.isNotEmpty() &&
-                        record.childKeys.all(removableKeys::contains)
-                    ) {
-                        removableKeys += key
-                        changed = true
-                    }
-                }
-            } while (changed)
-            return removableKeys
         }
 
         private fun filterNode(
@@ -298,7 +282,6 @@ object StreamCacheFilter {
     )
 
     private const val CONTINUATION_PRESENT = 1
-
     internal const val ROOT_OFFSET = 1
     internal const val ROOT_CHILDREN_OFFSET = 2
     internal const val NODES_OFFSET = 3

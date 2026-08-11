@@ -123,26 +123,16 @@ object StreamResponseFilter {
             if (adCasesById.isEmpty()) return null
 
             val decodedRoots = IdentityHashMap<Any, Any>()
-            val referencedIds = HashSet<Any>()
-            decodedNodes.values.forEach { node ->
-                collectChildIds(nodeChildrenField.get(node), referencedIds)
-            }
             lists.values
                 .asSequence()
                 .flatMap(List<*>::asSequence)
                 .filterNotNull()
                 .filter(rootWrapperKindField.declaringClass::isInstance)
                 .forEach { wrapper ->
-                    val decoded = decodeRoot(wrapper) ?: return@forEach
-                    decodedRoots[wrapper] = decoded
-                    collectChildIds(rootChildrenField.get(decoded), referencedIds)
+                    decodeRoot(wrapper)?.let { decoded -> decodedRoots[wrapper] = decoded }
                 }
 
-            val directRemovableIds =
-                adCasesById.keys.filterTo(HashSet(), referencedIds::contains)
-            if (directRemovableIds.isEmpty()) return null
-            val removableIds =
-                expandRemovableParents(decodedNodes, referencedIds, directRemovableIds)
+            val removableIds = RemovableNodes.select(adCasesById.keys, parents(decodedNodes))
 
             val replacement =
                 editor.copy(response) { mutableResponse ->
@@ -182,35 +172,27 @@ object StreamResponseFilter {
             return replacement
         }
 
-        private fun expandRemovableParents(
+        private fun parents(
             decodedNodes: IdentityHashMap<Any, Any>,
-            referencedIds: Set<Any>,
-            directRemovableIds: Set<Any>,
-        ): Set<Any> {
-            val removableIds = HashSet(directRemovableIds)
-            var changed: Boolean
-            do {
-                changed = false
+        ): Map<Any, RemovableNodes.Parent<Any>> =
+            buildMap {
                 for ((wrapper, node) in decodedNodes) {
                     val id = nodeIdField.get(wrapper) ?: continue
-                    if (id !in referencedIds || id in removableIds) continue
                     val children = nodeChildrenField.get(node) ?: continue
                     val childIds = childIdsField.get(children) as? List<*> ?: continue
-                    val continuation = childContinuationField.get(children) as? String
-                    val hasContinuation =
-                        childPresenceField.getInt(children) and CONTINUATION_PRESENT != 0 ||
-                            !continuation.isNullOrEmpty()
-                    if (!hasContinuation &&
-                        childIds.isNotEmpty() &&
-                        childIds.all(removableIds::contains)
-                    ) {
-                        removableIds += id
-                        changed = true
-                    }
+                    put(
+                        id,
+                        RemovableNodes.Parent(
+                            childIds = childIds.filterNotNull(),
+                            paginated = paginated(children),
+                        ),
+                    )
                 }
-            } while (changed)
-            return removableIds
-        }
+            }
+
+        private fun paginated(children: Any): Boolean =
+            childPresenceField.getInt(children) and CONTINUATION_PRESENT != 0 ||
+                !(childContinuationField.get(children) as? String).isNullOrEmpty()
 
         private fun transformNodes(
             wrappers: List<Any>,
@@ -280,15 +262,6 @@ object StreamResponseFilter {
                     ).filterNot(removableIds::contains)
                 editor.replaceList(mutableChildren, childIdsField, retained)
             }
-        }
-
-        private fun collectChildIds(
-            children: Any?,
-            destination: MutableSet<Any>,
-        ) {
-            if (children == null) return
-            val ids = childIdsField.get(children) as? List<*> ?: return
-            ids.filterNotNullTo(destination)
         }
 
         private fun decodeNode(wrapper: Any): Any? =

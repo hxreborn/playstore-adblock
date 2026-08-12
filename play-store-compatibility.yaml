@@ -68,6 +68,12 @@ releases:
     tested_on: 2026-07-29
     module_version_code: 10300
     notes: cache filtering tested from an ad-bearing cache
+  - version_name: "47.6.28-31 [0] [PR] 797877006"
+    version_code: 84762830
+    status: supported
+    tested_on: 2026-08-12
+    module_version_code: 10400
+    notes: no cache removal observed from an ad-bearing cache
   - version_name: "48.5.23-31 [0] [PR] 820926732"
     version_code: 84852330
     status: supported

@@ -60,6 +60,7 @@
 | 45.9.19-XX | 845919XX | supported |
 | 46.9.20-XX | 846920XX | supported |
 | 47.0.13-XX | 847013XX | supported |
+| 47.6.28-XX | 847628XX | supported |
 | 48.5.23-XX | 848523XX | supported |
 | 49.9.19-XX | 849919XX | supported |
 | 49.9.21-XX | 849921XX | untested |

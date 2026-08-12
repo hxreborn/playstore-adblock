@@ -6,7 +6,7 @@
 </h1>
 
 <p align="center">
-  Xposed module that removes sponsored listings and ads from the Google Play Store.
+  Xposed module that removes ads, sponsored apps, and promoted recommendations from the Google Play Store.
 </p>
 
 <p align="center">

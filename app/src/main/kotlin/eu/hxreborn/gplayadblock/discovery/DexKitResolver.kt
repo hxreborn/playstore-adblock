@@ -126,12 +126,11 @@ object DexKitResolver {
                 !field.isStatic && field.typeName == nodeClass.name
             } ?: return missing("node proto field not found")
 
-        val presentationType = streamConstructor.paramTypeNames[1]
         val presentationAccessors =
             nodeClass.methods.filter { method ->
                 !Modifier.isStatic(method.modifiers) &&
                     method.paramCount == 0 &&
-                    method.returnTypeName == presentationType
+                    method.returnType?.isPresentationWrapper() == true
             }
         val presentationAccessor =
             presentationAccessors.singleOrNull()
@@ -740,11 +739,16 @@ object DexKitResolver {
             handlerSuperClass.fields.singleOrNull { field ->
                 !field.isStatic && field.typeName == "${handlerClass.name}[]"
             } ?: return fail("child handler array field not found")
-        val childIdType = streamConstructor.paramTypeNames[0]
+        val childIdFields =
+            streamMethod.usingFields
+                .filter { usage -> usage.usingType.isRead() }
+                .map { usage -> usage.field }
+                .filter { field ->
+                    !field.isStatic && field.declaredClassName == handlerClass.name
+                }.distinctBy(FieldData::descriptor)
         val childIdField =
-            handlerClass.fields.singleOrNull { field ->
-                !field.isStatic && field.typeName == childIdType
-            } ?: return fail("child ID field not found")
+            childIdFields.singleOrNull()
+                ?: return fail("child ID fields=${childIdFields.size}")
 
         return Resolution.Success(
             StreamChain(
@@ -1244,6 +1248,10 @@ object DexKitResolver {
             }.distinctBy(MethodData::descriptor)
             .singleOrNull()
             ?.takeIf { constructor -> constructor.paramCount >= 2 }
+
+    private fun ClassData.isPresentationWrapper(): Boolean =
+        fields.count { field -> !field.isStatic && field.typeName == "int" } == 1 &&
+            fields.count { field -> !field.isStatic && field.typeName == "java.lang.Object" } == 1
 
     private fun missing(reason: String): ResolvedTargets.Missing = ResolvedTargets.Missing(reason)
 

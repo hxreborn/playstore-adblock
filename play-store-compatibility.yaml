@@ -161,3 +161,8 @@ releases:
     tested_on: 2026-08-16
     module_version_code: 10400
     notes: no cache removal observed from an ad-bearing cache
+  - version_name: "52.8.55-34 [0] [PR] 967533532"
+    version_code: 85285540
+    status: supported
+    tested_on: 2026-08-23
+    module_version_code: 10500

@@ -1,3 +1,24 @@
+## [1.5.0](https://github.com/hxreborn/playstore-adblock/compare/v1.4.0...v1.5.0) (2026-08-23)
+
+### Features
+
+* **compat:** support Play Store 52.8.55 ([4d4e186](https://github.com/hxreborn/playstore-adblock/commit/4d4e18664dcc6cbe9605452d99e490373617296b))
+
+### Bug Fixes
+
+* **discovery:** refuse the graph hook when its arguments move ([be6b2bd](https://github.com/hxreborn/playstore-adblock/commit/be6b2bdc8f0d857de841947b6a3466ce0f70e855))
+* **discovery:** resolve stream targets when parameter types are erased ([e077b7c](https://github.com/hxreborn/playstore-adblock/commit/e077b7c7cb8a3221202649acd288bd17df8580e6))
+* **hook:** look up the stream data constructor by its declared signature ([7d9b61c](https://github.com/hxreborn/playstore-adblock/commit/7d9b61c7ac22f762843736e2a292d7c26f9df08e))
+
+### Refactor
+
+* **test:** extract the sample target set into a shared fixture ([c2420f0](https://github.com/hxreborn/playstore-adblock/commit/c2420f057f538f46f55c5c68fb2395a8c19c6687))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.4.0](https://github.com/hxreborn/playstore-adblock/compare/v1.3.1...v1.4.0) (2026-08-11)
 
 ### Features

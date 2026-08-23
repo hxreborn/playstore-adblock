@@ -10,6 +10,8 @@ enum class HookGroup(
     ;
 
     companion object {
+        private const val STREAM_DATA_ARGUMENTS = 5
+
         data class CacheArguments(
             val root: Int,
             val rootChildren: Int,
@@ -39,13 +41,37 @@ enum class HookGroup(
 
         private fun streamData(targets: ResolvedTargets.Resolved): List<String> {
             val method = targets.streamDataMethod
+            val expected = listOf("java.lang.Throwable")
+            val signature =
+                "stream data ${method.className}.${method.methodName} declares " +
+                    "${method.paramTypeNames}, expected $expected"
 
-            if (method.paramTypeNames == listOf("java.lang.Throwable")) return emptyList()
+            return listOfNotNull(signature.takeIf { method.paramTypeNames != expected }) +
+                streamDataConstructor(targets)
+        }
+
+        private fun streamDataConstructor(targets: ResolvedTargets.Resolved): List<String> {
+            val constructor = targets.streamDataConstructor
+            val parameters = constructor.paramTypeNames
+
+            if (parameters.size != STREAM_DATA_ARGUMENTS) {
+                return listOf(
+                    "stream data constructor ${constructor.className} takes ${parameters.size} " +
+                        "arguments, expected $STREAM_DATA_ARGUMENTS",
+                )
+            }
 
             return listOf(
-                "stream data ${method.className}.${method.methodName} declares " +
-                    "${method.paramTypeNames}, expected [java.lang.Throwable]",
-            )
+                1 to targets.presentationAccessor.returnTypeName,
+                2 to "java.util.List",
+                3 to "boolean",
+                4 to "java.lang.Throwable",
+            ).mapNotNull { (index, type) ->
+                val actual = parameters[index]
+
+                "stream data constructor arg$index is $actual, expected $type"
+                    .takeIf { actual != type && actual != "java.lang.Object" }
+            }
         }
 
         private fun suggestion(targets: ResolvedTargets.Resolved): List<String> {

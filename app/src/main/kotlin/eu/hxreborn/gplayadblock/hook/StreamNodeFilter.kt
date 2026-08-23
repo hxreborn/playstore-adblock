@@ -23,15 +23,7 @@ object StreamNodeFilter {
         val presentationAccessor = targets.presentationAccessor.resolve(classLoader)
         val classifier = PresentationClassifier.from(classLoader, targets)
         val streamDataClass = classLoader.loadClass(targets.streamDataMethod.returnTypeName)
-        val streamDataConstructor =
-            streamDataClass
-                .getDeclaredConstructor(
-                    childIdField.type,
-                    presentationAccessor.returnType,
-                    List::class.java,
-                    Boolean::class.javaPrimitiveType,
-                    Throwable::class.java,
-                ).apply { isAccessible = true }
+        val streamDataConstructor = targets.streamDataConstructor.resolve(classLoader)
         val hasMoreField =
             streamDataClass.declaredFields
                 .single { field ->

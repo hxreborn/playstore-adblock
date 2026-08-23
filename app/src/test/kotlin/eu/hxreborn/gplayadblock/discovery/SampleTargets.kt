@@ -14,6 +14,18 @@ internal object SampleTargets {
     val RESOLVED =
         ResolvedTargets.Resolved(
             streamDataMethod = method("streamData"),
+            streamDataConstructor =
+                ConstructorRef(
+                    className = "streamDataOwner",
+                    paramTypeNames =
+                        listOf(
+                            "childId",
+                            "presentation",
+                            "java.util.List",
+                            "boolean",
+                            "java.lang.Throwable",
+                        ),
+                ),
             streamChildrenField = field("streamChildren"),
             childHandlersField = field("childHandlers"),
             childIdField = field("childId"),

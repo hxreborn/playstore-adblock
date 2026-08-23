@@ -8,6 +8,7 @@ sealed interface ResolvedTargets {
 
     data class Resolved(
         val streamDataMethod: MethodRef,
+        val streamDataConstructor: ConstructorRef,
         val streamChildrenField: FieldRef,
         val childHandlersField: FieldRef,
         val childIdField: FieldRef,

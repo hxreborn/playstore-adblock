@@ -635,6 +635,7 @@ object DexKitResolver {
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
+            streamDataConstructor = streamConstructor.toConstructorRef(),
             streamChildrenField = streamChildrenField.toRef(),
             childHandlersField = childHandlersField.toRef(),
             childIdField = childIdField.toRef(),

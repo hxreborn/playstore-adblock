@@ -80,6 +80,7 @@ object TargetCache {
     private fun encodeResolved(targets: ResolvedTargets.Resolved): JSONObject =
         JSONObject()
             .put("streamDataMethod", encodeMethod(targets.streamDataMethod))
+            .put("streamDataConstructor", encodeConstructor(targets.streamDataConstructor))
             .put("streamChildrenField", encodeField(targets.streamChildrenField))
             .put("childHandlersField", encodeField(targets.childHandlersField))
             .put("childIdField", encodeField(targets.childIdField))
@@ -139,6 +140,7 @@ object TargetCache {
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
             streamDataMethod = decodeMethod(value.getJSONObject("streamDataMethod")),
+            streamDataConstructor = decodeConstructor(value.getJSONObject("streamDataConstructor")),
             streamChildrenField = decodeField(value.getJSONObject("streamChildrenField")),
             childHandlersField = decodeField(value.getJSONObject("childHandlersField")),
             childIdField = decodeField(value.getJSONObject("childIdField")),

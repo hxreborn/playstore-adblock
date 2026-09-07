@@ -1,6 +1,11 @@
 version: 2
 updates:
   - package-ecosystem: gradle
+    ignore:
+      - dependency-name: "io.github.libxposed:api"
+        versions: [">=102"]
+      - dependency-name: "io.github.libxposed:service"
+        versions: [">=102"]
     directory: "/"
     schedule:
       interval: weekly

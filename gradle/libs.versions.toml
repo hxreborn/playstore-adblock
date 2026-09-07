@@ -5,7 +5,7 @@ json = "20260814"
 junit = "4.13.2"
 ktlint = "1.8.0"
 libxposedApi = "102.0.0"
-snakeyaml = "2.6"
+snakeyaml = "2.7"
 
 [libraries]
 dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }

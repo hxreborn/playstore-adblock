@@ -1,5 +1,5 @@
 [versions]
-agp = "9.3.1"
+agp = "9.4.0"
 dexkit = "2.2.0"
 json = "20260719"
 junit = "4.13.2"

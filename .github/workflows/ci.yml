@@ -36,3 +36,11 @@ jobs:
       - name: Test the release detector
         working-directory: tools
         run: python3 -m unittest discover -p 'test_*.py' -v
+
+      - name: Check the compatibility tables
+        run: |
+          python3 -m pip install --quiet pyyaml
+          curl -fsSL -o "$RUNNER_TEMP/mirror-README.md" \
+            https://raw.githubusercontent.com/Xposed-Modules-Repo/eu.hxreborn.gplayadblock/main/README.md
+          python3 tools/check_compat_tables.py play-store-compatibility.yaml \
+            README.md "$RUNNER_TEMP/mirror-README.md"

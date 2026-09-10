@@ -166,3 +166,9 @@ releases:
     status: supported
     tested_on: 2026-08-23
     module_version_code: 10500
+  - version_name: "53.0.27-34 [0] [PR] 973951861"
+    version_code: 85302740
+    status: supported
+    tested_on: 2026-09-10
+    module_version_code: 10500
+    notes: cache filtering tested from an ad-bearing cache

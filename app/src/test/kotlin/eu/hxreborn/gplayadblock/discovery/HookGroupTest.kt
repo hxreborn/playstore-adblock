@@ -17,7 +17,7 @@ class HookGroupTest {
     }
 
     @Test
-    fun `an erased stream data constructor still reports no graph mismatch`() {
+    fun `a stream data constructor with erased parameter types reports no graph mismatch`() {
         val erased =
             INTACT.copy(
                 streamDataConstructor =
@@ -34,21 +34,20 @@ class HookGroupTest {
     }
 
     @Test
-    fun `a stream data constructor that loses an argument reports a graph mismatch`() {
+    fun `a shorter stream data constructor reports its argument count`() {
         val shortened =
             INTACT.copy(
                 streamDataConstructor =
                     constructor("childId", "presentation", "java.util.List", "boolean"),
             )
 
-        assertTrue(
-            graphMismatches(shortened).single(),
-            graphMismatches(shortened).single().contains("takes 4 arguments, expected 5"),
-        )
+        val mismatch = graphMismatches(shortened).single()
+
+        assertTrue(mismatch, mismatch.contains("takes 4 arguments, expected 5"))
     }
 
     @Test
-    fun `a reordered stream data constructor reports the argument that moved`() {
+    fun `a reordered stream data constructor reports both moved arguments`() {
         val reordered =
             INTACT.copy(
                 streamDataConstructor =

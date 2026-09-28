@@ -1,6 +1,6 @@
 [versions]
 agp = "9.4.0"
-dexkit = "2.2.0"
+dexkit = "2.3.0"
 json = "20260814"
 junit = "4.13.2"
 ktlint = "1.8.0"

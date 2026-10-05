@@ -172,3 +172,9 @@ releases:
     tested_on: 2026-09-10
     module_version_code: 10500
     notes: cache filtering tested from an ad-bearing cache
+  - version_name: "53.3.21-34 [0] [PR] 986224237"
+    version_code: 85332140
+    status: supported
+    tested_on: 2026-10-05
+    module_version_code: 10500
+    notes: cache filtering tested from an ad-bearing cache

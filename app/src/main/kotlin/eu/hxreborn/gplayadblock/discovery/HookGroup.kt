@@ -7,6 +7,7 @@ enum class HookGroup(
     SEARCH("search"),
     CACHE("cache"),
     RESPONSE("response"),
+    SPOTLIGHT("spotlight"),
     ;
 
     companion object {

@@ -11,6 +11,7 @@ import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
+import eu.hxreborn.gplayadblock.hook.SpotlightHeaderFilter
 import eu.hxreborn.gplayadblock.hook.StreamCacheFilter
 import eu.hxreborn.gplayadblock.hook.StreamNodeFilter
 import eu.hxreborn.gplayadblock.hook.StreamResponseFilter
@@ -78,18 +79,20 @@ class PlayStoreAdblockModule : XposedModule() {
     ) {
         try {
             val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
-            val targetVersionCode = packageInfo.longVersionCode
-            val moduleVersionCode = BuildConfig.VERSION_CODE.toLong()
+            val modulePackageInfo =
+                context.packageManager.getPackageInfo(BuildConfig.APPLICATION_ID, 0)
+            val cacheKey =
+                TargetCache.Key(
+                    targetVersionCode = packageInfo.longVersionCode,
+                    targetLastUpdateTime = packageInfo.lastUpdateTime,
+                    moduleVersionCode = BuildConfig.VERSION_CODE.toLong(),
+                    moduleLastUpdateTime = modulePackageInfo.lastUpdateTime,
+                )
             val status =
-                "Play Store ${packageInfo.versionName} ($targetVersionCode) " +
+                "Play Store ${packageInfo.versionName} (${packageInfo.longVersionCode}) " +
                     "module v${BuildConfig.VERSION_NAME}"
             val applicationInfo = context.applicationInfo
-            val cached =
-                TargetCache.load(
-                    dataDir = applicationInfo.dataDir,
-                    targetVersionCode = targetVersionCode,
-                    moduleVersionCode = moduleVersionCode,
-                )
+            val cached = TargetCache.load(dataDir = applicationInfo.dataDir, key = cacheKey)
             val targets =
                 cached ?: DexKitResolver
                     .resolve(
@@ -100,8 +103,7 @@ class PlayStoreAdblockModule : XposedModule() {
                     ).also { resolved ->
                         TargetCache.store(
                             dataDir = applicationInfo.dataDir,
-                            targetVersionCode = targetVersionCode,
-                            moduleVersionCode = moduleVersionCode,
+                            key = cacheKey,
                             targets = resolved,
                         )
                     }
@@ -153,6 +155,9 @@ class PlayStoreAdblockModule : XposedModule() {
         targets.suggestionFailure?.let { reason ->
             Logger.warn("search suggestion targets unresolved reason=$reason")
         }
+        targets.spotlightFailure?.let { reason ->
+            Logger.warn("spotlight header targets unresolved reason=$reason")
+        }
         val mismatches = HookGroup.inputMismatches(targets)
         return listOfNotNull(
             install(HookGroup.GRAPH, mismatches) {
@@ -168,6 +173,11 @@ class PlayStoreAdblockModule : XposedModule() {
             },
             install(HookGroup.RESPONSE, mismatches) {
                 StreamResponseFilter.install(this, classLoader, targets)
+            },
+            targets.spotlight?.let { spotlight ->
+                install(HookGroup.SPOTLIGHT, mismatches) {
+                    SpotlightHeaderFilter.install(this, classLoader, targets, spotlight)
+                }
             },
         ).toSet()
     }

@@ -45,6 +45,11 @@ object DexKitResolver {
             ", itemClientStateFlow=",
             ", itemAdInfo=",
         )
+    private val appsHomeAnchors =
+        listOf(
+            "https://play.google.com/store/apps",
+            "HOME_UI_MODEL_RECEIVED",
+        )
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -632,6 +637,8 @@ object DexKitResolver {
                     null
                 }
             }
+        val spotlightResult =
+            resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -681,6 +688,8 @@ object DexKitResolver {
             repeatedListCopyMethod = repeatedListCopyMethod.toRef(),
             suggestion = suggestion,
             suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
+            spotlight = (spotlightResult as? Resolution.Success)?.value,
+            spotlightFailure = (spotlightResult as? Resolution.Failure)?.reason,
         )
     }
 
@@ -1183,6 +1192,44 @@ object DexKitResolver {
             SuggestionTargets(
                 remoteSuggestionConstructor = remoteSuggestionConstructor,
                 suggestionAdInfoField = suggestionAdInfoField,
+            ),
+        )
+    }
+
+    private fun resolveSpotlight(
+        bridge: DexKitBridge,
+        protobufMessageClassName: String,
+    ): Resolution<ResolvedTargets.Spotlight> {
+        val pageClasses =
+            bridge.findClass {
+                matcher {
+                    usingStrings = appsHomeAnchors
+                }
+            }
+        val pageClass =
+            pageClasses.singleOrNull()
+                ?: return fail("apps home page candidates=${pageClasses.size}")
+        val tabAccessors =
+            pageClass.methods.filter { method ->
+                Modifier.isStatic(method.modifiers) &&
+                    "int" in method.paramTypeNames &&
+                    method.returnType?.superClass?.name == protobufMessageClassName
+            }
+        val tabAccessor =
+            tabAccessors.singleOrNull()
+                ?: return fail("apps home tab accessors=${tabAccessors.size}")
+        val tabClass = tabAccessor.returnType ?: return fail("apps home tab class missing")
+        val tabDefaultInstanceFields =
+            tabClass.fields.filter { field ->
+                field.isStatic && field.typeName == tabClass.name
+            }
+        val tabDefaultInstanceField =
+            tabDefaultInstanceFields.singleOrNull()
+                ?: return fail("apps home tab default fields=${tabDefaultInstanceFields.size}")
+        return Resolution.Success(
+            ResolvedTargets.Spotlight(
+                tabAccessor = tabAccessor.toRef(),
+                tabDefaultInstanceField = tabDefaultInstanceField.toRef(),
             ),
         )
     }

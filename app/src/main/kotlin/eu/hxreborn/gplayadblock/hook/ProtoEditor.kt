@@ -27,12 +27,15 @@ class ProtoEditor(
     fun parse(
         defaultInstance: Any,
         byteString: Any,
-    ): Any {
-        val bytes = toByteArrayMethod.invoke(byteString) as ByteArray
-        return requireNotNull(
+    ): Any = parseBytes(defaultInstance, toByteArrayMethod.invoke(byteString) as ByteArray)
+
+    fun parseBytes(
+        defaultInstance: Any,
+        bytes: ByteArray,
+    ): Any =
+        requireNotNull(
             parseMethod.invoke(null, defaultInstance, bytes, 0, bytes.size, registry),
         )
-    }
 
     @Suppress("UNCHECKED_CAST")
     fun replaceList(

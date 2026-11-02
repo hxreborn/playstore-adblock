@@ -79,5 +79,11 @@ internal object SampleTargets {
                     adInfoField = field("adInfo"),
                 ),
             suggestionFailure = null,
+            spotlight =
+                ResolvedTargets.Spotlight(
+                    tabAccessor = method("spotlightTab"),
+                    tabDefaultInstanceField = field("spotlightTabDefault"),
+                ),
+            spotlightFailure = null,
         )
 }

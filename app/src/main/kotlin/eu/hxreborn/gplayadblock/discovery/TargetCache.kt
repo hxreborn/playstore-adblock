@@ -5,18 +5,22 @@ import org.json.JSONObject
 import java.io.File
 
 object TargetCache {
+    data class Key(
+        val targetVersionCode: Long,
+        val targetLastUpdateTime: Long,
+        val moduleVersionCode: Long,
+        val moduleLastUpdateTime: Long,
+    )
+
     fun load(
         dataDir: String,
-        targetVersionCode: Long,
-        moduleVersionCode: Long,
+        key: Key,
     ): ResolvedTargets? {
-        val file = cacheFile(dataDir, targetVersionCode, moduleVersionCode)
+        val file = cacheFile(dataDir, key)
         if (!file.isFile) return null
         return try {
             val root = JSONObject(file.readText())
-            if (root.getLong("targetVersionCode") != targetVersionCode ||
-                root.getLong("moduleVersionCode") != moduleVersionCode
-            ) {
+            if (root.optJSONObject("key")?.let(::decodeKey) != key) {
                 null
             } else if (root.getString("status") == "missing") {
                 ResolvedTargets.Missing(root.getString("reason"))
@@ -30,15 +34,11 @@ object TargetCache {
 
     fun store(
         dataDir: String,
-        targetVersionCode: Long,
-        moduleVersionCode: Long,
+        key: Key,
         targets: ResolvedTargets,
     ) {
-        val file = cacheFile(dataDir, targetVersionCode, moduleVersionCode)
-        val root =
-            JSONObject()
-                .put("targetVersionCode", targetVersionCode)
-                .put("moduleVersionCode", moduleVersionCode)
+        val file = cacheFile(dataDir, key)
+        val root = JSONObject().put("key", encodeKey(key))
         when (targets) {
             is ResolvedTargets.Missing -> {
                 if (targets.retryable) return
@@ -69,12 +69,26 @@ object TargetCache {
 
     private fun cacheFile(
         dataDir: String,
-        targetVersionCode: Long,
-        moduleVersionCode: Long,
+        key: Key,
     ): File =
         File(
             dataDir,
-            "files/playstore-adblock/$FILE_PREFIX$targetVersionCode-$moduleVersionCode.json",
+            "files/playstore-adblock/$FILE_PREFIX${key.targetVersionCode}-${key.moduleVersionCode}.json",
+        )
+
+    private fun encodeKey(key: Key): JSONObject =
+        JSONObject()
+            .put("targetVersionCode", key.targetVersionCode)
+            .put("targetLastUpdateTime", key.targetLastUpdateTime)
+            .put("moduleVersionCode", key.moduleVersionCode)
+            .put("moduleLastUpdateTime", key.moduleLastUpdateTime)
+
+    private fun decodeKey(value: JSONObject): Key =
+        Key(
+            targetVersionCode = value.getLong("targetVersionCode"),
+            targetLastUpdateTime = value.getLong("targetLastUpdateTime"),
+            moduleVersionCode = value.getLong("moduleVersionCode"),
+            moduleLastUpdateTime = value.getLong("moduleLastUpdateTime"),
         )
 
     private fun encodeResolved(targets: ResolvedTargets.Resolved): JSONObject =
@@ -136,6 +150,8 @@ object TargetCache {
                 encodeMethod(targets.repeatedListCopyMethod),
             ).putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
             .putOpt("suggestionFailure", targets.suggestionFailure)
+            .putOpt("spotlight", targets.spotlight?.let(::encodeSpotlight))
+            .putOpt("spotlightFailure", targets.spotlightFailure)
 
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
@@ -196,6 +212,8 @@ object TargetCache {
                 decodeMethod(value.getJSONObject("repeatedListCopyMethod")),
             suggestion = value.optJSONObject("suggestion")?.let(::decodeSuggestion),
             suggestionFailure = value.optString("suggestionFailure").ifEmpty { null },
+            spotlight = value.optJSONObject("spotlight")?.let(::decodeSpotlight),
+            spotlightFailure = value.optString("spotlightFailure").ifEmpty { null },
         )
 
     private fun encodeSuggestion(value: ResolvedTargets.Suggestion): JSONObject =
@@ -207,6 +225,17 @@ object TargetCache {
         ResolvedTargets.Suggestion(
             constructor = decodeConstructor(value.getJSONObject("constructor")),
             adInfoField = decodeField(value.getJSONObject("adInfoField")),
+        )
+
+    private fun encodeSpotlight(value: ResolvedTargets.Spotlight): JSONObject =
+        JSONObject()
+            .put("tabAccessor", encodeMethod(value.tabAccessor))
+            .put("tabDefaultInstanceField", encodeField(value.tabDefaultInstanceField))
+
+    private fun decodeSpotlight(value: JSONObject): ResolvedTargets.Spotlight =
+        ResolvedTargets.Spotlight(
+            tabAccessor = decodeMethod(value.getJSONObject("tabAccessor")),
+            tabDefaultInstanceField = decodeField(value.getJSONObject("tabDefaultInstanceField")),
         )
 
     private fun encodeConstructor(value: ConstructorRef): JSONObject =

@@ -1,6 +1,12 @@
 package eu.hxreborn.gplayadblock.hook
 
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
+import eu.hxreborn.gplayadblock.hook.ProtoWire.LENGTH_DELIMITED
+import eu.hxreborn.gplayadblock.hook.ProtoWire.VARINT
+import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldEnd
+import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldNumber
+import eu.hxreborn.gplayadblock.hook.ProtoWire.readVarint
+import eu.hxreborn.gplayadblock.hook.ProtoWire.wireType
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.Collections
@@ -102,36 +108,12 @@ class PresentationClassifier(
         var index = 0
         while (index < message.size) {
             val tag = readVarint(message, index) ?: return null
-            index = tag.nextIndex
-            val fieldNumber = (tag.value ushr 3).toInt()
-            when ((tag.value and 7).toInt()) {
-                0 -> {
-                    index = readVarint(message, index)?.nextIndex ?: return null
-                }
-
-                1 -> {
-                    index += 8
-                }
-
-                2 -> {
-                    val length = readVarint(message, index) ?: return null
-                    index = length.nextIndex
-                    if (length.value > Int.MAX_VALUE) return null
-                    val end = index + length.value.toInt()
-                    if (end < index || end > message.size) return null
-                    if (fieldNumber == target) return message.copyOfRange(index, end)
-                    index = end
-                }
-
-                5 -> {
-                    index += 4
-                }
-
-                else -> {
-                    return null
-                }
+            val end = fieldEnd(message, tag) ?: return null
+            if (fieldNumber(tag) == target && wireType(tag) == LENGTH_DELIMITED) {
+                val length = readVarint(message, tag.nextIndex) ?: return null
+                return message.copyOfRange(length.nextIndex, end)
             }
-            if (index > message.size) return null
+            index = end
         }
         return null
     }
@@ -143,53 +125,11 @@ class PresentationClassifier(
         var index = 0
         while (index < message.size) {
             val tag = readVarint(message, index) ?: return null
-            index = tag.nextIndex
-            val fieldNumber = (tag.value ushr 3).toInt()
-            when ((tag.value and 7).toInt()) {
-                0 -> {
-                    val value = readVarint(message, index) ?: return null
-                    if (fieldNumber == target) return value.value
-                    index = value.nextIndex
-                }
-
-                1 -> {
-                    index += 8
-                }
-
-                2 -> {
-                    val length = readVarint(message, index) ?: return null
-                    index = length.nextIndex
-                    if (length.value > Int.MAX_VALUE) return null
-                    val end = index + length.value.toInt()
-                    if (end < index || end > message.size) return null
-                    index = end
-                }
-
-                5 -> {
-                    index += 4
-                }
-
-                else -> {
-                    return null
-                }
+            val end = fieldEnd(message, tag) ?: return null
+            if (fieldNumber(tag) == target && wireType(tag) == VARINT) {
+                return readVarint(message, tag.nextIndex)?.value
             }
-            if (index > message.size) return null
-        }
-        return null
-    }
-
-    private fun readVarint(
-        message: ByteArray,
-        start: Int,
-    ): Varint? {
-        var index = start
-        var value = 0L
-        var shift = 0
-        while (index < message.size && shift < Long.SIZE_BITS) {
-            val byte = message[index++].toInt() and 0xff
-            value = value or ((byte and 0x7f).toLong() shl shift)
-            if (byte and 0x80 == 0) return Varint(value, index)
-            shift += 7
+            index = end
         }
         return null
     }
@@ -247,9 +187,4 @@ class PresentationClassifier(
         val AD_SLOT_MARKER = "ads_slot_".toByteArray(Charsets.US_ASCII)
         val SPONSORED_CLUSTER_MARKER = "sponsored_cluster".toByteArray(Charsets.US_ASCII)
     }
-
-    private data class Varint(
-        val value: Long,
-        val nextIndex: Int,
-    )
 }

@@ -6,6 +6,11 @@ sealed interface ResolvedTargets {
         val adInfoField: FieldRef,
     )
 
+    data class Spotlight(
+        val tabAccessor: MethodRef,
+        val tabDefaultInstanceField: FieldRef,
+    )
+
     data class Resolved(
         val streamDataMethod: MethodRef,
         val streamDataConstructor: ConstructorRef,
@@ -54,6 +59,8 @@ sealed interface ResolvedTargets {
         val repeatedListCopyMethod: MethodRef,
         val suggestion: Suggestion?,
         val suggestionFailure: String?,
+        val spotlight: Spotlight?,
+        val spotlightFailure: String?,
     ) : ResolvedTargets
 
     data class Missing(

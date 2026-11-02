@@ -1,3 +1,18 @@
+## [1.6.0](https://github.com/hxreborn/playstore-adblock/compare/v1.5.0...v1.6.0) (2026-11-02)
+
+### Features
+
+* **hook:** remove the promotional banner at the top of the Apps tab ([42b0f49](https://github.com/hxreborn/playstore-adblock/commit/42b0f495f19016e48939b0996f793d5afc8bba8e))
+
+### Reverts
+
+* **deps:** pin io.github.libxposed:api to 101.0.1 ([4a27ad3](https://github.com/hxreborn/playstore-adblock/commit/4a27ad3153ab3afefcf6c5ac6e96b405605115ef))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.5.0](https://github.com/hxreborn/playstore-adblock/compare/v1.4.0...v1.5.0) (2026-08-23)
 
 ### Features

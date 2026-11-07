@@ -20,7 +20,7 @@ class TargetCacheTest {
             targetVersionCode = targetVersion,
             targetLastUpdateTime = 1_793_000_000_000L,
             moduleVersionCode = moduleVersion,
-            moduleLastUpdateTime = 1_793_100_000_000L,
+            moduleApkPath = "/data/app/module-install/base.apk",
         )
 
     @Test
@@ -125,8 +125,21 @@ class TargetCacheTest {
     fun `a target set stored before the module was reinstalled is not reused`() {
         TargetCache.store(root(), key, RESOLVED)
 
-        val reinstalled = key.copy(moduleLastUpdateTime = key.moduleLastUpdateTime + 1)
+        val reinstalled = key.copy(moduleApkPath = "/data/app/module-reinstall/base.apk")
         assertNull(TargetCache.load(root(), reinstalled))
+    }
+
+    @Test
+    fun `an entry keyed by the module package update time is resolved again`() {
+        TargetCache.store(root(), key, RESOLVED)
+        val file = File(cacheDirectory(), "targets-$targetVersion-$moduleVersion.json")
+        val entry = JSONObject(file.readText())
+        val storedKey = entry.getJSONObject("key")
+        storedKey.remove("moduleApkPath")
+        storedKey.put("moduleLastUpdateTime", 1_793_100_000_000L)
+        file.writeText(entry.toString())
+
+        assertNull(TargetCache.load(root(), key))
     }
 
     @Test

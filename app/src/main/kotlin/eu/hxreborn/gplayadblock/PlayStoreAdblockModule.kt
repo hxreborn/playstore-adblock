@@ -79,14 +79,12 @@ class PlayStoreAdblockModule : XposedModule() {
     ) {
         try {
             val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
-            val modulePackageInfo =
-                context.packageManager.getPackageInfo(BuildConfig.APPLICATION_ID, 0)
             val cacheKey =
                 TargetCache.Key(
                     targetVersionCode = packageInfo.longVersionCode,
                     targetLastUpdateTime = packageInfo.lastUpdateTime,
                     moduleVersionCode = BuildConfig.VERSION_CODE.toLong(),
-                    moduleLastUpdateTime = modulePackageInfo.lastUpdateTime,
+                    moduleApkPath = moduleApplicationInfo.sourceDir,
                 )
             val status =
                 "Play Store ${packageInfo.versionName} (${packageInfo.longVersionCode}) " +

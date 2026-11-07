@@ -9,7 +9,7 @@ object TargetCache {
         val targetVersionCode: Long,
         val targetLastUpdateTime: Long,
         val moduleVersionCode: Long,
-        val moduleLastUpdateTime: Long,
+        val moduleApkPath: String,
     )
 
     fun load(
@@ -81,14 +81,14 @@ object TargetCache {
             .put("targetVersionCode", key.targetVersionCode)
             .put("targetLastUpdateTime", key.targetLastUpdateTime)
             .put("moduleVersionCode", key.moduleVersionCode)
-            .put("moduleLastUpdateTime", key.moduleLastUpdateTime)
+            .put("moduleApkPath", key.moduleApkPath)
 
     private fun decodeKey(value: JSONObject): Key =
         Key(
             targetVersionCode = value.getLong("targetVersionCode"),
             targetLastUpdateTime = value.getLong("targetLastUpdateTime"),
             moduleVersionCode = value.getLong("moduleVersionCode"),
-            moduleLastUpdateTime = value.getLong("moduleLastUpdateTime"),
+            moduleApkPath = value.getString("moduleApkPath"),
         )
 
     private fun encodeResolved(targets: ResolvedTargets.Resolved): JSONObject =

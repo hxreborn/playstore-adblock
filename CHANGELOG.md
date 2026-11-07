@@ -1,3 +1,14 @@
+## [1.6.1](https://github.com/hxreborn/playstore-adblock/compare/v1.6.0...v1.6.1) (2026-11-07)
+
+### Bug Fixes
+
+* **hook:** start filtering with restricted package visibility ([02066db](https://github.com/hxreborn/playstore-adblock/commit/02066db75519d9ff101e2be0864878478282ac20)), closes [#35](https://github.com/hxreborn/playstore-adblock/issues/35)
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.6.0](https://github.com/hxreborn/playstore-adblock/compare/v1.5.0...v1.6.0) (2026-11-02)
 
 ### Features

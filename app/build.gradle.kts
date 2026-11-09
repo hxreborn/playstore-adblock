@@ -36,7 +36,7 @@ android {
     }
 
     androidResources {
-        localeFilters += "en"
+        localeFilters += listOf("en", "ru")
     }
 
     dependenciesInfo {
@@ -117,6 +117,7 @@ val ktlint = configurations.create("ktlint")
 dependencies {
     add(ktlint.name, libs.ktlint.cli)
     compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.service)
     implementation(libs.dexkit)
     testCompileOnly(libs.libxposed.api)
     testImplementation(libs.junit)
@@ -134,6 +135,9 @@ tasks.withType<Test>().configureEach {
         "gplayadblock.compatibilityMetadata",
         rootDir.resolve("play-store-compatibility.yaml").absolutePath,
     )
+    System.getProperty("gplayadblock.playStoreApk")?.let { apkPath ->
+        systemProperty("gplayadblock.playStoreApk", apkPath)
+    }
     testLogging { showStandardStreams = true }
 }
 

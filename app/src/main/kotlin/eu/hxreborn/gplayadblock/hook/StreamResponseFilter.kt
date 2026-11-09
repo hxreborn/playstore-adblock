@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
@@ -12,8 +13,15 @@ object StreamResponseFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
+        preferences: FilterPreferences,
     ) {
-        val classifier = PresentationClassifier.from(classLoader, targets)
+        val classifier =
+            PresentationClassifier.from(
+                classLoader,
+                targets,
+                preferences::hideLiveOps,
+                preferences::hidePreRegistrationGames,
+            )
         val editor = ProtoEditor.from(classLoader, targets)
         val transformer =
             ResponseTransformer(

@@ -24,6 +24,8 @@ class PresentationClassifier(
     private val cardPayloadField: Field,
     private val cardAdMetadataFields: Map<Class<*>, List<Field>>,
     private val adPresenceField: Field,
+    private val hideLiveOps: () -> Boolean = { false },
+    private val hidePreRegistrationGames: () -> Boolean = { false },
 ) {
     private val cases = Collections.synchronizedMap(WeakHashMap<Any, Int>())
 
@@ -43,13 +45,17 @@ class PresentationClassifier(
         case in AD_CLUSTER_CASES ||
             case == GENERIC_AD_CARD ||
             case == GENERIC_AD_CLUSTER ||
-            case == GENERIC_AD_DISCLOSURE_CLUSTER
+            case == GENERIC_AD_DISCLOSURE_CLUSTER ||
+            (case == GENERIC_PROMOTIONAL_CARD && hideLiveOps()) ||
+            (case == GENERIC_PRE_REGISTRATION_CLUSTER && hidePreRegistrationGames())
 
     fun caseName(case: Int): String =
         when (case) {
             GENERIC_AD_CARD -> "card:itemAdInfo"
             GENERIC_AD_CLUSTER -> "cluster:adSlot"
             GENERIC_AD_DISCLOSURE_CLUSTER -> "cluster:adDisclosure"
+            GENERIC_PROMOTIONAL_CARD -> "card:liveOps"
+            GENERIC_PRE_REGISTRATION_CLUSTER -> "cluster:preRegistrationGames"
             else -> case.toString()
         }
 
@@ -58,17 +64,47 @@ class PresentationClassifier(
         if (payload == null || !clusterCaseField.declaringClass.isInstance(payload)) return 0
         val case = clusterCaseField.getInt(payload)
         return when {
-            case in AD_CLUSTER_CASES -> case
+            case in AD_CLUSTER_CASES -> {
+                case
+            }
 
-            hasAdSlotMetadata(payload) -> GENERIC_AD_CLUSTER
+            hidePreRegistrationGames() && hasPreRegistrationMarker(payload) -> {
+                GENERIC_PRE_REGISTRATION_CLUSTER
+            }
+
+            hasAdSlotMetadata(payload) -> {
+                GENERIC_AD_CLUSTER
+            }
 
             case == GENERIC_CLUSTER &&
                 hasAdDisclosureMetadata(
                     payload,
                 )
-            -> GENERIC_AD_DISCLOSURE_CLUSTER
+            -> {
+                GENERIC_AD_DISCLOSURE_CLUSTER
+            }
 
-            else -> case
+            else -> {
+                case
+            }
+        }
+    }
+
+    private fun hasPreRegistrationMarker(cluster: Any): Boolean {
+        val serverLogs = clusterServerLogsField.get(cluster)
+        val serverLogBytes =
+            serverLogs?.let { value ->
+                byteStringToByteArrayMethod.invoke(value) as? ByteArray
+            }
+        if (serverLogBytes?.containsSubsequence(PRE_REGISTRATION_GAMES_MARKER) == true) {
+            return true
+        }
+
+        val candidates = listOfNotNull(clusterPayloadField.get(cluster), cluster)
+        return candidates.any { candidate ->
+            protobufToByteArrayMethod.declaringClass.isInstance(candidate) &&
+                (protobufToByteArrayMethod.invoke(candidate) as? ByteArray)
+                    ?.containsSubsequence(PRE_REGISTRATION_GAMES_MARKER) == true
         }
     }
 
@@ -137,6 +173,7 @@ class PresentationClassifier(
     private fun cardCase(presentation: Any): Int {
         val card = presentationPayloadField.get(presentation)
         if (card == null || !cardKindField.declaringClass.isInstance(card)) return 0
+        if (cardKindField.getInt(card) == LIVE_OPS_CARD) return GENERIC_PROMOTIONAL_CARD
         val payload = cardPayloadField.get(card) ?: return 0
         val metadataFields = cardAdMetadataFields[payload.javaClass] ?: return 0
         return if (metadataFields.any { field ->
@@ -156,6 +193,8 @@ class PresentationClassifier(
         fun from(
             classLoader: ClassLoader,
             targets: ResolvedTargets.Resolved,
+            hideLiveOps: () -> Boolean = { false },
+            hidePreRegistrationGames: () -> Boolean = { false },
         ): PresentationClassifier =
             PresentationClassifier(
                 presentationKindField = targets.presentationKindField.resolve(classLoader),
@@ -173,6 +212,8 @@ class PresentationClassifier(
                         .map { field -> field.resolve(classLoader) }
                         .groupBy(Field::getDeclaringClass),
                 adPresenceField = targets.adPresenceField.resolve(classLoader),
+                hideLiveOps = hideLiveOps,
+                hidePreRegistrationGames = hidePreRegistrationGames,
             )
 
         val AD_CLUSTER_CASES = setOf(69, 85, 86, 224)
@@ -183,8 +224,13 @@ class PresentationClassifier(
         const val GENERIC_AD_CARD = -1
         const val GENERIC_AD_CLUSTER = -2
         const val GENERIC_AD_DISCLOSURE_CLUSTER = -3
+        const val GENERIC_PROMOTIONAL_CARD = -4
+        const val GENERIC_PRE_REGISTRATION_CLUSTER = -5
         const val AD_OVERFLOW_ENUM = 3
+        const val LIVE_OPS_CARD = 32
         val AD_SLOT_MARKER = "ads_slot_".toByteArray(Charsets.US_ASCII)
         val SPONSORED_CLUSTER_MARKER = "sponsored_cluster".toByteArray(Charsets.US_ASCII)
+        val PRE_REGISTRATION_GAMES_MARKER =
+            "pre_registration_games".toByteArray(Charsets.US_ASCII)
     }
 }

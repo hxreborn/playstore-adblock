@@ -93,7 +93,12 @@ class TargetCacheTest {
     @Test
     fun `every resolved role is written, so a new target cannot be dropped silently`() {
         val everyRolePresent =
-            RESOLVED.copy(suggestionFailure = "recorded", spotlightFailure = "recorded")
+            RESOLVED.copy(
+                suggestionFailure = "recorded",
+                spotlightFailure = "recorded",
+                manageAppsFailure = "recorded",
+                persistentNavFailure = "recorded",
+            )
         TargetCache.store(root(), key, everyRolePresent)
         val stored = File(cacheDirectory(), "targets-$targetVersion-$moduleVersion.json").readText()
 

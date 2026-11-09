@@ -152,6 +152,10 @@ object TargetCache {
             .putOpt("suggestionFailure", targets.suggestionFailure)
             .putOpt("spotlight", targets.spotlight?.let(::encodeSpotlight))
             .putOpt("spotlightFailure", targets.spotlightFailure)
+            .putOpt("manageApps", targets.manageApps?.let(::encodeManageApps))
+            .putOpt("manageAppsFailure", targets.manageAppsFailure)
+            .putOpt("persistentNav", targets.persistentNav?.let(::encodePersistentNav))
+            .putOpt("persistentNavFailure", targets.persistentNavFailure)
 
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
@@ -214,6 +218,45 @@ object TargetCache {
             suggestionFailure = value.optString("suggestionFailure").ifEmpty { null },
             spotlight = value.optJSONObject("spotlight")?.let(::decodeSpotlight),
             spotlightFailure = value.optString("spotlightFailure").ifEmpty { null },
+            manageApps = value.optJSONObject("manageApps")?.let(::decodeManageApps),
+            manageAppsFailure = value.optString("manageAppsFailure").ifEmpty { null },
+            persistentNav = value.optJSONObject("persistentNav")?.let(::decodePersistentNav),
+            persistentNavFailure = value.optString("persistentNavFailure").ifEmpty { null },
+        )
+
+    private fun encodeManageApps(value: ResolvedTargets.ManageApps): JSONObject =
+        JSONObject()
+            .put("manageListClassName", value.manageListClassName)
+            .putOpt("deviceSyncClassName", value.deviceSyncClassName)
+            .putOpt("playProtectClassName", value.playProtectClassName)
+
+    private fun decodeManageApps(value: JSONObject): ResolvedTargets.ManageApps =
+        ResolvedTargets.ManageApps(
+            manageListClassName = value.getString("manageListClassName"),
+            deviceSyncClassName = value.optString("deviceSyncClassName").ifEmpty { null },
+            playProtectClassName = value.optString("playProtectClassName").ifEmpty { null },
+        )
+
+    private fun encodePersistentNav(value: ResolvedTargets.PersistentNav): JSONObject =
+        JSONObject()
+            .put("navConstructor", encodeConstructor(value.navConstructor))
+            .put("navItemTypeField", encodeField(value.navItemTypeField))
+            .put("navPrimaryCallbackField", encodeField(value.navPrimaryCallbackField))
+            .put("navSecondaryCallbackField", encodeField(value.navSecondaryCallbackField))
+            .put("navActionConstructor", encodeConstructor(value.navActionConstructor))
+            .put("navCallbackMethod", encodeMethod(value.navCallbackMethod))
+
+    private fun decodePersistentNav(value: JSONObject): ResolvedTargets.PersistentNav =
+        ResolvedTargets.PersistentNav(
+            navConstructor = decodeConstructor(value.getJSONObject("navConstructor")),
+            navItemTypeField = decodeField(value.getJSONObject("navItemTypeField")),
+            navPrimaryCallbackField =
+                decodeField(value.getJSONObject("navPrimaryCallbackField")),
+            navSecondaryCallbackField =
+                decodeField(value.getJSONObject("navSecondaryCallbackField")),
+            navActionConstructor =
+                decodeConstructor(value.getJSONObject("navActionConstructor")),
+            navCallbackMethod = decodeMethod(value.getJSONObject("navCallbackMethod")),
         )
 
     private fun encodeSuggestion(value: ResolvedTargets.Suggestion): JSONObject =

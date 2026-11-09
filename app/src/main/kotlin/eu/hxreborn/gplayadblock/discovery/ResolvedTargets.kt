@@ -1,6 +1,21 @@
 package eu.hxreborn.gplayadblock.discovery
 
 sealed interface ResolvedTargets {
+    data class ManageApps(
+        val manageListClassName: String,
+        val deviceSyncClassName: String?,
+        val playProtectClassName: String?,
+    )
+
+    data class PersistentNav(
+        val navConstructor: ConstructorRef,
+        val navItemTypeField: FieldRef,
+        val navPrimaryCallbackField: FieldRef,
+        val navSecondaryCallbackField: FieldRef,
+        val navActionConstructor: ConstructorRef,
+        val navCallbackMethod: MethodRef,
+    )
+
     data class Suggestion(
         val constructor: ConstructorRef,
         val adInfoField: FieldRef,
@@ -61,6 +76,10 @@ sealed interface ResolvedTargets {
         val suggestionFailure: String?,
         val spotlight: Spotlight?,
         val spotlightFailure: String?,
+        val manageApps: ManageApps?,
+        val manageAppsFailure: String?,
+        val persistentNav: PersistentNav?,
+        val persistentNavFailure: String?,
     ) : ResolvedTargets
 
     data class Missing(

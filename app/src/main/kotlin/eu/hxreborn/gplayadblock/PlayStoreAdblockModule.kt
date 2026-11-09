@@ -10,6 +10,9 @@ import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
+import eu.hxreborn.gplayadblock.hook.AccountMenuFilter
+import eu.hxreborn.gplayadblock.hook.ManageAppsFilter
+import eu.hxreborn.gplayadblock.hook.PersistentNavFilter
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
 import eu.hxreborn.gplayadblock.hook.SpotlightHeaderFilter
 import eu.hxreborn.gplayadblock.hook.StreamCacheFilter
@@ -78,6 +81,8 @@ class PlayStoreAdblockModule : XposedModule() {
         classLoader: ClassLoader,
     ) {
         try {
+            val preferences =
+                FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
             val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
             val cacheKey =
                 TargetCache.Key(
@@ -125,7 +130,47 @@ class PlayStoreAdblockModule : XposedModule() {
                         "targets resolved streamMethod=${targets.streamDataMethod.className}." +
                             targets.streamDataMethod.methodName
                     }
-                    val installed = installHookGroups(classLoader, targets)
+                    val installed =
+                        installHookGroups(classLoader, targets, preferences).toMutableSet()
+                    try {
+                        AccountMenuFilter.install(this, context, classLoader, preferences)
+                        installed += "account"
+                    } catch (exception: Exception) {
+                        Logger.warn("optional account filters unavailable", exception)
+                    }
+                    try {
+                        targets.manageApps?.let { manageApps ->
+                            ManageAppsFilter.install(
+                                this,
+                                context,
+                                classLoader,
+                                preferences,
+                                manageApps,
+                            )
+                            installed += "manage-apps"
+                        }
+                    } catch (exception: Exception) {
+                        Logger.warn("optional manage apps filters unavailable", exception)
+                    }
+                    try {
+                        targets.persistentNav?.let { persistentNav ->
+                            PersistentNavFilter.install(
+                                this,
+                                classLoader,
+                                preferences,
+                                persistentNav,
+                            )
+                            installed += "persistent-nav"
+                        }
+                    } catch (exception: Exception) {
+                        Logger.warn("optional persistent nav filters unavailable", exception)
+                    }
+                    targets.manageAppsFailure?.let { reason ->
+                        Logger.warn("optional manage apps targets unresolved reason=$reason")
+                    }
+                    targets.persistentNavFailure?.let { reason ->
+                        Logger.warn("optional persistent nav targets unresolved reason=$reason")
+                    }
                     val active = installed.joinToString(",", "[", "]")
                     val missing = REQUIRED_HOOK_GROUPS - installed
                     if (missing.isEmpty()) {
@@ -149,6 +194,7 @@ class PlayStoreAdblockModule : XposedModule() {
     private fun installHookGroups(
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
+        preferences: FilterPreferences,
     ): Set<String> {
         targets.suggestionFailure?.let { reason ->
             Logger.warn("search suggestion targets unresolved reason=$reason")
@@ -159,7 +205,7 @@ class PlayStoreAdblockModule : XposedModule() {
         val mismatches = HookGroup.inputMismatches(targets)
         return listOfNotNull(
             install(HookGroup.GRAPH, mismatches) {
-                StreamNodeFilter.install(this, classLoader, targets)
+                StreamNodeFilter.install(this, classLoader, targets, preferences)
             },
             targets.suggestion?.let { suggestion ->
                 install(HookGroup.SEARCH, mismatches) {
@@ -167,10 +213,10 @@ class PlayStoreAdblockModule : XposedModule() {
                 }
             },
             install(HookGroup.CACHE, mismatches) {
-                StreamCacheFilter.install(this, classLoader, targets)
+                StreamCacheFilter.install(this, classLoader, targets, preferences)
             },
             install(HookGroup.RESPONSE, mismatches) {
-                StreamResponseFilter.install(this, classLoader, targets)
+                StreamResponseFilter.install(this, classLoader, targets, preferences)
             },
             targets.spotlight?.let { spotlight ->
                 install(HookGroup.SPOTLIGHT, mismatches) {

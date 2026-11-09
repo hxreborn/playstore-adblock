@@ -50,6 +50,11 @@ object DexKitResolver {
             "https://play.google.com/store/apps",
             "HOME_UI_MODEL_RECEIVED",
         )
+    private const val MANAGE_LIST_ANCHOR = "VerticalScrollerUiModelContent(itemList="
+    private const val NAV_CONTENT_ANCHOR = "PersistentNavDataUiContent(items="
+    private const val NAV_ITEM_ANCHOR = "PersistentNavItem(title="
+    private const val NAV_ACTION_ANCHOR = "PersistentNavUiAction(onPersistentNavItemClicked="
+    private val navTypeAnchors = listOf("APPS", "GAMES", "BOOKS", "YOU")
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -639,6 +644,8 @@ object DexKitResolver {
             }
         val spotlightResult =
             resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
+        val manageAppsResult = resolveManageApps(bridge)
+        val persistentNavResult = resolvePersistentNav(bridge)
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -690,7 +697,152 @@ object DexKitResolver {
             suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
             spotlight = (spotlightResult as? Resolution.Success)?.value,
             spotlightFailure = (spotlightResult as? Resolution.Failure)?.reason,
+            manageApps = (manageAppsResult as? Resolution.Success)?.value,
+            manageAppsFailure = (manageAppsResult as? Resolution.Failure)?.reason,
+            persistentNav = (persistentNavResult as? Resolution.Success)?.value,
+            persistentNavFailure = (persistentNavResult as? Resolution.Failure)?.reason,
         )
+    }
+
+    private fun resolveManageApps(bridge: DexKitBridge): Resolution<ResolvedTargets.ManageApps> {
+        val manageClass =
+            when (val result = findAnchoredClass(bridge, MANAGE_LIST_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val manageConstructors =
+            manageClass.methods.filter { method ->
+                method.isConstructor && method.paramTypeNames.firstOrNull() == "java.util.List"
+            }
+        if (manageConstructors.isEmpty()) {
+            return fail("manage list constructors=0")
+        }
+
+        fun knownStateWrapper(name: String): String? {
+            val candidate = bridge.getClassData(name) ?: return null
+            val fields = candidate.fields.filter { field -> !Modifier.isStatic(field.modifiers) }
+            val constructors = candidate.methods.filter(MethodData::isConstructor)
+            val accessors =
+                candidate.methods.filter { method ->
+                    !Modifier.isStatic(method.modifiers) &&
+                        !method.isConstructor &&
+                        method.paramCount == 0
+                }
+            return candidate.name.takeIf {
+                fields.size == 1 &&
+                    constructors.any { constructor ->
+                        constructor.paramTypeNames == listOf(fields.single().typeName)
+                    } &&
+                    accessors.any { accessor ->
+                        accessor.returnTypeName == fields.single().typeName
+                    }
+            }
+        }
+
+        return Resolution.Success(
+            ResolvedTargets.ManageApps(
+                manageListClassName = manageClass.name,
+                deviceSyncClassName = knownStateWrapper("altb"),
+                playProtectClassName = knownStateWrapper("altg"),
+            ),
+        )
+    }
+
+    private fun resolvePersistentNav(
+        bridge: DexKitBridge,
+    ): Resolution<ResolvedTargets.PersistentNav> {
+        val navClass =
+            when (val result = findAnchoredClass(bridge, NAV_CONTENT_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navItemClass =
+            when (val result = findAnchoredClass(bridge, NAV_ITEM_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navActionClass =
+            when (val result = findAnchoredClass(bridge, NAV_ACTION_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navTypeClasses =
+            bridge.findClass {
+                matcher { usingStrings = navTypeAnchors }
+            }
+        val navTypeNames = navTypeClasses.mapTo(mutableSetOf(), ClassData::name)
+        val navItemTypeFields =
+            navItemClass.fields.filter { field ->
+                !Modifier.isStatic(field.modifiers) && field.typeName in navTypeNames
+            }
+        val navItemTypeField =
+            navItemTypeFields.singleOrNull()
+                ?: return fail(
+                    "nav type candidates=${navTypeClasses.size} " +
+                        "item intersections=${navItemTypeFields.size}",
+                )
+
+        val actionInstanceFields =
+            navActionClass.fields.filter { field -> !Modifier.isStatic(field.modifiers) }
+        if (actionInstanceFields.size != 2 ||
+            actionInstanceFields.map(FieldData::typeName).distinct().size != 1
+        ) {
+            return fail("nav action fields=${actionInstanceFields.size}")
+        }
+        val callbackClassName = actionInstanceFields.first().typeName
+        val callbackClass =
+            bridge.getClassData(callbackClassName)
+                ?: return fail("nav callback class missing")
+        val callbackMethods =
+            callbackClass.methods.filter { method ->
+                !method.isConstructor &&
+                    !Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames == listOf("java.lang.Object") &&
+                    method.returnTypeName == "java.lang.Object"
+            }
+        val callbackMethod =
+            callbackMethods.singleOrNull()
+                ?: return fail("nav callback methods=${callbackMethods.size}")
+        val actionConstructors =
+            navActionClass.methods.filter { method ->
+                method.isConstructor &&
+                    method.paramTypeNames == listOf(callbackClassName, callbackClassName)
+            }
+        val actionConstructor =
+            actionConstructors.singleOrNull()
+                ?: return fail("nav action constructors=${actionConstructors.size}")
+        val navConstructors =
+            navClass.methods.filter { method ->
+                method.isConstructor &&
+                    method.paramTypeNames.firstOrNull() == "java.util.List" &&
+                    method.paramTypeNames.lastOrNull() == navActionClass.name
+            }
+        val navConstructor =
+            navConstructors.singleOrNull()
+                ?: return fail("nav constructors=${navConstructors.size}")
+
+        return Resolution.Success(
+            ResolvedTargets.PersistentNav(
+                navConstructor = navConstructor.toConstructorRef(),
+                navItemTypeField = navItemTypeField.toRef(),
+                navPrimaryCallbackField = actionInstanceFields[0].toRef(),
+                navSecondaryCallbackField = actionInstanceFields[1].toRef(),
+                navActionConstructor = actionConstructor.toConstructorRef(),
+                navCallbackMethod = callbackMethod.toRef(),
+            ),
+        )
+    }
+
+    private fun findAnchoredClass(
+        bridge: DexKitBridge,
+        anchor: String,
+    ): Resolution<ClassData> {
+        val candidates =
+            bridge.findClass {
+                matcher { usingStrings = listOf(anchor) }
+            }
+        return candidates.singleOrNull()?.let(Resolution<ClassData>::Success)
+            ?: fail("anchor '$anchor' candidates=${candidates.size}")
     }
 
     private fun resolveStreamChain(bridge: DexKitBridge): Resolution<StreamChain> {

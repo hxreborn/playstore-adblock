@@ -85,5 +85,30 @@ internal object SampleTargets {
                     tabDefaultInstanceField = field("spotlightTabDefault"),
                 ),
             spotlightFailure = null,
+            manageApps =
+                ResolvedTargets.ManageApps(
+                    manageListClassName = "manageList",
+                    deviceSyncClassName = "deviceSync",
+                    playProtectClassName = "playProtect",
+                ),
+            manageAppsFailure = null,
+            persistentNav =
+                ResolvedTargets.PersistentNav(
+                    navConstructor =
+                        ConstructorRef(
+                            className = "nav",
+                            paramTypeNames = listOf("java.util.List", "int", "navAction"),
+                        ),
+                    navItemTypeField = field("navItemType"),
+                    navPrimaryCallbackField = field("navPrimaryCallback"),
+                    navSecondaryCallbackField = field("navSecondaryCallback"),
+                    navActionConstructor =
+                        ConstructorRef(
+                            className = "navAction",
+                            paramTypeNames = listOf("navCallback", "navCallback"),
+                        ),
+                    navCallbackMethod = method("navCallback"),
+                ),
+            persistentNavFailure = null,
         )
 }

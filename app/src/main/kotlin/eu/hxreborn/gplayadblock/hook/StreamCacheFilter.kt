@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
@@ -14,6 +15,7 @@ object StreamCacheFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
+        preferences: FilterPreferences,
     ) {
         val positions =
             requireNotNull(HookGroup.cacheArguments(targets)) {
@@ -22,7 +24,13 @@ object StreamCacheFilter {
             }
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
         val nodeClass = classLoader.loadClass(targets.presentationAccessor.className)
-        val classifier = PresentationClassifier.from(classLoader, targets)
+        val classifier =
+            PresentationClassifier.from(
+                classLoader,
+                targets,
+                preferences::hideLiveOps,
+                preferences::hidePreRegistrationGames,
+            )
         val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =
             CacheAssemblyInterceptor(

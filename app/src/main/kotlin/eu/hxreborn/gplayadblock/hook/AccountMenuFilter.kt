@@ -2,6 +2,7 @@ package eu.hxreborn.gplayadblock.hook
 
 import android.content.Context
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
@@ -10,6 +11,7 @@ import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 import java.util.concurrent.ConcurrentHashMap
 
 object AccountMenuFilter {
@@ -65,9 +67,14 @@ object AccountMenuFilter {
                 isAccessible = true
             }
         val immutableCopy =
-            immutableListClass.getDeclaredMethod("n", Collection::class.java).apply {
-                isAccessible = true
-            }
+            immutableListClass.declaredMethods
+                .single { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.returnType == immutableListClass &&
+                        method.parameterTypes.contentEquals(arrayOf(Collection::class.java))
+                }.apply {
+                    isAccessible = true
+                }
         val labels = menuLabels()
 
         module
@@ -122,9 +129,14 @@ object AccountMenuFilter {
             return runCatching { field.get(item) as? String }.getOrNull()
         }
         val immutableCopy =
-            immutableListClass.getDeclaredMethod("n", Collection::class.java).apply {
-                isAccessible = true
-            }
+            immutableListClass.declaredMethods
+                .single { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.returnType == immutableListClass &&
+                        method.parameterTypes.contentEquals(arrayOf(Collection::class.java))
+                }.apply {
+                    isAccessible = true
+                }
         val labels = menuLabels()
 
         module
@@ -222,7 +234,16 @@ object AccountMenuFilter {
                         ancestor = ancestor.parent
                     }
                     if (ancestor is View) {
+                        ancestor.layoutParams =
+                            ancestor.layoutParams.apply {
+                                height = 0
+                                if (this is ViewGroup.MarginLayoutParams) {
+                                    setMargins(0, 0, 0, 0)
+                                }
+                            }
                         ancestor.visibility = View.GONE
+                        ancestor.requestLayout()
+                        (ancestor.parent as? View)?.requestLayout()
                         Logger.debug { "Play Points reminder removed" }
                     }
                 }

@@ -78,13 +78,15 @@ class PlayStoreAdblockModule : XposedModule() {
                 installed = true
             }
             val context = chain.getArg(0) as Context
-            module.install(context, classLoader)
+            val application = chain.thisObject as Application
+            module.install(context, application, classLoader)
             return null
         }
     }
 
     private fun install(
         context: Context,
+        application: Application,
         classLoader: ClassLoader,
     ) {
         try {
@@ -166,7 +168,6 @@ class PlayStoreAdblockModule : XposedModule() {
                         targets.manageApps?.let { manageApps ->
                             ManageAppsFilter.install(
                                 this,
-                                context,
                                 classLoader,
                                 preferences,
                                 manageApps,
@@ -180,6 +181,7 @@ class PlayStoreAdblockModule : XposedModule() {
                         targets.persistentNav?.let { persistentNav ->
                             PersistentNavFilter.install(
                                 this,
+                                application,
                                 classLoader,
                                 preferences,
                                 persistentNav,

@@ -835,32 +835,11 @@ object DexKitResolver {
             return fail("manage list constructors=0")
         }
 
-        fun knownStateWrapper(name: String): String? {
-            val candidate = bridge.getClassData(name) ?: return null
-            val fields = candidate.fields.filter { field -> !Modifier.isStatic(field.modifiers) }
-            val constructors = candidate.methods.filter(MethodData::isConstructor)
-            val accessors =
-                candidate.methods.filter { method ->
-                    !Modifier.isStatic(method.modifiers) &&
-                        !method.isConstructor &&
-                        method.paramCount == 0
-                }
-            return candidate.name.takeIf {
-                fields.size == 1 &&
-                    constructors.any { constructor ->
-                        constructor.paramTypeNames == listOf(fields.single().typeName)
-                    } &&
-                    accessors.any { accessor ->
-                        accessor.returnTypeName == fields.single().typeName
-                    }
-            }
-        }
-
         return Resolution.Success(
             ResolvedTargets.ManageApps(
                 manageListClassName = manageClass.name,
-                deviceSyncClassName = knownStateWrapper("altb"),
-                playProtectClassName = knownStateWrapper("altg"),
+                deviceSyncClassName = null,
+                playProtectClassName = null,
             ),
         )
     }

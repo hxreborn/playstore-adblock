@@ -1,5 +1,9 @@
 package eu.hxreborn.gplayadblock.hook
 
+import android.app.Activity
+import android.app.Application
+import android.content.Intent
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import eu.hxreborn.gplayadblock.FilterPreferences
@@ -15,10 +19,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 object PersistentNavFilter {
     fun install(
         module: XposedModule,
+        application: Application,
         classLoader: ClassLoader,
         preferences: FilterPreferences,
         targets: ResolvedTargets.PersistentNav,
     ) {
+        val externalLaunch = AtomicBoolean(false)
+        installLaunchTracking(module, application, classLoader, externalLaunch)
+
         val constructor = targets.navConstructor.resolve(classLoader)
         val itemTypeField = targets.navItemTypeField.resolve(classLoader)
         val primaryCallbackField = targets.navPrimaryCallbackField.resolve(classLoader)
@@ -50,7 +58,13 @@ object PersistentNavFilter {
                 val originalAction = chain.getArg(5)
                 val originalCallback = primaryCallbackField.get(originalAction)
                 val originalIndices = retained.map { it.index }
-                val configuredType = preferences.startTab()
+                val isExternalNavigation = externalLaunch.get()
+                val configuredType =
+                    if (isExternalNavigation) {
+                        FilterPreferences.START_TAB_UNCHANGED
+                    } else {
+                        preferences.startTab()
+                    }
                 val configuredPosition =
                     retained.indexOfFirst { item ->
                         itemTypeField.get(item.value)?.toString() == configuredType
@@ -67,6 +81,10 @@ object PersistentNavFilter {
                     }
                 val targetIndex =
                     when {
+                        isExternalNavigation -> {
+                            null
+                        }
+
                         configuredType != FilterPreferences.START_TAB_UNCHANGED &&
                             configuredPosition >= 0 &&
                             retained[configuredPosition].index != selected -> {
@@ -87,7 +105,7 @@ object PersistentNavFilter {
                         arrayOf(callbackClass),
                     ) { proxy, method, args ->
                         when (method.name) {
-                            "kw" -> {
+                            callbackMethod.name -> {
                                 val filteredIndex = args?.firstOrNull() as? Int
                                 val originalIndex = filteredIndex?.let(originalIndices::getOrNull)
                                 if (originalIndex == null) {
@@ -145,6 +163,78 @@ object PersistentNavFilter {
             }
     }
 
+    private fun installLaunchTracking(
+        module: XposedModule,
+        application: Application,
+        classLoader: ClassLoader,
+        externalLaunch: AtomicBoolean,
+    ) {
+        application.registerActivityLifecycleCallbacks(
+            object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityPreCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) {
+                    updateLaunchState(externalLaunch, activity.intent)
+                }
+
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) = Unit
+
+                override fun onActivityStarted(activity: Activity) = Unit
+
+                override fun onActivityResumed(activity: Activity) = Unit
+
+                override fun onActivityPaused(activity: Activity) = Unit
+
+                override fun onActivityStopped(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) = Unit
+
+                override fun onActivityDestroyed(activity: Activity) = Unit
+            },
+        )
+
+        generateSequence(classLoader.loadClass(MAIN_ACTIVITY_CLASS)) { type -> type.superclass }
+            .flatMap { type -> type.declaredMethods.asSequence() }
+            .filter { method ->
+                method.name == "onNewIntent" &&
+                    method.parameterTypes.contentEquals(arrayOf(Intent::class.java))
+            }.distinct()
+            .forEach { method ->
+                method.isAccessible = true
+                module
+                    .hook(method)
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                    .intercept { chain ->
+                        updateLaunchState(externalLaunch, chain.getArg(0) as? Intent)
+                        chain.proceed()
+                    }
+            }
+    }
+
+    private fun updateLaunchState(
+        externalLaunch: AtomicBoolean,
+        intent: Intent?,
+    ) {
+        when {
+            intent?.action == Intent.ACTION_VIEW || intent?.data != null -> {
+                externalLaunch.set(true)
+                Logger.debug { "external navigation detected" }
+            }
+
+            intent?.action == Intent.ACTION_MAIN -> {
+                externalLaunch.set(false)
+                Logger.debug { "launcher navigation detected" }
+            }
+        }
+    }
+
     private fun shouldHide(
         type: String,
         preferences: FilterPreferences,
@@ -177,4 +267,5 @@ object PersistentNavFilter {
 
     private val navigationInFlight = AtomicBoolean(false)
     private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
+    private const val MAIN_ACTIVITY_CLASS = "com.google.android.finsky.activities.MainActivity"
 }

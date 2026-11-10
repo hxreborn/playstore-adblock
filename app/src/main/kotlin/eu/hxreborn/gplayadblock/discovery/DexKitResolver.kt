@@ -59,6 +59,8 @@ object DexKitResolver {
         "CollapsibleAccountManagementFeatureImpl{commonCards="
     private const val ACCOUNT_ACTION_ANCHOR = "CustomActionSpec{id="
     private const val ACCOUNT_FEATURES_ANCHOR = "AccountMenuFeatures{deactivatedAccountsFeature="
+    private const val NOTIFICATION_TOP_BAR_ANCHOR =
+        "NotificationTopBarItemUiContent(notificationIndicatorBadge="
     private val selfUpdateSchedulerAnchors =
         listOf(
             "Skipping DFE self-update check as there is an update already queued.",
@@ -733,6 +735,14 @@ object DexKitResolver {
             val featureClass = anchored(ACCOUNT_FEATURE_ANCHOR)
             val actionClass = anchored(ACCOUNT_ACTION_ANCHOR)
             val featuresClass = anchored(ACCOUNT_FEATURES_ANCHOR)
+            val notificationTopBarConstructor =
+                bridge
+                    .findClass {
+                        matcher { usingStrings = listOf(NOTIFICATION_TOP_BAR_ANCHOR) }
+                    }.singleOrNull()
+                    ?.methods
+                    ?.filter { method -> method.isConstructor && method.paramCount == 2 }
+                    ?.singleOrNull()
             val immutableCandidates =
                 featureClass.methods
                     .asSequence()
@@ -758,6 +768,9 @@ object DexKitResolver {
                     actionClassName = actionClass.name,
                     featuresClassName = featuresClass.name,
                     immutableListClassName = immutableListClass.name,
+                    notificationTopBarConstructor =
+                        notificationTopBarConstructor
+                            ?.toConstructorRef(),
                 ),
             )
         } catch (failure: AccountResolutionFailure) {

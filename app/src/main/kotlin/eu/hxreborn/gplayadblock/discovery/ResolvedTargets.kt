@@ -6,6 +6,7 @@ sealed interface ResolvedTargets {
         val actionClassName: String,
         val featuresClassName: String,
         val immutableListClassName: String,
+        val notificationTopBarConstructor: ConstructorRef?,
     )
 
     data class SelfUpdate(

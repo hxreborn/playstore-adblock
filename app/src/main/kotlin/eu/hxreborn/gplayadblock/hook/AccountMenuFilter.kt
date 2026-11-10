@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.TextView
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
+import eu.hxreborn.gplayadblock.discovery.ConstructorRef
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
@@ -28,11 +29,10 @@ object AccountMenuFilter {
         installOptional("Play Points reminder") {
             installPlayPointsReminder(module, context, classLoader, preferences)
         }
-        installOptional("notification counter") {
-            installNotificationCounter(module, classLoader, preferences)
-        }
-        installOptional("notification top bar") {
-            installNotificationTopBar(module, classLoader, preferences)
+        targets.notificationTopBarConstructor?.let { constructor ->
+            installOptional("notification badge") {
+                installNotificationBadge(module, classLoader, preferences, constructor)
+            }
         }
     }
 
@@ -230,95 +230,25 @@ object AccountMenuFilter {
             }
     }
 
-    private fun installNotificationCounter(
+    private fun installNotificationBadge(
         module: XposedModule,
         classLoader: ClassLoader,
         preferences: FilterPreferences,
+        constructorRef: ConstructorRef,
     ) {
-        val counterClass = classLoader.loadClass(NOTIFICATION_COUNTER_CLASS)
-        val observableClass = classLoader.loadClass(OBSERVABLE_CLASS)
-        val countField =
-            counterClass.declaredFields.single { field -> field.type == observableClass }.apply {
-                isAccessible = true
-            }
-        val setValue =
-            observableClass.getDeclaredMethod("i", Any::class.java).apply {
-                isAccessible = true
-            }
-        val zero = { counter: Any ->
-            if (preferences.suppressNotificationBadge()) {
-                setValue.invoke(countField.get(counter), 0)
-            }
-        }
-
-        counterClass.declaredConstructors.single().also { constructor ->
-            constructor.isAccessible = true
-            module
-                .hook(constructor)
-                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    zero(chain.thisObject)
-                    result
-                }
-        }
-        counterClass.getDeclaredMethod("a", Int::class.javaPrimitiveType).also { update ->
-            update.isAccessible = true
-            module
-                .hook(update)
-                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    if (preferences.suppressNotificationBadge()) {
-                        chain.proceed(arrayOf(0))
-                    } else {
-                        chain.proceed()
-                    }
-                }
-        }
-        counterClass.getDeclaredMethod("jR").also { refresh ->
-            refresh.isAccessible = true
-            module
-                .hook(refresh)
-                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-                .intercept { chain ->
-                    val result = chain.proceed()
-                    zero(chain.thisObject)
-                    result
-                }
-        }
-    }
-
-    private fun installNotificationTopBar(
-        module: XposedModule,
-        classLoader: ClassLoader,
-        preferences: FilterPreferences,
-    ) {
-        val producerClass = classLoader.loadClass(NOTIFICATION_TOP_BAR_PRODUCER_CLASS)
-        val inputClass = classLoader.loadClass(NOTIFICATION_TOP_BAR_INPUT_CLASS)
-        val contentClass = classLoader.loadClass(NOTIFICATION_TOP_BAR_CONTENT_CLASS)
-        val actionClass = classLoader.loadClass(UI_ACTION_CLASS)
-        val contentProducer =
-            producerClass.getDeclaredMethod("b", inputClass).apply { isAccessible = true }
-        val actionField = contentClass.getDeclaredField("b").apply { isAccessible = true }
-        val contentConstructor =
-            contentClass
-                .getDeclaredConstructor(
-                    classLoader.loadClass(NOTIFICATION_BADGE_CLASS),
-                    actionClass,
-                ).apply { isAccessible = true }
+        val constructor = constructorRef.resolve(classLoader)
 
         module
-            .hook(contentProducer)
+            .hook(constructor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val content = chain.proceed()
-                if (!preferences.suppressNotificationBadge() ||
-                    content == null ||
-                    !contentClass.isInstance(content)
-                ) {
-                    return@intercept content
+                if (!preferences.suppressNotificationBadge() || chain.getArg(0) == null) {
+                    return@intercept chain.proceed()
                 }
-                contentConstructor.newInstance(null, actionField.get(content))
+                val arguments = chain.args.toTypedArray()
+                arguments[0] = null
+                Logger.debug { "notification badge suppressed" }
+                chain.proceed(arguments)
             }
     }
 
@@ -332,12 +262,4 @@ object AccountMenuFilter {
         val experimentalFeatures: Set<String>,
         val paymentsAndSubscriptions: Set<String>,
     )
-
-    private const val OBSERVABLE_CLASS = "mcz"
-    private const val NOTIFICATION_COUNTER_CLASS = "anwy"
-    private const val NOTIFICATION_TOP_BAR_PRODUCER_CLASS = "abvg"
-    private const val NOTIFICATION_TOP_BAR_INPUT_CLASS = "abvd"
-    private const val NOTIFICATION_TOP_BAR_CONTENT_CLASS = "abvk"
-    private const val NOTIFICATION_BADGE_CLASS = "abvj"
-    private const val UI_ACTION_CLASS = "cjqf"
 }

@@ -116,6 +116,11 @@ internal object SampleTargets {
                     actionClassName = "accountAction",
                     featuresClassName = "accountFeatures",
                     immutableListClassName = "immutableList",
+                    notificationTopBarConstructor =
+                        ConstructorRef(
+                            className = "notificationTopBar",
+                            paramTypeNames = listOf("notificationBadge", "notificationAction"),
+                        ),
                 ),
             accountMenuFailure = null,
             selfUpdate =

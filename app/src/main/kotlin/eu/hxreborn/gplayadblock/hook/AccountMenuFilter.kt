@@ -3,6 +3,7 @@ package eu.hxreborn.gplayadblock.hook
 import android.content.Context
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
+import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 
@@ -12,12 +13,32 @@ object AccountMenuFilter {
         context: Context,
         classLoader: ClassLoader,
         preferences: FilterPreferences,
+        targets: ResolvedTargets.AccountMenu,
     ) {
-        installMenuItems(module, context, classLoader, preferences)
-        installCommonMenuItems(module, context, classLoader, preferences)
-        installPlayPointsReminder(module, context, classLoader, preferences)
-        installNotificationCounter(module, classLoader, preferences)
-        installNotificationTopBar(module, classLoader, preferences)
+        installOptional("account actions") {
+            installMenuItems(module, context, classLoader, preferences, targets)
+        }
+        installOptional("account common actions") {
+            installCommonMenuItems(module, context, classLoader, preferences, targets)
+        }
+        installOptional("Play Points reminder") {
+            installPlayPointsReminder(module, context, classLoader, preferences)
+        }
+        installOptional("notification counter") {
+            installNotificationCounter(module, classLoader, preferences)
+        }
+        installOptional("notification top bar") {
+            installNotificationTopBar(module, classLoader, preferences)
+        }
+    }
+
+    private inline fun installOptional(
+        name: String,
+        block: () -> Unit,
+    ) {
+        runCatching(block).onFailure { error ->
+            Logger.warn("optional $name hook unavailable", error)
+        }
     }
 
     private fun installMenuItems(
@@ -25,10 +46,11 @@ object AccountMenuFilter {
         context: Context,
         classLoader: ClassLoader,
         preferences: FilterPreferences,
+        targets: ResolvedTargets.AccountMenu,
     ) {
-        val featureClass = classLoader.loadClass(ACCOUNT_FEATURE_CLASS)
-        val itemClass = classLoader.loadClass(ACCOUNT_ACTION_CLASS)
-        val immutableListClass = classLoader.loadClass(IMMUTABLE_LIST_CLASS)
+        val featureClass = classLoader.loadClass(targets.featureClassName)
+        val itemClass = classLoader.loadClass(targets.actionClassName)
+        val immutableListClass = classLoader.loadClass(targets.immutableListClassName)
         val actionsAccessor =
             featureClass.declaredMethods
                 .single { method ->
@@ -69,10 +91,11 @@ object AccountMenuFilter {
         context: Context,
         classLoader: ClassLoader,
         preferences: FilterPreferences,
+        targets: ResolvedTargets.AccountMenu,
     ) {
-        val featuresClass = classLoader.loadClass(ACCOUNT_FEATURES_CLASS)
-        val actionClass = classLoader.loadClass(ACCOUNT_COMMON_ACTION_CLASS)
-        val immutableListClass = classLoader.loadClass(IMMUTABLE_LIST_CLASS)
+        val featuresClass = classLoader.loadClass(targets.featuresClassName)
+        val actionClass = classLoader.loadClass(targets.commonActionClassName)
+        val immutableListClass = classLoader.loadClass(targets.immutableListClassName)
         val constructor =
             featuresClass.declaredConstructors
                 .single { candidate ->
@@ -301,11 +324,6 @@ object AccountMenuFilter {
         val paymentsAndSubscriptions: Set<String>,
     )
 
-    private const val ACCOUNT_FEATURE_CLASS = "bolr"
-    private const val ACCOUNT_ACTION_CLASS = "bolv"
-    private const val ACCOUNT_FEATURES_CLASS = "bolp"
-    private const val ACCOUNT_COMMON_ACTION_CLASS = "boll"
-    private const val IMMUTABLE_LIST_CLASS = "bthm"
     private const val DYNAMIC_CARD_PRODUCER_CLASS = "anwv"
     private const val TEXT_CARD_CLASS = "boky"
     private const val TEXT_CARD_RETURN_CLASS = "boks"

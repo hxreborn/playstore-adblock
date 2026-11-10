@@ -14,6 +14,7 @@ import eu.hxreborn.gplayadblock.hook.AccountMenuFilter
 import eu.hxreborn.gplayadblock.hook.ManageAppsFilter
 import eu.hxreborn.gplayadblock.hook.PersistentNavFilter
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
+import eu.hxreborn.gplayadblock.hook.SelfUpdateFilter
 import eu.hxreborn.gplayadblock.hook.SpotlightHeaderFilter
 import eu.hxreborn.gplayadblock.hook.StreamCacheFilter
 import eu.hxreborn.gplayadblock.hook.StreamNodeFilter
@@ -133,10 +134,26 @@ class PlayStoreAdblockModule : XposedModule() {
                     val installed =
                         installHookGroups(classLoader, targets, preferences).toMutableSet()
                     try {
-                        AccountMenuFilter.install(this, context, classLoader, preferences)
-                        installed += "account"
+                        targets.accountMenu?.let { accountMenu ->
+                            AccountMenuFilter.install(
+                                this,
+                                context,
+                                classLoader,
+                                preferences,
+                                accountMenu,
+                            )
+                            installed += "account"
+                        }
                     } catch (exception: Exception) {
                         Logger.warn("optional account filters unavailable", exception)
+                    }
+                    try {
+                        targets.selfUpdate?.let { selfUpdate ->
+                            SelfUpdateFilter.install(this, classLoader, preferences, selfUpdate)
+                            installed += "self-update"
+                        }
+                    } catch (exception: Exception) {
+                        Logger.warn("optional self-update filter unavailable", exception)
                     }
                     try {
                         targets.manageApps?.let { manageApps ->
@@ -170,6 +187,12 @@ class PlayStoreAdblockModule : XposedModule() {
                     }
                     targets.persistentNavFailure?.let { reason ->
                         Logger.warn("optional persistent nav targets unresolved reason=$reason")
+                    }
+                    targets.accountMenuFailure?.let { reason ->
+                        Logger.warn("optional account targets unresolved reason=$reason")
+                    }
+                    targets.selfUpdateFailure?.let { reason ->
+                        Logger.warn("optional self-update target unresolved reason=$reason")
                     }
                     val active = installed.joinToString(",", "[", "]")
                     val missing = REQUIRED_HOOK_GROUPS - installed

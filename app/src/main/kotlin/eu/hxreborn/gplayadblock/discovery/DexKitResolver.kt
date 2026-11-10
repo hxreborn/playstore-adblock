@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock.discovery
 
 import org.luckypray.dexkit.DexKitBridge
+import org.luckypray.dexkit.query.enums.StringMatchType
 import org.luckypray.dexkit.result.ClassData
 import org.luckypray.dexkit.result.FieldData
 import org.luckypray.dexkit.result.MethodData
@@ -54,6 +55,18 @@ object DexKitResolver {
     private const val NAV_CONTENT_ANCHOR = "PersistentNavDataUiContent(items="
     private const val NAV_ITEM_ANCHOR = "PersistentNavItem(title="
     private const val NAV_ACTION_ANCHOR = "PersistentNavUiAction(onPersistentNavItemClicked="
+    private const val ACCOUNT_FEATURE_ANCHOR =
+        "CollapsibleAccountManagementFeatureImpl{commonCards="
+    private const val ACCOUNT_ACTION_ANCHOR = "CustomActionSpec{id="
+    private const val ACCOUNT_FEATURES_ANCHOR = "AccountMenuFeatures{deactivatedAccountsFeature="
+    private const val ACCOUNT_COMMON_ACTION_ANCHOR = "ActionSpec{id="
+    private val selfUpdateSchedulerAnchors =
+        listOf(
+            "Skipping DFE self-update check as there is an update already queued.",
+            "Bulk scheduling self-update with policies",
+        )
+    private const val AUTO_UPDATE_ANCHOR =
+        "UChk: document %s is not qualified for auto update v2"
     private val navTypeAnchors = listOf("APPS", "GAMES", "BOOKS", "YOU")
     private val primitiveTypes =
         setOf(
@@ -646,6 +659,8 @@ object DexKitResolver {
             resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
         val manageAppsResult = resolveManageApps(bridge)
         val persistentNavResult = resolvePersistentNav(bridge)
+        val accountMenuResult = resolveAccountMenu(bridge)
+        val selfUpdateResult = resolveSelfUpdate(bridge)
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -701,6 +716,98 @@ object DexKitResolver {
             manageAppsFailure = (manageAppsResult as? Resolution.Failure)?.reason,
             persistentNav = (persistentNavResult as? Resolution.Success)?.value,
             persistentNavFailure = (persistentNavResult as? Resolution.Failure)?.reason,
+            accountMenu = (accountMenuResult as? Resolution.Success)?.value,
+            accountMenuFailure = (accountMenuResult as? Resolution.Failure)?.reason,
+            selfUpdate = (selfUpdateResult as? Resolution.Success)?.value,
+            selfUpdateFailure = (selfUpdateResult as? Resolution.Failure)?.reason,
+        )
+    }
+
+    private fun resolveAccountMenu(bridge: DexKitBridge): Resolution<ResolvedTargets.AccountMenu> {
+        fun anchored(anchor: String): ClassData =
+            when (val result = findAnchoredClass(bridge, anchor)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> throw AccountResolutionFailure(result.reason)
+            }
+
+        return try {
+            val featureClass = anchored(ACCOUNT_FEATURE_ANCHOR)
+            val actionClass = anchored(ACCOUNT_ACTION_ANCHOR)
+            val featuresClass = anchored(ACCOUNT_FEATURES_ANCHOR)
+            val commonActionClass = anchored(ACCOUNT_COMMON_ACTION_ANCHOR)
+            val immutableCandidates =
+                featureClass.methods
+                    .asSequence()
+                    .filter { method ->
+                        !method.isConstructor &&
+                            !Modifier.isStatic(method.modifiers) &&
+                            method.paramCount == 0
+                    }.mapNotNull(MethodData::returnType)
+                    .filter { candidate ->
+                        candidate.methods.any { method ->
+                            Modifier.isStatic(method.modifiers) &&
+                                method.returnTypeName == candidate.name &&
+                                method.paramTypeNames == listOf("java.util.Collection")
+                        }
+                    }.distinctBy(ClassData::name)
+                    .toList()
+            val immutableListClass =
+                immutableCandidates.singleOrNull()
+                    ?: return fail("account immutable lists=${immutableCandidates.size}")
+            Resolution.Success(
+                ResolvedTargets.AccountMenu(
+                    featureClassName = featureClass.name,
+                    actionClassName = actionClass.name,
+                    featuresClassName = featuresClass.name,
+                    commonActionClassName = commonActionClass.name,
+                    immutableListClassName = immutableListClass.name,
+                ),
+            )
+        } catch (failure: AccountResolutionFailure) {
+            fail(failure.message.orEmpty())
+        }
+    }
+
+    private fun resolveSelfUpdate(bridge: DexKitBridge): Resolution<ResolvedTargets.SelfUpdate> {
+        val schedulers =
+            bridge.findMethod {
+                matcher {
+                    returnType = "boolean"
+                    usingStrings(selfUpdateSchedulerAnchors, StringMatchType.Contains)
+                }
+            }
+        val scheduler =
+            schedulers.singleOrNull()
+                ?: return fail("self-update schedulers=${schedulers.size}")
+
+        val autoAnchors =
+            bridge.findMethod {
+                matcher {
+                    usingStrings(listOf(AUTO_UPDATE_ANCHOR), StringMatchType.Contains)
+                }
+            }
+        val autoUpdateMethod =
+            autoAnchors
+                .singleOrNull()
+                ?.declaredClass
+                ?.methods
+                ?.filter { method ->
+                    val parameters = method.paramTypeNames
+                    method.returnTypeName == "void" &&
+                        parameters.size == 4 &&
+                        parameters[1] == "int" &&
+                        parameters[2] == "java.util.List" &&
+                        bridge.getClassData(parameters[0])?.methods?.any { callback ->
+                            callback.returnTypeName == "void" &&
+                                callback.paramTypeNames == listOf("java.util.Set")
+                        } == true
+                }?.singleOrNull()
+
+        return Resolution.Success(
+            ResolvedTargets.SelfUpdate(
+                schedulerMethod = scheduler.toRef(),
+                autoUpdateMethod = autoUpdateMethod?.toRef(),
+            ),
         )
     }
 
@@ -1439,6 +1546,10 @@ object DexKitResolver {
         val remoteSuggestionConstructor: MethodData,
         val suggestionAdInfoField: FieldData,
     )
+
+    private class AccountResolutionFailure(
+        reason: String,
+    ) : RuntimeException(reason)
 
     private fun streamDataConstructor(method: MethodData): MethodData? =
         method.invokes

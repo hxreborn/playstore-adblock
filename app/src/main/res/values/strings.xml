@@ -8,6 +8,7 @@
     <string name="category_account_menu">Account menu</string>
     <string name="category_manage_apps">Manage apps &amp; device</string>
     <string name="category_bottom_navigation">Bottom navigation</string>
+    <string name="category_maintenance">Apply and compatibility</string>
     <string name="hide_live_ops">Hide editorial promotions</string>
     <string name="hide_live_ops_summary">Removes large LiveOps cards such as promoted apps, games and events.</string>
     <string name="hide_play_points_reminder">Hide Play Points reminder</string>
@@ -54,4 +55,11 @@
         <item>You</item>
     </string-array>
     <string name="restart_hint">Restart Google Play Store after changing filters so cached screens are rebuilt.</string>
+    <string name="block_store_self_updates">Block Play Store self-updates</string>
+    <string name="block_store_self_updates_summary">Keeps the tested Play Store version installed. Normal updates for other apps are not affected.</string>
+    <string name="restart_play_store">Apply filters and restart Play Store</string>
+    <string name="restart_play_store_summary">Uses root to stop Play Store, clears only its cache and code cache, then opens it again. Accounts and app data are preserved.</string>
+    <string name="restart_play_store_working">Restarting Play Store…</string>
+    <string name="restart_play_store_success">Play Store restarted. The new filters are active.</string>
+    <string name="restart_play_store_failed">Could not restart Play Store. Check the root permission prompt.</string>
 </resources>

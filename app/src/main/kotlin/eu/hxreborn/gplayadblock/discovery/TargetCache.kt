@@ -156,6 +156,10 @@ object TargetCache {
             .putOpt("manageAppsFailure", targets.manageAppsFailure)
             .putOpt("persistentNav", targets.persistentNav?.let(::encodePersistentNav))
             .putOpt("persistentNavFailure", targets.persistentNavFailure)
+            .putOpt("accountMenu", targets.accountMenu?.let(::encodeAccountMenu))
+            .putOpt("accountMenuFailure", targets.accountMenuFailure)
+            .putOpt("selfUpdate", targets.selfUpdate?.let(::encodeSelfUpdate))
+            .putOpt("selfUpdateFailure", targets.selfUpdateFailure)
 
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
@@ -222,6 +226,38 @@ object TargetCache {
             manageAppsFailure = value.optString("manageAppsFailure").ifEmpty { null },
             persistentNav = value.optJSONObject("persistentNav")?.let(::decodePersistentNav),
             persistentNavFailure = value.optString("persistentNavFailure").ifEmpty { null },
+            accountMenu = value.optJSONObject("accountMenu")?.let(::decodeAccountMenu),
+            accountMenuFailure = value.optString("accountMenuFailure").ifEmpty { null },
+            selfUpdate = value.optJSONObject("selfUpdate")?.let(::decodeSelfUpdate),
+            selfUpdateFailure = value.optString("selfUpdateFailure").ifEmpty { null },
+        )
+
+    private fun encodeAccountMenu(value: ResolvedTargets.AccountMenu): JSONObject =
+        JSONObject()
+            .put("featureClassName", value.featureClassName)
+            .put("actionClassName", value.actionClassName)
+            .put("featuresClassName", value.featuresClassName)
+            .put("commonActionClassName", value.commonActionClassName)
+            .put("immutableListClassName", value.immutableListClassName)
+
+    private fun decodeAccountMenu(value: JSONObject): ResolvedTargets.AccountMenu =
+        ResolvedTargets.AccountMenu(
+            featureClassName = value.getString("featureClassName"),
+            actionClassName = value.getString("actionClassName"),
+            featuresClassName = value.getString("featuresClassName"),
+            commonActionClassName = value.getString("commonActionClassName"),
+            immutableListClassName = value.getString("immutableListClassName"),
+        )
+
+    private fun encodeSelfUpdate(value: ResolvedTargets.SelfUpdate): JSONObject =
+        JSONObject()
+            .put("schedulerMethod", encodeMethod(value.schedulerMethod))
+            .putOpt("autoUpdateMethod", value.autoUpdateMethod?.let(::encodeMethod))
+
+    private fun decodeSelfUpdate(value: JSONObject): ResolvedTargets.SelfUpdate =
+        ResolvedTargets.SelfUpdate(
+            schedulerMethod = decodeMethod(value.getJSONObject("schedulerMethod")),
+            autoUpdateMethod = value.optJSONObject("autoUpdateMethod")?.let(::decodeMethod),
         )
 
     private fun encodeManageApps(value: ResolvedTargets.ManageApps): JSONObject =

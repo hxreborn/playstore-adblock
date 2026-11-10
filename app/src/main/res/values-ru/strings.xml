@@ -8,6 +8,7 @@
     <string name="category_account_menu">Меню аккаунта</string>
     <string name="category_manage_apps">Управление устройством и приложениями</string>
     <string name="category_bottom_navigation">Нижняя навигация</string>
+    <string name="category_maintenance">Применение и совместимость</string>
     <string name="hide_live_ops">Скрывать редакционные промо</string>
     <string name="hide_live_ops_summary">Убирает крупные карточки LiveOps с продвигаемыми приложениями, играми и событиями.</string>
     <string name="hide_play_points_reminder">Скрывать напоминание Play Points</string>
@@ -54,4 +55,11 @@
         <item>Вы</item>
     </string-array>
     <string name="restart_hint">После изменения фильтров перезапустите Google Play, чтобы экран пересобрался без старого кэша.</string>
+    <string name="block_store_self_updates">Блокировать самообновление Play Market</string>
+    <string name="block_store_self_updates_summary">Сохраняет проверенную версию Play Market. Обычные обновления остальных приложений продолжат работать.</string>
+    <string name="restart_play_store">Применить и перезапустить Play Market</string>
+    <string name="restart_play_store_summary">Через root останавливает Play Market, очищает только cache и code_cache, затем открывает его снова. Аккаунты и данные приложений сохраняются.</string>
+    <string name="restart_play_store_working">Перезапускаю Play Market…</string>
+    <string name="restart_play_store_success">Play Market перезапущен. Новые фильтры применены.</string>
+    <string name="restart_play_store_failed">Не удалось перезапустить Play Market. Проверьте запрос root-доступа.</string>
 </resources>

@@ -20,6 +20,8 @@ class OptionalUiResolverTest {
         resolved as ResolvedTargets.Resolved
         assertNotNull(resolved.manageAppsFailure, resolved.manageApps)
         assertNotNull(resolved.persistentNavFailure, resolved.persistentNav)
+        assertNotNull(resolved.accountMenuFailure, resolved.accountMenu)
+        assertNotNull(resolved.selfUpdateFailure, resolved.selfUpdate)
     }
 
     private companion object {

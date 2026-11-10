@@ -49,6 +49,30 @@
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
+## Optional interface filters
+
+The module settings also expose opt-in filters for Play Store interface elements. They can hide selected
+home shelves, account-menu entries, management-page rows, persistent navigation tabs, Play Points and
+notification indicators. A replacement start tab can be selected when its original tab is hidden.
+
+These filters are disabled by default. Unlike the main ad filter, they depend on internal Play Store UI
+models that Google can change without notice. Targets are resolved from code structure and stable string
+fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
+filter fails open and the original interface remains available rather than risking a Play Store crash.
+
+The compatibility section contains two additional controls:
+
+- **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does
+  not block updates of other apps and is disabled by default.
+- **Apply and restart Play Store** force-stops Play Store, removes only its `cache` and `code_cache`
+  directories, and relaunches it through root. Accounts, installed-app records, preferences, and Play Store
+  app data are not cleared.
+
+Some filters require a restart before an already-created screen changes. Hiding a currently selected
+persistent tab may still briefly expose cached content on unusual Play Store builds; the module switches to
+the configured replacement tab synchronously and falls back to a main-thread callback if the direct switch
+is rejected.
+
 ## Compatibility
 
 | Play Store release | Version code | Status |

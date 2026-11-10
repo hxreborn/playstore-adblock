@@ -52,6 +52,9 @@ class FilterPreferences(
     fun startTab(): String =
         preferences.getString(KEY_START_TAB, START_TAB_UNCHANGED) ?: START_TAB_UNCHANGED
 
+    fun blockStoreSelfUpdates(): Boolean =
+        preferences.getBoolean(KEY_BLOCK_STORE_SELF_UPDATES, false)
+
     companion object {
         const val PREFERENCES_NAME = "gplay_adblock_settings"
         const val KEY_HIDE_LIVE_OPS = "hide_live_ops"
@@ -74,6 +77,7 @@ class FilterPreferences(
         const val KEY_HIDE_BOOKS_TAB = "hide_books_tab"
         const val KEY_HIDE_YOU_TAB = "hide_you_tab"
         const val KEY_START_TAB = "start_tab"
+        const val KEY_BLOCK_STORE_SELF_UPDATES = "block_store_self_updates"
 
         const val START_TAB_UNCHANGED = "UNCHANGED"
         const val START_TAB_GAMES = "GAMES"

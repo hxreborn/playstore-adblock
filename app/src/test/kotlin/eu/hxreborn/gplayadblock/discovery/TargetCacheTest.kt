@@ -98,6 +98,8 @@ class TargetCacheTest {
                 spotlightFailure = "recorded",
                 manageAppsFailure = "recorded",
                 persistentNavFailure = "recorded",
+                accountMenuFailure = "recorded",
+                selfUpdateFailure = "recorded",
             )
         TargetCache.store(root(), key, everyRolePresent)
         val stored = File(cacheDirectory(), "targets-$targetVersion-$moduleVersion.json").readText()

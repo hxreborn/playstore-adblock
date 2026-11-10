@@ -7,11 +7,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import java.util.concurrent.TimeUnit
 
 class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -160,6 +162,15 @@ class SettingsActivity : Activity() {
                 )
                 addStartTabPreference(preferences)
 
+                addHeader(R.string.category_maintenance)
+                addFilter(
+                    R.string.block_store_self_updates,
+                    R.string.block_store_self_updates_summary,
+                    FilterPreferences.KEY_BLOCK_STORE_SELF_UPDATES,
+                    preferences,
+                )
+                addRestartButton()
+
                 addView(
                     TextView(context).apply {
                         text = getString(R.string.restart_hint)
@@ -292,5 +303,66 @@ class SettingsActivity : Activity() {
         )
     }
 
+    private fun LinearLayout.addRestartButton() {
+        val status =
+            TextView(context).apply {
+                text = getString(R.string.restart_play_store_summary)
+                textSize = 13f
+                setPadding(0, dp(3), 0, dp(9))
+            }
+        addView(
+            Button(context).apply {
+                text = getString(R.string.restart_play_store)
+                setOnClickListener { button ->
+                    button.isEnabled = false
+                    status.text = getString(R.string.restart_play_store_working)
+                    Thread {
+                        val result = restartPlayStore()
+                        runOnUiThread {
+                            status.text =
+                                getString(
+                                    if (result) {
+                                        R.string.restart_play_store_success
+                                    } else {
+                                        R.string.restart_play_store_failed
+                                    },
+                                )
+                            button.isEnabled = true
+                        }
+                    }.start()
+                }
+            },
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        addView(status)
+    }
+
+    private fun restartPlayStore(): Boolean =
+        runCatching {
+            val command =
+                listOf(
+                    "am force-stop com.android.vending",
+                    "rm -rf /data/user/0/com.android.vending/cache/*",
+                    "rm -rf /data/user/0/com.android.vending/code_cache/*",
+                    "am start -a android.intent.action.MAIN " +
+                        "-c android.intent.category.LAUNCHER -p com.android.vending",
+                ).joinToString("; ")
+            ProcessBuilder("su", "-c", command)
+                .redirectErrorStream(true)
+                .start()
+                .let { process ->
+                    val completed = process.waitFor(RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    if (!completed) process.destroyForcibly()
+                    completed && process.exitValue() == 0
+                }
+        }.getOrDefault(false)
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val RESTART_TIMEOUT_SECONDS = 60L
+    }
 }

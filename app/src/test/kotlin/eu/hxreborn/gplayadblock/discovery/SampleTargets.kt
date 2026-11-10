@@ -110,5 +110,20 @@ internal object SampleTargets {
                     navCallbackMethod = method("navCallback"),
                 ),
             persistentNavFailure = null,
+            accountMenu =
+                ResolvedTargets.AccountMenu(
+                    featureClassName = "accountFeature",
+                    actionClassName = "accountAction",
+                    featuresClassName = "accountFeatures",
+                    commonActionClassName = "accountCommonAction",
+                    immutableListClassName = "immutableList",
+                ),
+            accountMenuFailure = null,
+            selfUpdate =
+                ResolvedTargets.SelfUpdate(
+                    schedulerMethod = method("selfUpdateScheduler"),
+                    autoUpdateMethod = method("autoUpdate"),
+                ),
+            selfUpdateFailure = null,
         )
 }

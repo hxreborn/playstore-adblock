@@ -90,6 +90,9 @@ class GPlayAdblockApp :
                     FilterPreferences.KEY_START_TAB,
                     FilterPreferences.START_TAB_UNCHANGED,
                 ),
+            ).putBoolean(
+                FilterPreferences.KEY_BLOCK_STORE_SELF_UPDATES,
+                local.getBoolean(FilterPreferences.KEY_BLOCK_STORE_SELF_UPDATES, false),
             ).commit()
     }
 

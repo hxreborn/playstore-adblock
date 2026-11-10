@@ -128,10 +128,17 @@ object PersistentNavFilter {
                 val result = chain.proceed(arguments)
 
                 if (targetIndex != null && navigationScheduled.compareAndSet(false, true)) {
-                    Handler(Looper.getMainLooper()).postAtFrontOfQueue {
-                        runCatching { callbackMethod.invoke(originalCallback, targetIndex) }
-                            .onFailure { Logger.warn("start tab navigation failed", it) }
-                    }
+                    runCatching { callbackMethod.invoke(originalCallback, targetIndex) }
+                        .onFailure { synchronousFailure ->
+                            Logger.warn(
+                                "synchronous start tab navigation failed",
+                                synchronousFailure,
+                            )
+                            Handler(Looper.getMainLooper()).postAtFrontOfQueue {
+                                runCatching { callbackMethod.invoke(originalCallback, targetIndex) }
+                                    .onFailure { Logger.warn("start tab navigation failed", it) }
+                            }
+                        }
                 }
                 if (retained.size != original.size) {
                     Logger.debug { "persistent nav tabs=${original.size}->${retained.size}" }

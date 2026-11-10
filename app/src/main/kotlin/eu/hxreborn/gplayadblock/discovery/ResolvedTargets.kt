@@ -1,6 +1,19 @@
 package eu.hxreborn.gplayadblock.discovery
 
 sealed interface ResolvedTargets {
+    data class AccountMenu(
+        val featureClassName: String,
+        val actionClassName: String,
+        val featuresClassName: String,
+        val commonActionClassName: String,
+        val immutableListClassName: String,
+    )
+
+    data class SelfUpdate(
+        val schedulerMethod: MethodRef,
+        val autoUpdateMethod: MethodRef?,
+    )
+
     data class ManageApps(
         val manageListClassName: String,
         val deviceSyncClassName: String?,
@@ -80,6 +93,10 @@ sealed interface ResolvedTargets {
         val manageAppsFailure: String?,
         val persistentNav: PersistentNav?,
         val persistentNavFailure: String?,
+        val accountMenu: AccountMenu?,
+        val accountMenuFailure: String?,
+        val selfUpdate: SelfUpdate?,
+        val selfUpdateFailure: String?,
     ) : ResolvedTargets
 
     data class Missing(

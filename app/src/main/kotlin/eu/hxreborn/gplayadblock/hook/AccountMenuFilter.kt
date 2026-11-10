@@ -2,8 +2,6 @@ package eu.hxreborn.gplayadblock.hook
 
 import android.content.Context
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ConstructorRef
@@ -29,7 +27,7 @@ object AccountMenuFilter {
             installCommonMenuItems(module, context, classLoader, preferences, targets)
         }
         installOptional("Play Points reminder") {
-            installPlayPointsReminder(module, context, classLoader, preferences)
+            installPlayPointsReminder(module, classLoader, preferences, targets)
         }
         targets.notificationTopBarConstructor?.let { constructor ->
             installOptional("notification badge") {
@@ -85,8 +83,7 @@ object AccountMenuFilter {
                     ?: return null
             val discriminatorField =
                 listener.javaClass.declaredFields.singleOrNull { field ->
-                    !field.isSynthetic &&
-                        !Modifier.isStatic(field.modifiers) &&
+                    !Modifier.isStatic(field.modifiers) &&
                         field.type == Int::class.javaPrimitiveType
                 } ?: return null
             discriminatorField.isAccessible = true
@@ -239,43 +236,114 @@ object AccountMenuFilter {
 
     private fun installPlayPointsReminder(
         module: XposedModule,
-        @Suppress("UNUSED_PARAMETER") context: Context,
-        @Suppress("UNUSED_PARAMETER") classLoader: ClassLoader,
+        classLoader: ClassLoader,
         preferences: FilterPreferences,
+        targets: ResolvedTargets.AccountMenu,
     ) {
-        val onAttached =
-            TextView::class.java.getDeclaredMethod("onAttachedToWindow").apply {
-                isAccessible = true
+        val featureClass = classLoader.loadClass(targets.featureClassName)
+        val immutableListClass = classLoader.loadClass(targets.immutableListClassName)
+        val constructor =
+            featureClass.declaredConstructors
+                .single { candidate ->
+                    candidate.parameterCount == 3 &&
+                        candidate.parameterTypes[0] == candidate.parameterTypes[2] &&
+                        candidate.parameterTypes[1] == immutableListClass
+                }.apply { isAccessible = true }
+        val immutableCopy =
+            immutableListClass.declaredMethods
+                .single { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.returnType == immutableListClass &&
+                        method.parameterTypes.contentEquals(arrayOf(Collection::class.java))
+                }.apply { isAccessible = true }
+
+        fun retrieverOf(wrapper: Any): Any? {
+            val fields =
+                wrapper.javaClass.declaredFields.filterNot { field ->
+                    Modifier.isStatic(field.modifiers) || field.type.isPrimitive
+                }
+            if (fields.size != 1) return null
+            return runCatching {
+                fields.single().apply { isAccessible = true }.get(wrapper)
+            }.getOrNull()
+        }
+
+        fun discriminatorOf(retriever: Any): Int? {
+            val fields =
+                retriever.javaClass.declaredFields.filterNot { field ->
+                    Modifier.isStatic(field.modifiers)
+                }
+            val discriminator =
+                fields.singleOrNull { field -> field.type == Int::class.javaPrimitiveType }
+                    ?: return null
+            if (fields.size != 2 || fields.count { field -> !field.type.isPrimitive } != 1) {
+                return null
             }
+            return runCatching {
+                discriminator.isAccessible = true
+                discriminator.getInt(retriever)
+            }.getOrNull()
+        }
+
         module
-            .hook(onAttached)
+            .hook(constructor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val result = chain.proceed()
-                val title = chain.thisObject as? TextView
-                if (
-                    preferences.hidePlayPointsReminder() &&
-                    title?.text?.toString()?.contains("Play Points", ignoreCase = true) == true
-                ) {
-                    var ancestor = title?.parent
-                    while (ancestor is View && !ancestor.javaClass.name.endsWith("CardView")) {
-                        ancestor = ancestor.parent
-                    }
-                    if (ancestor is View) {
-                        ancestor.layoutParams =
-                            ancestor.layoutParams.apply {
-                                height = 0
-                                if (this is ViewGroup.MarginLayoutParams) {
-                                    setMargins(0, 0, 0, 0)
-                                }
+                if (!preferences.hidePlayPointsReminder()) return@intercept chain.proceed()
+                val optional = chain.getArg(2) ?: return@intercept chain.proceed()
+                val optionalMethods = optional.javaClass.declaredMethods
+                val isPresent =
+                    optionalMethods
+                        .singleOrNull { method ->
+                            method.parameterCount == 0 &&
+                                method.returnType == Boolean::class.javaPrimitiveType
+                        }?.apply { isAccessible = true }
+                        ?: return@intercept chain.proceed()
+                val present = runCatching { isPresent.invoke(optional) as? Boolean }.getOrNull()
+                if (present != true) return@intercept chain.proceed()
+                val original =
+                    optionalMethods
+                        .asSequence()
+                        .filter { method ->
+                            method.parameterCount == 0 && method.returnType == Any::class.java
+                        }.mapNotNull { method ->
+                            runCatching {
+                                method.isAccessible = true
+                                method.invoke(optional) as? List<*>
+                            }.getOrNull()
+                        }.firstOrNull()
+                        ?: return@intercept chain.proceed()
+                val models =
+                    original.mapNotNull { wrapper ->
+                        wrapper?.let(::retrieverOf)?.let { retriever ->
+                            discriminatorOf(retriever)?.let { discriminator ->
+                                Triple(wrapper, retriever.javaClass, discriminator)
                             }
-                        ancestor.visibility = View.GONE
-                        ancestor.requestLayout()
-                        (ancestor.parent as? View)?.requestLayout()
-                        Logger.debug { "Play Points reminder removed" }
+                        }
                     }
-                }
-                result
+                val matchingGroup =
+                    models
+                        .groupBy { (_, retrieverClass, _) -> retrieverClass }
+                        .values
+                        .singleOrNull { group ->
+                            group.size == 2 &&
+                                group.map { it.third }.toSet() ==
+                                setOf(PLAY_POINTS_CARD, PURCHASE_READY_CARD)
+                        } ?: return@intercept chain.proceed()
+                val target = matchingGroup.single { it.third == PLAY_POINTS_CARD }.first
+                val retained = original.filterNot { it === target }
+                val replacementList = immutableCopy.invoke(null, retained)
+                val replacementOptional =
+                    optional.javaClass.declaredConstructors
+                        .singleOrNull { candidate ->
+                            candidate.parameterTypes.contentEquals(arrayOf(Any::class.java))
+                        }?.apply { isAccessible = true }
+                        ?.newInstance(replacementList)
+                        ?: return@intercept chain.proceed()
+                val arguments = chain.args.toTypedArray()
+                arguments[2] = replacementOptional
+                Logger.debug { "Play Points reminder model removed" }
+                chain.proceed(arguments)
             }
     }
 
@@ -312,4 +380,9 @@ object AccountMenuFilter {
     }
 
     private val COMMON_ACTION_ROLES = setOf("PRIVACY_ADVISOR", "HELP_AND_FEEDBACK")
+
+    // These sibling synthetic retrievers are verified against the current Play Store artifact.
+    // Requiring the complete pair makes a changed layout fail open instead of hiding another card.
+    private const val PLAY_POINTS_CARD = 1
+    private const val PURCHASE_READY_CARD = 3
 }

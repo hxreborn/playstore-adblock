@@ -5,7 +5,6 @@ sealed interface ResolvedTargets {
         val featureClassName: String,
         val actionClassName: String,
         val featuresClassName: String,
-        val commonActionClassName: String,
         val immutableListClassName: String,
     )
 

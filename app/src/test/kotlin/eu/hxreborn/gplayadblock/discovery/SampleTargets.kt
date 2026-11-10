@@ -115,7 +115,6 @@ internal object SampleTargets {
                     featureClassName = "accountFeature",
                     actionClassName = "accountAction",
                     featuresClassName = "accountFeatures",
-                    commonActionClassName = "accountCommonAction",
                     immutableListClassName = "immutableList",
                 ),
             accountMenuFailure = null,

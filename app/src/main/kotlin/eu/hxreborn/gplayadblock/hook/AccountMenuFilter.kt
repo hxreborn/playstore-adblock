@@ -1,11 +1,15 @@
 package eu.hxreborn.gplayadblock.hook
 
 import android.content.Context
+import android.view.View
+import android.widget.TextView
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
+import java.lang.reflect.Field
+import java.util.concurrent.ConcurrentHashMap
 
 object AccountMenuFilter {
     fun install(
@@ -64,7 +68,7 @@ object AccountMenuFilter {
             immutableListClass.getDeclaredMethod("n", Collection::class.java).apply {
                 isAccessible = true
             }
-        val labels = menuLabels(context)
+        val labels = menuLabels()
 
         module
             .hook(actionsAccessor)
@@ -94,7 +98,6 @@ object AccountMenuFilter {
         targets: ResolvedTargets.AccountMenu,
     ) {
         val featuresClass = classLoader.loadClass(targets.featuresClassName)
-        val actionClass = classLoader.loadClass(targets.commonActionClassName)
         val immutableListClass = classLoader.loadClass(targets.immutableListClassName)
         val constructor =
             featuresClass.declaredConstructors
@@ -105,15 +108,24 @@ object AccountMenuFilter {
             constructor.parameterTypes.indices.single { index ->
                 constructor.parameterTypes[index] == immutableListClass
             }
-        val labelField =
-            actionClass.declaredFields.single { field -> field.type == String::class.java }.apply {
-                isAccessible = true
-            }
+        val labelFields = ConcurrentHashMap<Class<*>, Field>()
+
+        fun labelOf(item: Any): String? {
+            val itemClass = item.javaClass
+            val field =
+                labelFields[itemClass]
+                    ?: itemClass.declaredFields
+                        .singleOrNull { candidate -> candidate.type == String::class.java }
+                        ?.apply { isAccessible = true }
+                        ?.also { labelFields[itemClass] = it }
+                    ?: return null
+            return runCatching { field.get(item) as? String }.getOrNull()
+        }
         val immutableCopy =
             immutableListClass.getDeclaredMethod("n", Collection::class.java).apply {
                 isAccessible = true
             }
-        val labels = menuLabels(context)
+        val labels = menuLabels()
 
         module
             .hook(constructor)
@@ -123,9 +135,9 @@ object AccountMenuFilter {
                     chain.getArg(actionsIndex) as? List<*> ?: return@intercept chain.proceed()
                 val retained =
                     original.filterNot { item ->
-                        if (item == null || !actionClass.isInstance(item)) return@filterNot false
-                        when (labelField.get(item) as? String) {
-                            labels.personalization -> preferences.hidePersonalization()
+                        if (item == null) return@filterNot false
+                        when (labelOf(item)) {
+                            in labels.personalization -> preferences.hidePersonalization()
                             in labels.help -> preferences.hideHelp()
                             else -> false
                         }
@@ -138,27 +150,34 @@ object AccountMenuFilter {
             }
     }
 
-    private fun menuLabels(context: Context): MenuLabels =
+    private fun menuLabels(): MenuLabels =
         MenuLabels(
-            notifications = context.getString(NOTIFICATIONS_LABEL),
-            playProtect = context.getString(PLAY_PROTECT_LABEL),
-            playPass = context.getString(PLAY_PASS_LABEL),
-            library = context.getString(LIBRARY_LABEL),
+            notifications = setOf("Notifications & offers", "Уведомления и предложения"),
+            playProtect = setOf("Play Protect", "Play Защита"),
+            playPass = setOf("Play Pass"),
+            library = setOf("Library", "Библиотека"),
             help =
                 setOf(
-                    context.getString(HELP_AND_FEEDBACK_LABEL),
-                    context.getString(HELP_AND_FEEDBACK_ALTERNATE_LABEL),
+                    "Help & feedback",
+                    "Справка и отзывы",
+                    "Справка/отзыв",
+                    "Справка",
                 ),
             personalization =
-                context.getString(
-                    PERSONALIZATION_LABEL,
-                    context.getString(GOOGLE_PLAY_LABEL),
+                setOf(
+                    "Personalization in Google Play",
+                    "Персонализация в приложении \"Google Play\"",
                 ),
-            experimentalFeatures = context.getString(EXPERIMENTAL_FEATURES_LABEL),
+            experimentalFeatures =
+                setOf(
+                    "Try experimental features",
+                    "Попробовать экспериментальные функции",
+                ),
             paymentsAndSubscriptions =
                 setOf(
-                    context.getString(PAYMENTS_AND_SUBSCRIPTIONS_LABEL),
-                    context.getString(PAYMENTS_AND_SUBSCRIPTIONS_ALTERNATE_LABEL),
+                    "Payments & subscriptions",
+                    "Payments and subscriptions",
+                    "Платежи и подписки",
                 ),
         )
 
@@ -168,56 +187,46 @@ object AccountMenuFilter {
         preferences: FilterPreferences,
     ): Boolean =
         when (label) {
-            labels.notifications -> preferences.hideNotifications()
-            labels.playProtect -> preferences.hidePlayProtect()
-            labels.playPass -> preferences.hidePlayPass()
-            labels.library -> preferences.hideLibrary()
+            in labels.notifications -> preferences.hideNotifications()
+            in labels.playProtect -> preferences.hidePlayProtect()
+            in labels.playPass -> preferences.hidePlayPass()
+            in labels.library -> preferences.hideLibrary()
             in labels.help -> preferences.hideHelp()
-            labels.personalization -> preferences.hidePersonalization()
-            labels.experimentalFeatures -> preferences.hideExperimentalFeatures()
+            in labels.personalization -> preferences.hidePersonalization()
+            in labels.experimentalFeatures -> preferences.hideExperimentalFeatures()
             in labels.paymentsAndSubscriptions -> preferences.hidePaymentsAndSubscriptions()
             else -> false
         }
 
     private fun installPlayPointsReminder(
         module: XposedModule,
-        context: Context,
-        classLoader: ClassLoader,
+        @Suppress("UNUSED_PARAMETER") context: Context,
+        @Suppress("UNUSED_PARAMETER") classLoader: ClassLoader,
         preferences: FilterPreferences,
     ) {
-        val producerClass = classLoader.loadClass(DYNAMIC_CARD_PRODUCER_CLASS)
-        val cardClass = classLoader.loadClass(TEXT_CARD_CLASS)
-        val cardReturnClass = classLoader.loadClass(TEXT_CARD_RETURN_CLASS)
-        val cardBaseClass = classLoader.loadClass(TEXT_CARD_BASE_CLASS)
-        val observableClass = classLoader.loadClass(OBSERVABLE_CLASS)
-        val titleClass = classLoader.loadClass(TEXT_DATA_CLASS)
-        val producer =
-            producerClass.declaredMethods
-                .single { method ->
-                    method.parameterCount == 1 && method.returnType == cardReturnClass
-                }.apply { isAccessible = true }
-        val titleObservable = cardBaseClass.getDeclaredField("m").apply { isAccessible = true }
-        val observableValue = observableClass.getDeclaredMethod("d").apply { isAccessible = true }
-        val titleField = titleClass.getDeclaredField("a").apply { isAccessible = true }
-        val playPointsTitle = context.getString(PLAY_POINTS_REMINDER_TITLE)
+        val onAttached =
+            TextView::class.java.getDeclaredMethod("onAttachedToWindow").apply {
+                isAccessible = true
+            }
+        val titles = setOf("Looking for Play Points?", "Ищете баллы Play Points?")
 
         module
-            .hook(producer)
+            .hook(onAttached)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val card = chain.proceed() ?: return@intercept null
-                if (!preferences.hidePlayPointsReminder() || !cardClass.isInstance(card)) {
-                    return@intercept card
+                val result = chain.proceed()
+                val title = chain.thisObject as? TextView
+                if (preferences.hidePlayPointsReminder() && title?.text?.toString() in titles) {
+                    var ancestor = title?.parent
+                    while (ancestor is View && !ancestor.javaClass.name.endsWith("CardView")) {
+                        ancestor = ancestor.parent
+                    }
+                    if (ancestor is View) {
+                        ancestor.visibility = View.GONE
+                        Logger.debug { "Play Points reminder removed" }
+                    }
                 }
-                val observable = titleObservable.get(card) ?: return@intercept card
-                val titleData = observableValue.invoke(observable) ?: return@intercept card
-                val title = titleField.get(titleData) as? String
-                if (title == playPointsTitle) {
-                    Logger.debug { "Play Points reminder removed" }
-                    null
-                } else {
-                    card
-                }
+                result
             }
     }
 
@@ -314,21 +323,16 @@ object AccountMenuFilter {
     }
 
     private data class MenuLabels(
-        val notifications: String,
-        val playProtect: String,
-        val playPass: String,
-        val library: String,
+        val notifications: Set<String>,
+        val playProtect: Set<String>,
+        val playPass: Set<String>,
+        val library: Set<String>,
         val help: Set<String>,
-        val personalization: String,
-        val experimentalFeatures: String,
+        val personalization: Set<String>,
+        val experimentalFeatures: Set<String>,
         val paymentsAndSubscriptions: Set<String>,
     )
 
-    private const val DYNAMIC_CARD_PRODUCER_CLASS = "anwv"
-    private const val TEXT_CARD_CLASS = "boky"
-    private const val TEXT_CARD_RETURN_CLASS = "boks"
-    private const val TEXT_CARD_BASE_CLASS = "bokx"
-    private const val TEXT_DATA_CLASS = "bokv"
     private const val OBSERVABLE_CLASS = "mcz"
     private const val NOTIFICATION_COUNTER_CLASS = "anwy"
     private const val NOTIFICATION_TOP_BAR_PRODUCER_CLASS = "abvg"
@@ -336,17 +340,4 @@ object AccountMenuFilter {
     private const val NOTIFICATION_TOP_BAR_CONTENT_CLASS = "abvk"
     private const val NOTIFICATION_BADGE_CLASS = "abvj"
     private const val UI_ACTION_CLASS = "cjqf"
-
-    private const val PLAY_POINTS_REMINDER_TITLE = 0x7f140bf7
-    private const val NOTIFICATIONS_LABEL = 0x7f14114b
-    private const val PLAY_PASS_LABEL = 0x7f14114f
-    private const val PLAY_PROTECT_LABEL = 0x7f14116b
-    private const val LIBRARY_LABEL = 0x7f140bba
-    private const val HELP_AND_FEEDBACK_LABEL = 0x7f140ee2
-    private const val HELP_AND_FEEDBACK_ALTERNATE_LABEL = 0x7f140f8e
-    private const val PERSONALIZATION_LABEL = 0x7f140f99
-    private const val GOOGLE_PLAY_LABEL = 0x7f14110f
-    private const val EXPERIMENTAL_FEATURES_LABEL = 0x7f141130
-    private const val PAYMENTS_AND_SUBSCRIPTIONS_LABEL = 0x7f141055
-    private const val PAYMENTS_AND_SUBSCRIPTIONS_ALTERNATE_LABEL = 0x7f141056
 }

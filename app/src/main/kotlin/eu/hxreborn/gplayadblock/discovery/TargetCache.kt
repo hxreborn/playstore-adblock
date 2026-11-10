@@ -237,7 +237,6 @@ object TargetCache {
             .put("featureClassName", value.featureClassName)
             .put("actionClassName", value.actionClassName)
             .put("featuresClassName", value.featuresClassName)
-            .put("commonActionClassName", value.commonActionClassName)
             .put("immutableListClassName", value.immutableListClassName)
 
     private fun decodeAccountMenu(value: JSONObject): ResolvedTargets.AccountMenu =
@@ -245,7 +244,6 @@ object TargetCache {
             featureClassName = value.getString("featureClassName"),
             actionClassName = value.getString("actionClassName"),
             featuresClassName = value.getString("featuresClassName"),
-            commonActionClassName = value.getString("commonActionClassName"),
             immutableListClassName = value.getString("immutableListClassName"),
         )
 

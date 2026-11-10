@@ -59,7 +59,6 @@ object DexKitResolver {
         "CollapsibleAccountManagementFeatureImpl{commonCards="
     private const val ACCOUNT_ACTION_ANCHOR = "CustomActionSpec{id="
     private const val ACCOUNT_FEATURES_ANCHOR = "AccountMenuFeatures{deactivatedAccountsFeature="
-    private const val ACCOUNT_COMMON_ACTION_ANCHOR = "ActionSpec{id="
     private val selfUpdateSchedulerAnchors =
         listOf(
             "Skipping DFE self-update check as there is an update already queued.",
@@ -734,7 +733,6 @@ object DexKitResolver {
             val featureClass = anchored(ACCOUNT_FEATURE_ANCHOR)
             val actionClass = anchored(ACCOUNT_ACTION_ANCHOR)
             val featuresClass = anchored(ACCOUNT_FEATURES_ANCHOR)
-            val commonActionClass = anchored(ACCOUNT_COMMON_ACTION_ANCHOR)
             val immutableCandidates =
                 featureClass.methods
                     .asSequence()
@@ -759,7 +757,6 @@ object DexKitResolver {
                     featureClassName = featureClass.name,
                     actionClassName = actionClass.name,
                     featuresClassName = featuresClass.name,
-                    commonActionClassName = commonActionClass.name,
                     immutableListClassName = immutableListClass.name,
                 ),
             )

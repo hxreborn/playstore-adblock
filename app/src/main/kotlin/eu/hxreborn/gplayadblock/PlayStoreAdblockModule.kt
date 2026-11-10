@@ -2,9 +2,15 @@ package eu.hxreborn.gplayadblock
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
+import android.os.ResultReceiver
 import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.HookGroup
@@ -82,6 +88,7 @@ class PlayStoreAdblockModule : XposedModule() {
         classLoader: ClassLoader,
     ) {
         try {
+            installRestartReceiver(context)
             val preferences =
                 FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
             val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
@@ -214,6 +221,55 @@ class PlayStoreAdblockModule : XposedModule() {
         }
     }
 
+    private fun installRestartReceiver(context: Context) {
+        context.registerReceiver(
+            object : BroadcastReceiver() {
+                @Suppress("DEPRECATION")
+                override fun onReceive(
+                    receiverContext: Context,
+                    intent: Intent,
+                ) {
+                    if (intent.action != RestartProtocol.ACTION) return
+                    val callback =
+                        intent.getParcelableExtra(RestartProtocol.EXTRA_CALLBACK) as? ResultReceiver
+                    val pendingResult = goAsync()
+                    Thread {
+                        val cleared =
+                            runCatching {
+                                clearDirectoryContents(receiverContext.cacheDir)
+                                clearDirectoryContents(receiverContext.codeCacheDir)
+                            }.onFailure { error ->
+                                Logger.warn("Play Store cache cleanup failed", error)
+                            }.isSuccess
+                        callback?.send(
+                            if (cleared) {
+                                RestartProtocol.RESULT_OK
+                            } else {
+                                RestartProtocol.RESULT_FAILED
+                            },
+                            Bundle.EMPTY,
+                        )
+                        pendingResult.finish()
+                        Handler(Looper.getMainLooper()).postDelayed(
+                            { Process.killProcess(Process.myPid()) },
+                            RESTART_KILL_DELAY_MILLIS,
+                        )
+                    }.start()
+                }
+            },
+            IntentFilter(RestartProtocol.ACTION),
+            RestartProtocol.PERMISSION,
+            Handler(Looper.getMainLooper()),
+            Context.RECEIVER_EXPORTED,
+        )
+    }
+
+    private fun clearDirectoryContents(directory: java.io.File) {
+        directory.listFiles()?.forEach { child ->
+            check(child.deleteRecursively()) { "could not remove ${child.name}" }
+        }
+    }
+
     private fun installHookGroups(
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
@@ -272,6 +328,7 @@ class PlayStoreAdblockModule : XposedModule() {
 
     private companion object {
         val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
+        const val RESTART_KILL_DELAY_MILLIS = 150L
         const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."

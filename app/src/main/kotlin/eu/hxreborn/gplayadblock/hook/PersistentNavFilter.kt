@@ -129,9 +129,13 @@ object PersistentNavFilter {
                 arguments[5] = filteredAction
                 val result = chain.proceed(arguments)
 
-                if (targetIndex != null && navigationScheduled.compareAndSet(false, true)) {
-                    navigateBeforeReturning {
-                        callbackMethod.invoke(originalCallback, targetIndex)
+                if (targetIndex != null && navigationInFlight.compareAndSet(false, true)) {
+                    try {
+                        navigateBeforeReturning {
+                            callbackMethod.invoke(originalCallback, targetIndex)
+                        }
+                    } finally {
+                        navigationInFlight.set(false)
                     }
                 }
                 if (retained.size != original.size) {
@@ -171,6 +175,6 @@ object PersistentNavFilter {
         }.onFailure { Logger.warn("waiting for start tab navigation failed", it) }
     }
 
-    private val navigationScheduled = AtomicBoolean(false)
+    private val navigationInFlight = AtomicBoolean(false)
     private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
 }

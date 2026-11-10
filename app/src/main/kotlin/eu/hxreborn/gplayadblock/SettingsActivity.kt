@@ -3,6 +3,9 @@ package eu.hxreborn.gplayadblock
 import android.app.Activity
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.ResultReceiver
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
@@ -13,7 +16,9 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,14 +345,53 @@ class SettingsActivity : Activity() {
         addView(status)
     }
 
-    private fun restartPlayStore(): Boolean =
+    private fun restartPlayStore(): Boolean = restartViaModule() || restartViaRoot()
+
+    private fun restartViaModule(): Boolean =
+        runCatching {
+            val completed = CountDownLatch(1)
+            val succeeded = AtomicBoolean(false)
+            val callback =
+                object : ResultReceiver(Handler(Looper.getMainLooper())) {
+                    override fun onReceiveResult(
+                        resultCode: Int,
+                        resultData: Bundle?,
+                    ) {
+                        succeeded.set(resultCode == RestartProtocol.RESULT_OK)
+                        completed.countDown()
+                    }
+                }
+            sendBroadcast(
+                android.content
+                    .Intent(RestartProtocol.ACTION)
+                    .setPackage(BuildConfig.TARGET_PACKAGE)
+                    .putExtra(RestartProtocol.EXTRA_CALLBACK, callback),
+            )
+            if (!completed.await(MODULE_RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS) ||
+                !succeeded.get()
+            ) {
+                return@runCatching false
+            }
+            Thread.sleep(MODULE_RELAUNCH_DELAY_MILLIS)
+            val launchIntent =
+                packageManager.getLaunchIntentForPackage(BuildConfig.TARGET_PACKAGE)
+                    ?: return@runCatching false
+            launchIntent.addFlags(
+                android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
+            )
+            startActivity(launchIntent)
+            true
+        }.getOrDefault(false)
+
+    private fun restartViaRoot(): Boolean =
         runCatching {
             val command =
                 listOf(
                     "am force-stop com.android.vending",
                     "rm -rf /data/user/0/com.android.vending/cache/*",
                     "rm -rf /data/user/0/com.android.vending/code_cache/*",
-                    "am start -a android.intent.action.MAIN " +
+                    "am start --activity-clear-task -a android.intent.action.MAIN " +
                         "-c android.intent.category.LAUNCHER -p com.android.vending",
                 ).joinToString("; ")
             ProcessBuilder("su", "-c", command)
@@ -363,6 +407,8 @@ class SettingsActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
+        const val MODULE_RESTART_TIMEOUT_SECONDS = 3L
+        const val MODULE_RELAUNCH_DELAY_MILLIS = 500L
         const val RESTART_TIMEOUT_SECONDS = 60L
     }
 }

@@ -64,9 +64,9 @@ The compatibility section contains two additional controls:
 
 - **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does
   not block updates of other apps and is disabled by default.
-- **Apply and restart Play Store** force-stops Play Store, removes only its `cache` and `code_cache`
-  directories, and relaunches it through root. Accounts, installed-app records, preferences, and Play Store
-  app data are not cleared.
+- **Apply and restart Play Store** asks the active module inside Play Store to remove only its `cache` and
+  `code_cache` contents, terminate the process, discard its old task snapshot, and relaunch. Root is used
+  only as a fallback. Accounts, installed-app records, preferences, and Play Store app data are not cleared.
 
 Some filters require a restart before an already-created screen changes. Hiding a currently selected
 persistent tab may still briefly expose cached content on unusual Play Store builds; the module switches to

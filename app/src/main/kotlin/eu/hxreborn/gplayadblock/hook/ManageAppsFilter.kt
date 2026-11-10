@@ -75,8 +75,10 @@ object ManageAppsFilter {
                             } else {
                                 null
                             }
-                        val ratingsItem = stringActionItems.getOrNull(0)
-                        val contributionsItem = stringActionItems.getOrNull(1)
+                        val ratingsItem =
+                            if (isManageList) stringActionItems.getOrNull(0) else null
+                        val contributionsItem =
+                            if (isManageList) stringActionItems.getOrNull(1) else null
                         val retained =
                             original.filter { item ->
                                 when {

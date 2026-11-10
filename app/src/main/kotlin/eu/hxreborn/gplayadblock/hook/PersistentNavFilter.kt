@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
@@ -15,6 +16,7 @@ import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 object PersistentNavFilter {
     fun install(
@@ -24,8 +26,8 @@ object PersistentNavFilter {
         preferences: FilterPreferences,
         targets: ResolvedTargets.PersistentNav,
     ) {
-        val externalLaunch = AtomicBoolean(false)
-        installLaunchTracking(module, application, classLoader, externalLaunch)
+        val externalNavigationDeadline = AtomicLong(0L)
+        installLaunchTracking(module, application, classLoader, externalNavigationDeadline)
 
         val constructor = targets.navConstructor.resolve(classLoader)
         val itemTypeField = targets.navItemTypeField.resolve(classLoader)
@@ -58,7 +60,8 @@ object PersistentNavFilter {
                 val originalAction = chain.getArg(5)
                 val originalCallback = primaryCallbackField.get(originalAction)
                 val originalIndices = retained.map { it.index }
-                val isExternalNavigation = externalLaunch.get()
+                val isExternalNavigation =
+                    SystemClock.elapsedRealtime() < externalNavigationDeadline.get()
                 val configuredType =
                     if (isExternalNavigation) {
                         FilterPreferences.START_TAB_UNCHANGED
@@ -70,6 +73,18 @@ object PersistentNavFilter {
                         itemTypeField.get(item.value)?.toString() == configuredType
                     }
                 val currentPosition = originalIndices.indexOf(selected)
+                val recoveryPosition =
+                    preferences
+                        .startTab()
+                        .let { preferredType ->
+                            retained.indexOfFirst { item ->
+                                itemTypeField.get(item.value)?.toString() == preferredType
+                            }
+                        }.takeIf { it >= 0 }
+                        ?: currentPosition.takeIf { it >= 0 }
+                        ?: 0
+                val externalRecoveryTargetIndex =
+                    if (isExternalNavigation) retained[recoveryPosition].index else null
                 val selectedNew =
                     when {
                         configuredType != FilterPreferences.START_TAB_UNCHANGED &&
@@ -156,6 +171,22 @@ object PersistentNavFilter {
                         navigationInFlight.set(false)
                     }
                 }
+                if (
+                    externalRecoveryTargetIndex != null &&
+                    externalRecoveryScheduled.compareAndSet(false, true)
+                ) {
+                    Handler(Looper.getMainLooper()).postDelayed(
+                        {
+                            runCatching {
+                                callbackMethod.invoke(originalCallback, externalRecoveryTargetIndex)
+                            }.onFailure { error ->
+                                Logger.warn("external navigation recovery failed", error)
+                            }
+                            externalRecoveryScheduled.set(false)
+                        },
+                        EXTERNAL_NAVIGATION_GRACE_MILLIS,
+                    )
+                }
                 if (retained.size != original.size) {
                     Logger.debug { "persistent nav tabs=${original.size}->${retained.size}" }
                 }
@@ -167,7 +198,7 @@ object PersistentNavFilter {
         module: XposedModule,
         application: Application,
         classLoader: ClassLoader,
-        externalLaunch: AtomicBoolean,
+        externalNavigationDeadline: AtomicLong,
     ) {
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
@@ -175,7 +206,7 @@ object PersistentNavFilter {
                     activity: Activity,
                     savedInstanceState: Bundle?,
                 ) {
-                    updateLaunchState(externalLaunch, activity.intent)
+                    updateLaunchState(externalNavigationDeadline, activity.intent)
                 }
 
                 override fun onActivityCreated(
@@ -212,24 +243,29 @@ object PersistentNavFilter {
                     .hook(method)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
-                        updateLaunchState(externalLaunch, chain.getArg(0) as? Intent)
+                        updateLaunchState(
+                            externalNavigationDeadline,
+                            chain.getArg(0) as? Intent,
+                        )
                         chain.proceed()
                     }
             }
     }
 
     private fun updateLaunchState(
-        externalLaunch: AtomicBoolean,
+        externalNavigationDeadline: AtomicLong,
         intent: Intent?,
     ) {
         when {
             intent?.action == Intent.ACTION_VIEW || intent?.data != null -> {
-                externalLaunch.set(true)
+                externalNavigationDeadline.set(
+                    SystemClock.elapsedRealtime() + EXTERNAL_NAVIGATION_GRACE_MILLIS,
+                )
                 Logger.debug { "external navigation detected" }
             }
 
             intent?.action == Intent.ACTION_MAIN -> {
-                externalLaunch.set(false)
+                externalNavigationDeadline.set(0L)
                 Logger.debug { "launcher navigation detected" }
             }
         }
@@ -266,6 +302,8 @@ object PersistentNavFilter {
     }
 
     private val navigationInFlight = AtomicBoolean(false)
+    private val externalRecoveryScheduled = AtomicBoolean(false)
     private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
+    private const val EXTERNAL_NAVIGATION_GRACE_MILLIS = 2_000L
     private const val MAIN_ACTIVITY_CLASS = "com.google.android.finsky.activities.MainActivity"
 }

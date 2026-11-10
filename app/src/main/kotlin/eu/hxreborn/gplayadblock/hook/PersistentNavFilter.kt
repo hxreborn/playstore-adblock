@@ -8,6 +8,8 @@ import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Proxy
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object PersistentNavFilter {
@@ -128,17 +130,9 @@ object PersistentNavFilter {
                 val result = chain.proceed(arguments)
 
                 if (targetIndex != null && navigationScheduled.compareAndSet(false, true)) {
-                    runCatching { callbackMethod.invoke(originalCallback, targetIndex) }
-                        .onFailure { synchronousFailure ->
-                            Logger.warn(
-                                "synchronous start tab navigation failed",
-                                synchronousFailure,
-                            )
-                            Handler(Looper.getMainLooper()).postAtFrontOfQueue {
-                                runCatching { callbackMethod.invoke(originalCallback, targetIndex) }
-                                    .onFailure { Logger.warn("start tab navigation failed", it) }
-                            }
-                        }
+                    navigateBeforeReturning {
+                        callbackMethod.invoke(originalCallback, targetIndex)
+                    }
                 }
                 if (retained.size != original.size) {
                     Logger.debug { "persistent nav tabs=${original.size}->${retained.size}" }
@@ -159,5 +153,24 @@ object PersistentNavFilter {
             else -> false
         }
 
+    private fun navigateBeforeReturning(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            runCatching(action).onFailure { Logger.warn("start tab navigation failed", it) }
+            return
+        }
+
+        val completed = CountDownLatch(1)
+        Handler(Looper.getMainLooper()).postAtFrontOfQueue {
+            runCatching(action).onFailure { Logger.warn("start tab navigation failed", it) }
+            completed.countDown()
+        }
+        runCatching {
+            if (!completed.await(NAVIGATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                Logger.warn("start tab navigation timed out")
+            }
+        }.onFailure { Logger.warn("waiting for start tab navigation failed", it) }
+    }
+
     private val navigationScheduled = AtomicBoolean(false)
+    private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
 }

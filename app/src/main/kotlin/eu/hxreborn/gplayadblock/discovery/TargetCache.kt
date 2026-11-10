@@ -267,14 +267,10 @@ object TargetCache {
     private fun encodeManageApps(value: ResolvedTargets.ManageApps): JSONObject =
         JSONObject()
             .put("manageListClassName", value.manageListClassName)
-            .putOpt("deviceSyncClassName", value.deviceSyncClassName)
-            .putOpt("playProtectClassName", value.playProtectClassName)
 
     private fun decodeManageApps(value: JSONObject): ResolvedTargets.ManageApps =
         ResolvedTargets.ManageApps(
             manageListClassName = value.getString("manageListClassName"),
-            deviceSyncClassName = value.optString("deviceSyncClassName").ifEmpty { null },
-            playProtectClassName = value.optString("playProtectClassName").ifEmpty { null },
         )
 
     private fun encodePersistentNav(value: ResolvedTargets.PersistentNav): JSONObject =

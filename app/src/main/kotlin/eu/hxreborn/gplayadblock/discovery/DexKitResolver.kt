@@ -838,8 +838,6 @@ object DexKitResolver {
         return Resolution.Success(
             ResolvedTargets.ManageApps(
                 manageListClassName = manageClass.name,
-                deviceSyncClassName = null,
-                playProtectClassName = null,
             ),
         )
     }

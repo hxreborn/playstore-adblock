@@ -62,10 +62,6 @@ object AccountMenuFilter {
                 .single { method ->
                     method.parameterCount == 0 && method.returnType == immutableListClass
                 }.apply { isAccessible = true }
-        val labelField =
-            itemClass.declaredFields.single { field -> field.type == String::class.java }.apply {
-                isAccessible = true
-            }
         val immutableCopy =
             immutableListClass.declaredMethods
                 .single { method ->
@@ -75,18 +71,59 @@ object AccountMenuFilter {
                 }.apply {
                     isAccessible = true
                 }
-        val labels = menuLabels()
+        val listenerField =
+            itemClass.declaredFields
+                .singleOrNull { field ->
+                    !Modifier.isStatic(field.modifiers) &&
+                        View.OnClickListener::class.java.isAssignableFrom(field.type)
+                }?.apply { isAccessible = true }
+        val roleByDiscriminator = ConcurrentHashMap<Int, AccountActionRole>()
+
+        fun discriminatorOf(item: Any): Int? {
+            val listener =
+                listenerField?.let { field -> runCatching { field.get(item) }.getOrNull() }
+                    ?: return null
+            val discriminatorField =
+                listener.javaClass.declaredFields.singleOrNull { field ->
+                    !field.isSynthetic &&
+                        !Modifier.isStatic(field.modifiers) &&
+                        field.type == Int::class.javaPrimitiveType
+                } ?: return null
+            discriminatorField.isAccessible = true
+            return runCatching { discriminatorField.getInt(listener) }.getOrNull()
+        }
 
         module
             .hook(actionsAccessor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val original = chain.proceed() as? List<*> ?: return@intercept null
+                val actions = original.filterNotNull().filter(itemClass::isInstance)
+                val discriminators = actions.map(::discriminatorOf)
+                val matchesKnownLayout =
+                    actions.size == AccountActionRole.entries.size &&
+                        actions.size == original.size &&
+                        discriminators.none { it == null } &&
+                        discriminators.filterNotNull().distinct().size == actions.size
+                val currentRoles =
+                    if (matchesKnownLayout) {
+                        actions.zip(AccountActionRole.entries).toMap().also { roles ->
+                            roles.forEach { (item, role) ->
+                                discriminatorOf(item)?.let { discriminator ->
+                                    roleByDiscriminator.putIfAbsent(discriminator, role)
+                                }
+                            }
+                        }
+                    } else {
+                        emptyMap()
+                    }
                 val retained =
                     original.filterNot { item ->
-                        item != null &&
-                            itemClass.isInstance(item) &&
-                            shouldHide(labelField.get(item) as? String, labels, preferences)
+                        if (item == null || !itemClass.isInstance(item)) return@filterNot false
+                        val role =
+                            discriminatorOf(item)?.let(roleByDiscriminator::get)
+                                ?: currentRoles[item]
+                        role != null && shouldHide(role, preferences)
                     }
                 if (retained.size == original.size) {
                     original
@@ -115,18 +152,24 @@ object AccountMenuFilter {
             constructor.parameterTypes.indices.single { index ->
                 constructor.parameterTypes[index] == immutableListClass
             }
-        val labelFields = ConcurrentHashMap<Class<*>, Field>()
+        val roleFields = ConcurrentHashMap<Class<*>, List<Field>>()
 
-        fun labelOf(item: Any): String? {
+        fun roleOf(item: Any): String? {
             val itemClass = item.javaClass
-            val field =
-                labelFields[itemClass]
-                    ?: itemClass.declaredFields
-                        .singleOrNull { candidate -> candidate.type == String::class.java }
-                        ?.apply { isAccessible = true }
-                        ?.also { labelFields[itemClass] = it }
-                    ?: return null
-            return runCatching { field.get(item) as? String }.getOrNull()
+            val fields =
+                roleFields.getOrPut(itemClass) {
+                    itemClass.declaredFields
+                        .filterNot { field ->
+                            field.isSynthetic ||
+                                Modifier.isStatic(field.modifiers) ||
+                                field.type.isPrimitive ||
+                                field.type == String::class.java
+                        }.onEach { field -> field.isAccessible = true }
+                }
+            return fields
+                .asSequence()
+                .mapNotNull { field -> runCatching { field.get(item)?.toString() }.getOrNull() }
+                .firstOrNull(COMMON_ACTION_ROLES::contains)
         }
         val immutableCopy =
             immutableListClass.declaredMethods
@@ -137,8 +180,6 @@ object AccountMenuFilter {
                 }.apply {
                     isAccessible = true
                 }
-        val labels = menuLabels()
-
         module
             .hook(constructor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
@@ -148,9 +189,9 @@ object AccountMenuFilter {
                 val retained =
                     original.filterNot { item ->
                         if (item == null) return@filterNot false
-                        when (labelOf(item)) {
-                            in labels.personalization -> preferences.hidePersonalization()
-                            in labels.help -> preferences.hideHelp()
+                        when (roleOf(item)) {
+                            "PRIVACY_ADVISOR" -> preferences.hidePersonalization()
+                            "HELP_AND_FEEDBACK" -> preferences.hideHelp()
                             else -> false
                         }
                     }
@@ -162,52 +203,38 @@ object AccountMenuFilter {
             }
     }
 
-    private fun menuLabels(): MenuLabels =
-        MenuLabels(
-            notifications = setOf("Notifications & offers", "Уведомления и предложения"),
-            playProtect = setOf("Play Protect", "Play Защита"),
-            playPass = setOf("Play Pass"),
-            library = setOf("Library", "Библиотека"),
-            help =
-                setOf(
-                    "Help & feedback",
-                    "Справка и отзывы",
-                    "Справка/отзыв",
-                    "Справка",
-                ),
-            personalization =
-                setOf(
-                    "Personalization in Google Play",
-                    "Персонализация в приложении \"Google Play\"",
-                ),
-            experimentalFeatures =
-                setOf(
-                    "Try experimental features",
-                    "Попробовать экспериментальные функции",
-                ),
-            paymentsAndSubscriptions =
-                setOf(
-                    "Payments & subscriptions",
-                    "Payments and subscriptions",
-                    "Платежи и подписки",
-                ),
-        )
-
     private fun shouldHide(
-        label: String?,
-        labels: MenuLabels,
+        role: AccountActionRole,
         preferences: FilterPreferences,
     ): Boolean =
-        when (label) {
-            in labels.notifications -> preferences.hideNotifications()
-            in labels.playProtect -> preferences.hidePlayProtect()
-            in labels.playPass -> preferences.hidePlayPass()
-            in labels.library -> preferences.hideLibrary()
-            in labels.help -> preferences.hideHelp()
-            in labels.personalization -> preferences.hidePersonalization()
-            in labels.experimentalFeatures -> preferences.hideExperimentalFeatures()
-            in labels.paymentsAndSubscriptions -> preferences.hidePaymentsAndSubscriptions()
-            else -> false
+        when (role) {
+            AccountActionRole.MANAGE_APPS -> {
+                false
+            }
+
+            AccountActionRole.NOTIFICATIONS -> {
+                preferences.hideNotifications()
+            }
+
+            AccountActionRole.PAYMENTS_AND_SUBSCRIPTIONS -> {
+                preferences.hidePaymentsAndSubscriptions()
+            }
+
+            AccountActionRole.PLAY_PROTECT -> {
+                preferences.hidePlayProtect()
+            }
+
+            AccountActionRole.EXPERIMENTAL_FEATURES -> {
+                preferences.hideExperimentalFeatures()
+            }
+
+            AccountActionRole.LIBRARY -> {
+                preferences.hideLibrary()
+            }
+
+            AccountActionRole.PLAY_PASS -> {
+                preferences.hidePlayPass()
+            }
         }
 
     private fun installPlayPointsReminder(
@@ -220,15 +247,16 @@ object AccountMenuFilter {
             TextView::class.java.getDeclaredMethod("onAttachedToWindow").apply {
                 isAccessible = true
             }
-        val titles = setOf("Looking for Play Points?", "Ищете баллы Play Points?")
-
         module
             .hook(onAttached)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val result = chain.proceed()
                 val title = chain.thisObject as? TextView
-                if (preferences.hidePlayPointsReminder() && title?.text?.toString() in titles) {
+                if (
+                    preferences.hidePlayPointsReminder() &&
+                    title?.text?.toString()?.contains("Play Points", ignoreCase = true) == true
+                ) {
                     var ancestor = title?.parent
                     while (ancestor is View && !ancestor.javaClass.name.endsWith("CardView")) {
                         ancestor = ancestor.parent
@@ -273,14 +301,15 @@ object AccountMenuFilter {
             }
     }
 
-    private data class MenuLabels(
-        val notifications: Set<String>,
-        val playProtect: Set<String>,
-        val playPass: Set<String>,
-        val library: Set<String>,
-        val help: Set<String>,
-        val personalization: Set<String>,
-        val experimentalFeatures: Set<String>,
-        val paymentsAndSubscriptions: Set<String>,
-    )
+    private enum class AccountActionRole {
+        MANAGE_APPS,
+        NOTIFICATIONS,
+        PAYMENTS_AND_SUBSCRIPTIONS,
+        PLAY_PROTECT,
+        EXPERIMENTAL_FEATURES,
+        LIBRARY,
+        PLAY_PASS,
+    }
+
+    private val COMMON_ACTION_ROLES = setOf("PRIVACY_ADVISOR", "HELP_AND_FEEDBACK")
 }

@@ -16,8 +16,6 @@ sealed interface ResolvedTargets {
 
     data class ManageApps(
         val manageListClassName: String,
-        val deviceSyncClassName: String?,
-        val playProtectClassName: String?,
     )
 
     data class PersistentNav(

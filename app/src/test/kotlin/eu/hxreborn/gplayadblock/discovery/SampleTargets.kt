@@ -88,8 +88,6 @@ internal object SampleTargets {
             manageApps =
                 ResolvedTargets.ManageApps(
                     manageListClassName = "manageList",
-                    deviceSyncClassName = "deviceSync",
-                    playProtectClassName = "playProtect",
                 ),
             manageAppsFailure = null,
             persistentNav =

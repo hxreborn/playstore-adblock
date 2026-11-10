@@ -59,6 +59,8 @@ These filters are disabled by default. Unlike the main ad filter, they depend on
 models that Google can change without notice. Targets are resolved from code structure and stable string
 fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
 filter fails open and the original interface remains available rather than risking a Play Store crash.
+UI entries are matched by model shape, semantic roles, and product identifiers rather than translated
+labels, so the filters are not limited to English or Russian Play Store installations.
 
 The compatibility section contains two additional controls:
 

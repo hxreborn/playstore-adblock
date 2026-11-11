@@ -57,26 +57,20 @@ notification indicators. A replacement start tab can be selected when its origin
 The **Minimal Search home** option keeps the top search field and results routing intact while removing
 the Search landing suggestions and the remaining bottom-navigation item.
 
-These filters are disabled by default, except **Hide promoted search shelves** (see below). Unlike the main ad filter, they depend on internal Play Store UI
+These filters are disabled by default. Unlike the main ad filter, they depend on internal Play Store UI
 models that Google can change without notice. Targets are resolved from code structure and stable string
 fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
 filter fails open and the original interface remains available rather than risking a Play Store crash.
-UI entries are matched by model shape, semantic roles, product identifiers, and Play Store's own
-translations of their English labels, so the filters are not limited to English or Russian Play Store
-installations.
+UI entries are matched by model shape, semantic roles, product identifiers, and the resource IDs Play
+Store pairs with their English labels, so the filters work in every Play Store language.
 
 **Hide promoted search shelves** removes the collapsed promotional shelf shown among search results
-(for example limited-time events). It is promotional placement, so it is hidden by default together with
-ads; Play Store does not label it as an ad, so it keeps its own switch for users who want to see it.
+(for example limited-time events). Play Store does not label it as an ad, so it has its own switch.
 
-Before trusting a new Play Store release, `python tools/check_play_store_apk.py base.apk --aapt2 <path>`
-checks that every DexKit anchor and every English UI label the filters rely on is still present. A
-label the module cannot find at runtime is also reported in the Xposed log. For a full DexKit
-resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`
-and run the unit tests with `-Dgplayadblock.playStoreApk=/path/to/base.apk`. That check is strict: it
-requires every optional target, so older releases that lack some of them (for example 43.9.18 without
-persistent navigation) are expected to fail it. Recorded releases are checked against their own
-fingerprints instead.
+An English UI label the module cannot find at runtime is reported in the Xposed log. For a full DexKit
+resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`,
+put release APKs at `analysis/release-fixtures/com.android.vending-<version>/base.apk` and run the
+unit tests: every archived release is checked against its recorded fingerprints.
 
 The start tab is applied once when Play Store is opened from the launcher; tabs chosen afterwards are
 kept. If Play Store crashes repeatedly (three times within two minutes), the optional interface filters

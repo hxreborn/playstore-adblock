@@ -1,6 +1,5 @@
 package eu.hxreborn.gplayadblock.hook
 
-import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
@@ -11,14 +10,13 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamCacheFilter {
     fun install(
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        preferences: FilterPreferences,
+        classifier: RemovalPolicy,
     ) {
         val positions =
             requireNotNull(HookGroup.cacheArguments(targets)) {
@@ -27,23 +25,14 @@ object StreamCacheFilter {
             }
         val method = targets.cacheAssemblyMethod.resolve(classLoader)
         val nodeClass = classLoader.loadClass(targets.presentationAccessor.className)
-        val classifier =
-            PresentationClassifier.from(
-                classLoader,
-                targets,
-                preferences::hideLiveOps,
-                preferences::hidePreRegistrationGames,
-                preferences::hideSearchPromotions,
-            )
         val editor = ProtoEditor.from(classLoader, targets)
-        val presentationAccessor = targets.presentationAccessor.resolve(classLoader)
         val interceptor =
             CacheAssemblyInterceptor(
                 positions = positions,
                 transformer =
                     CacheGraphTransformer(
                         nodeClass = nodeClass,
-                        presentationAccessor = presentationAccessor,
+                        presentationAccessor = targets.presentationAccessor.resolve(classLoader),
                         nodeChildrenField = targets.cacheNodeChildrenField.resolve(classLoader),
                         pageBoundariesField =
                             targets.cachePageBoundariesField.resolve(classLoader),
@@ -117,7 +106,7 @@ object StreamCacheFilter {
         private val childPresenceField: Field,
         private val childContinuationField: Field,
         private val childKeyMethod: Method,
-        private val classifier: PresentationClassifier,
+        private val classifier: RemovalPolicy,
         private val editor: ProtoEditor,
     ) {
         fun transform(
@@ -154,10 +143,10 @@ object StreamCacheFilter {
             for ((key, record) in records) {
                 val presentation = presentationAccessor.invoke(record.node) ?: continue
                 val case = classifier.classify(presentation)
-                if (classifier.isAd(case)) {
+                if (classifier.isRemovable(case)) {
                     adCasesByKey[key] = case
                 } else {
-                    strippedLiveOps(presentation)?.let { stripped ->
+                    classifier.strippedPresentation(presentation, editor)?.let { stripped ->
                         presentationField(record.node, presentation)?.let { field ->
                             presentationRewrites[key] = field to stripped
                         }
@@ -165,7 +154,7 @@ object StreamCacheFilter {
                 }
             }
             val rootCase = presentationAccessor.invoke(root)?.let(classifier::classify) ?: 0
-            if (classifier.isAd(rootCase)) {
+            if (classifier.isRemovable(rootCase)) {
                 Logger.warn(
                     "cache assembly root is sponsored case=${classifier.caseName(rootCase)} " +
                         "and cannot be removed by rewriting this call",
@@ -195,26 +184,17 @@ object StreamCacheFilter {
             for ((key, record) in records) {
                 if (key in removableKeys) continue
                 val filteredNode = filterNode(record, removableKeys)
-                val rewrite = presentationRewrites[key]
                 val replacementNode =
-                    when {
-                        rewrite != null -> {
-                            val (field, stripped) = rewrite
-                            // The LiveOps rewrite is optional: if it fails, keep the node
-                            // without it and carry on with the ad removal.
-                            runCatching {
-                                editor.copy(filteredNode ?: record.node) { mutableNode ->
-                                    field.set(mutableNode, stripped)
-                                }
-                            }.onFailure { error ->
-                                Logger.warn("cache LiveOps rewrite skipped", error)
-                            }.getOrElse { filteredNode }
-                        }
-
-                        else -> {
+                    presentationRewrites[key]?.let { (field, stripped) ->
+                        try {
+                            editor.copy(filteredNode ?: record.node) { mutableNode ->
+                                field.set(mutableNode, stripped)
+                            }
+                        } catch (exception: Exception) {
+                            Logger.warn("cache LiveOps rewrite skipped", exception)
                             filteredNode
                         }
-                    } ?: continue
+                    } ?: filteredNode ?: continue
                 replacementNodes[key] = replacementNode
                 changedNodes = true
             }
@@ -234,23 +214,8 @@ object StreamCacheFilter {
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
         }
 
-        /** Optional stripping must never abort ad removal for the rest of the cached graph. */
-        private fun strippedLiveOps(presentation: Any): Any? =
-            runCatching { classifier.stripEmbeddedLiveOps(presentation, editor) }
-                .onFailure { error ->
-                    if (liveOpsFailureLogged.compareAndSet(false, true)) {
-                        Logger.warn("embedded LiveOps stripping skipped on cache", error)
-                    }
-                }.getOrNull()
-
-        private val liveOpsFailureLogged = AtomicBoolean(false)
         private val presentationFields = ConcurrentHashMap<Class<*>, Field>()
 
-        /**
-         * The node field that holds [presentation]. Cached nodes store it in a protobuf oneof
-         * (an Object field next to its case), so the field is found by identity with the value
-         * the accessor returned; the case is left untouched. Null when not unique (fail open).
-         */
         private fun presentationField(
             node: Any,
             presentation: Any,

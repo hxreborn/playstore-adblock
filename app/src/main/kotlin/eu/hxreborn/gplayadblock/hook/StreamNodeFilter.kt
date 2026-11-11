@@ -1,6 +1,5 @@
 package eu.hxreborn.gplayadblock.hook
 
-import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
@@ -15,7 +14,7 @@ object StreamNodeFilter {
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        preferences: FilterPreferences,
+        classifier: RemovalPolicy,
     ) {
         val method = targets.streamDataMethod.resolve(classLoader)
         val streamChildrenField = targets.streamChildrenField.resolve(classLoader)
@@ -23,14 +22,6 @@ object StreamNodeFilter {
         val childIdField = targets.childIdField.resolve(classLoader)
         val nodeField = targets.nodeField.resolve(classLoader)
         val presentationAccessor = targets.presentationAccessor.resolve(classLoader)
-        val classifier =
-            PresentationClassifier.from(
-                classLoader,
-                targets,
-                preferences::hideLiveOps,
-                preferences::hidePreRegistrationGames,
-                preferences::hideSearchPromotions,
-            )
         val streamDataClass = classLoader.loadClass(targets.streamDataMethod.returnTypeName)
         val streamDataConstructor = targets.streamDataConstructor.resolve(classLoader)
         val hasMoreField =
@@ -62,7 +53,7 @@ object StreamNodeFilter {
         private val childIdField: Field,
         private val nodeField: Field,
         private val presentationAccessor: Method,
-        private val classifier: PresentationClassifier,
+        private val classifier: RemovalPolicy,
         private val streamDataConstructor: Constructor<*>,
         private val hasMoreField: Field,
     ) {
@@ -90,7 +81,7 @@ object StreamNodeFilter {
             for (handler in handlers) {
                 if (handler == null) continue
                 val case = presentationCase(handler)
-                if (!classifier.isAd(case)) continue
+                if (!classifier.isRemovable(case)) continue
                 val childId = childIdField.get(handler) ?: continue
                 casesById[childId] = case
             }

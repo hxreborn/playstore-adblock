@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock
 
+import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
 import org.junit.Assert.assertTrue
 import org.junit.Test
 

@@ -4,7 +4,7 @@ import java.io.File
 
 class ReleaseFixture(
     val release: String,
-    private val apk: File,
+    val apk: File,
 ) {
     fun resolveTargets(): ResolvedTargets = DexKitResolver.resolve(listOf(apk.absolutePath))
 
@@ -58,11 +58,6 @@ object ReleaseFixtures {
 
             !hostResolverLibraryPresent() -> {
                 "$HOST_RESOLVER_LIBRARY is not on java.library.path"
-            }
-
-            // A library built for another OS (a Linux .so on Windows) is present but unusable.
-            DexKitResolver.hasNativeLoadFailure() -> {
-                "$HOST_RESOLVER_LIBRARY cannot be loaded on this host"
             }
 
             else -> {

@@ -1,29 +1,19 @@
 package eu.hxreborn.gplayadblock.hook
 
-import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.util.IdentityHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamResponseFilter {
     fun install(
         module: XposedModule,
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
-        preferences: FilterPreferences,
+        classifier: RemovalPolicy,
     ) {
-        val classifier =
-            PresentationClassifier.from(
-                classLoader,
-                targets,
-                preferences::hideLiveOps,
-                preferences::hidePreRegistrationGames,
-                preferences::hideSearchPromotions,
-            )
         val editor = ProtoEditor.from(classLoader, targets)
         val transformer =
             ResponseTransformer(
@@ -102,11 +92,10 @@ object StreamResponseFilter {
         private val childContinuationField: Field,
         private val nodeDefaultInstance: Any,
         private val rootDefaultInstance: Any,
-        private val classifier: PresentationClassifier,
+        private val classifier: RemovalPolicy,
         private val editor: ProtoEditor,
     ) {
         private val nodeWrapperClass: Class<*> = nodeWrapperKindField.declaringClass
-        private val liveOpsFailureLogged = AtomicBoolean(false)
         private val rootWrapperClass: Class<*> = rootWrapperKindField.declaringClass
 
         fun transform(response: Any): Any? {
@@ -130,16 +119,11 @@ object StreamResponseFilter {
                 val decoded = decodeNode(wrapper) ?: continue
                 decodedNodes[wrapper] = decoded
                 val presentation = nodePresentationField.get(decoded) ?: continue
-                // Optional LiveOps stripping must not abort ad removal for the whole response.
-                runCatching { classifier.stripEmbeddedLiveOps(presentation, editor) }
-                    .onFailure { error ->
-                        if (liveOpsFailureLogged.compareAndSet(false, true)) {
-                            Logger.warn("embedded LiveOps stripping skipped", error)
-                        }
-                    }.getOrNull()
-                    ?.let { stripped -> presentationRewrites[wrapper] = stripped }
+                classifier.strippedPresentation(presentation, editor)?.let { stripped ->
+                    presentationRewrites[wrapper] = stripped
+                }
                 val case = classifier.classify(presentation)
-                if (!classifier.isAd(case)) continue
+                if (!classifier.isRemovable(case)) continue
                 val id = nodeIdField.get(wrapper) ?: continue
                 adCasesById[id] = case
             }
@@ -211,9 +195,7 @@ object StreamResponseFilter {
                 .mapNotNull { field -> field.get(response) as? List<*> }
                 .flatMap(List<*>::asSequence)
                 .filter(nodeWrapperClass::isInstance)
-                .count { wrapper ->
-                    nodeIdField.get(wrapper)?.let { id -> id in removableIds } == true
-                }
+                .count { wrapper -> nodeIdField.get(wrapper) in removableIds }
 
         private fun parents(
             decodedNodes: IdentityHashMap<Any, Any>,
@@ -243,31 +225,28 @@ object StreamResponseFilter {
             presentationRewrites: IdentityHashMap<Any, Any>,
             removableIds: Set<Any>,
         ): Any? {
-            if (nodeIdField.get(wrapper)?.let { id -> id in removableIds } == true) return null
+            if (nodeIdField.get(wrapper) in removableIds) return null
             val decoded = decodedNodes[wrapper] ?: decodeNode(wrapper) ?: return wrapper
             val filteredChildren = filterChildren(nodeChildrenField.get(decoded), removableIds)
-            val rewrittenPresentation = presentationRewrites[wrapper]
-            if (filteredChildren == null && rewrittenPresentation == null) return wrapper
+            val strippedPresentation = presentationRewrites[wrapper]
+            if (filteredChildren == null && strippedPresentation == null) return wrapper
 
             fun rebuild(presentation: Any?): Any =
                 editor.copy(decoded) { mutableNode ->
                     if (filteredChildren != null) {
                         nodeChildrenField.set(mutableNode, filteredChildren)
                     }
-                    if (presentation != null) {
-                        nodePresentationField.set(mutableNode, presentation)
-                    }
+                    if (presentation != null) nodePresentationField.set(mutableNode, presentation)
                 }
-            // The LiveOps rewrite is optional: if it fails, rebuild the node without it so the
-            // ad filtering of its children still applies.
             val rebuiltNode =
-                runCatching { rebuild(rewrittenPresentation) }
-                    .recoverCatching { error ->
-                        if (rewrittenPresentation == null) throw error
-                        Logger.warn("response LiveOps rewrite skipped", error)
-                        if (filteredChildren == null) return wrapper
-                        rebuild(null)
-                    }.getOrThrow()
+                try {
+                    rebuild(strippedPresentation)
+                } catch (exception: Exception) {
+                    if (strippedPresentation == null) throw exception
+                    Logger.warn("response LiveOps rewrite skipped", exception)
+                    if (filteredChildren == null) return wrapper
+                    rebuild(null)
+                }
             return editor.copy(wrapper) { mutableWrapper ->
                 nodeWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
                 nodeWrapperPayloadField.set(mutableWrapper, rebuiltNode)

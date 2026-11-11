@@ -9,18 +9,11 @@ import android.os.Looper
 import android.os.Process
 import android.os.ResultReceiver
 import android.os.SystemClock
+import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Restarts Play Store so new filter settings apply. Blocking; call it off the main thread.
- * Uses only an application context, so a settings screen closed meanwhile is not retained.
- *
- * The module inside Play Store decides whether a restart is safe (no install, no purchase flow),
- * removes the cached feed responses and resets the crash-loop guard. Without a reply from it,
- * Play Store is never force-stopped blindly: the root fallback repeats the same safety checks.
- */
 internal object PlayStoreRestarter {
     enum class Outcome { RESTARTED, BUSY, FAILED }
 
@@ -30,8 +23,6 @@ internal object PlayStoreRestarter {
         val appContext = context.applicationContext
         val reply =
             when (val first = askModule(appContext)) {
-                // A stopped Play Store has no receiver: start it and ask again. The existing task
-                // is kept, so an open purchase stays for the module's safety check.
                 Reply.NONE -> {
                     launch(appContext, clearTask = false)
                     Thread.sleep(MODULE_STARTUP_WAIT_MILLIS)
@@ -44,12 +35,8 @@ internal object PlayStoreRestarter {
             }
         return when (reply) {
             Reply.OK -> relaunchAfterModuleRestart(appContext)
-
             Reply.BUSY -> Outcome.BUSY
-
-            // The module answered and could not restart safely: root must not override it.
             Reply.FAILED -> Outcome.FAILED
-
             Reply.NONE -> restartViaRoot()
         }
     }
@@ -68,7 +55,6 @@ internal object PlayStoreRestarter {
                         completed.countDown()
                     }
                 }
-            // The module must decide well before this caller gives up waiting.
             val deadline =
                 SystemClock.elapsedRealtime() +
                     TimeUnit.SECONDS.toMillis(MODULE_REPLY_TIMEOUT_SECONDS) -
@@ -109,11 +95,9 @@ internal object PlayStoreRestarter {
             true
         }.getOrDefault(false)
 
-    // The fixed /data/user path is intended: root operates on Play Store's own data directory.
     @SuppressLint("SdCardPath")
     private fun restartViaRoot(): Outcome =
         runCatching {
-            // Output is discarded, so a su that keeps its streams open cannot block the timed wait.
             ProcessBuilder("su", "-c", rootScript())
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.to(java.io.File("/dev/null")))
@@ -131,20 +115,8 @@ internal object PlayStoreRestarter {
                 }
         }.getOrDefault(Outcome.FAILED)
 
-    /**
-     * The root fallback, run by su's shell. Each step must succeed before the next one runs:
-     * - refuse (exit [ROOT_EXIT_BUSY]) while any package installer session is staged or a Play
-     *   Store purchase activity exists, the same checks the module makes; a check that cannot
-     *   run fails the restart instead of passing;
-     * - stop Play Store, then remove the cached feed responses and the crash-loop guard in init's
-     *   mount namespace (su may keep this app's namespace, where app data isolation hides other
-     *   packages' data directories) and confirm the cache directory is gone. If that fails,
-     *   Play Store is started again and the restart is reported as failed;
-     * - start Play Store again.
-     */
     @SuppressLint("SdCardPath")
     internal fun rootScript(userId: Int = Process.myUid() / PER_USER_UID_RANGE): String {
-        // Secondary users and work profiles have their own data directory and Play Store process.
         val target = BuildConfig.TARGET_PACKAGE
         val dataDir = "/data/user/$userId/$target"
         val feedCache = "$dataDir/cache/${RestartProtocol.STREAM_DATA_STORE_DIR}"
@@ -155,11 +127,6 @@ internal object PlayStoreRestarter {
             "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
                 "-c android.intent.category.LAUNCHER -p $target >/dev/null"
         return listOf(
-            // Package installer sessions in progress, wherever PackageInstallerService keeps
-            // them: app installs on internal storage (/data/app/vmdl*.tmp), on adopted storage
-            // (/mnt/expand/<volume>/app/vmdl*.tmp) and staged system updates
-            // (/data/app-staging/session_*). Listing proves /data/app can be read; otherwise the
-            // glob could not see a session and would pass.
             "ls /data/app >/dev/null || exit 1",
             "for session in /data/app/vmdl*.tmp /mnt/expand/*/app/vmdl*.tmp " +
                 "/data/app-staging/session_*; do " +

@@ -36,7 +36,7 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "ru")
+        localeFilters += "en"
     }
 
     dependenciesInfo {
@@ -51,7 +51,10 @@ android {
     flavorDimensions += "distribution"
     productFlavors {
         create("core") { dimension = "distribution" }
-        create("full") { dimension = "distribution" }
+        create("full") {
+            dimension = "distribution"
+            androidResources.localeFilters += "ru"
+        }
     }
 
     signingConfigs {
@@ -142,8 +145,8 @@ tasks.withType<Test>().configureEach {
         "gplayadblock.compatibilityMetadata",
         rootDir.resolve("play-store-compatibility.yaml").absolutePath,
     )
-    System.getProperty("gplayadblock.playStoreApk")?.let { apkPath ->
-        systemProperty("gplayadblock.playStoreApk", apkPath)
+    System.getProperty("gplayadblock.recordOptionalFingerprints")?.let { path ->
+        systemProperty("gplayadblock.recordOptionalFingerprints", path)
     }
     testLogging { showStandardStreams = true }
 }

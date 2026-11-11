@@ -44,39 +44,25 @@ class PresentationClassifierTest {
         fun toByteArray(): ByteArray = bytes
     }
 
-    private fun classifier(
-        hideLiveOps: Boolean = false,
-        hidePreRegistrationGames: Boolean = false,
-        hideSearchPromotions: Boolean = false,
-    ) = classifier({ hideLiveOps }, { hidePreRegistrationGames }, { hideSearchPromotions })
-
-    private fun classifier(
-        hideLiveOps: () -> Boolean,
-        hidePreRegistrationGames: () -> Boolean,
-        hideSearchPromotions: () -> Boolean,
-    ) = PresentationClassifier(
-        presentationKindField = field<Presentation>("kind"),
-        presentationPayloadField = field<Presentation>("payload"),
-        clusterCaseField = field<Cluster>("case"),
-        clusterPayloadField = field<Cluster>("payload"),
-        clusterServerLogsField = field<Cluster>("serverLogs"),
-        byteStringToByteArrayMethod =
-            ByteString::class.java.getDeclaredMethod("toByteArray"),
-        protobufToByteArrayMethod =
-            GenericPayload::class.java.getDeclaredMethod("toByteArray"),
-        cardKindField = field<Card>("kind"),
-        cardPayloadField = field<Card>("payload"),
-        cardAdMetadataFields =
-            mapOf(
-                AppCard::class.java to listOf(field<AppCard>("itemAdInfo")),
-            ),
-        adPresenceField = field<AdMetadata>("bitField"),
-        hideLiveOps = hideLiveOps,
-        hidePreRegistrationGames = hidePreRegistrationGames,
-        hideSearchPromotions = hideSearchPromotions,
-    )
-
-    private val classifier = classifier()
+    private val classifier =
+        PresentationClassifier(
+            presentationKindField = field<Presentation>("kind"),
+            presentationPayloadField = field<Presentation>("payload"),
+            clusterCaseField = field<Cluster>("case"),
+            clusterPayloadField = field<Cluster>("payload"),
+            clusterServerLogsField = field<Cluster>("serverLogs"),
+            byteStringToByteArrayMethod =
+                ByteString::class.java.getDeclaredMethod("toByteArray"),
+            protobufToByteArrayMethod =
+                GenericPayload::class.java.getDeclaredMethod("toByteArray"),
+            cardKindField = field<Card>("kind"),
+            cardPayloadField = field<Card>("payload"),
+            cardAdMetadataFields =
+                mapOf(
+                    AppCard::class.java to listOf(field<AppCard>("itemAdInfo")),
+                ),
+            adPresenceField = field<AdMetadata>("bitField"),
+        )
 
     @Test
     fun `every dedicated sponsored cluster case is an ad`() {
@@ -153,127 +139,9 @@ class PresentationClassifierTest {
     }
 
     @Test
-    fun `a LiveOps card is optional promotional content`() {
-        val presentation = card(AppCard(itemAdInfo = null), kind = LIVE_OPS_CARD_CASE)
-        assertEquals(
-            PresentationClassifier.GENERIC_PROMOTIONAL_CARD,
-            classifier.classify(presentation),
-        )
-        assertFalse(classifier.isAd(classifier.classify(presentation)))
-        val enabledClassifier = classifier(hideLiveOps = true)
-        assertTrue(enabledClassifier.isAd(enabledClassifier.classify(presentation)))
-    }
-
-    @Test
-    fun `a sponsored LiveOps card is an ad even with LiveOps allowed`() {
-        val presentation =
-            card(AppCard(AdMetadata(bitField = ITEM_AD_INFO_BIT)), kind = LIVE_OPS_CARD_CASE)
-        assertEquals(PresentationClassifier.GENERIC_AD_CARD, classifier.classify(presentation))
-        assertTrue(classifier.isAd(classifier.classify(presentation)))
-    }
-
-    @Test
     fun `case 109 on its own is organic`() {
         val presentation = cluster(case = 109)
         assertEquals(109, classifier.classify(presentation))
-        assertFalse(classifier.isAd(classifier.classify(presentation)))
-    }
-
-    @Test
-    fun `a pre-registration games cluster is optional promotional content`() {
-        val presentation =
-            cluster(
-                case = GENERIC_CLUSTER_CASE,
-                serverLogs = "promotion_3000000d51_pre_registration_games",
-            )
-        assertFalse(classifier.isAd(classifier.classify(presentation)))
-        val enabledClassifier = classifier(hidePreRegistrationGames = true)
-        assertEquals(
-            PresentationClassifier.GENERIC_PRE_REGISTRATION_CLUSTER,
-            enabledClassifier.classify(presentation),
-        )
-        assertTrue(enabledClassifier.isAd(enabledClassifier.classify(presentation)))
-    }
-
-    @Test
-    fun `a collapsed search quality promotion is optional promotional content`() {
-        val presentation =
-            cluster(
-                case = 67,
-                serverLogs = "search_quality_cluster_COLLAPSED_DEV_SUCCESS_CLUSTER_0",
-            )
-
-        assertEquals(
-            PresentationClassifier.GENERIC_SEARCH_QUALITY_PROMOTION,
-            classifier.classify(presentation),
-        )
-        assertFalse(classifier.isAd(classifier.classify(presentation)))
-        val enabledClassifier = classifier(hideSearchPromotions = true)
-        assertTrue(enabledClassifier.isAd(enabledClassifier.classify(presentation)))
-    }
-
-    @Test
-    fun `optional categories follow preference changes after classification is cached`() {
-        var hidePreRegistration = false
-        val liveClassifier =
-            classifier(
-                hideLiveOps = { false },
-                hidePreRegistrationGames = { hidePreRegistration },
-                hideSearchPromotions = { false },
-            )
-        val presentation =
-            cluster(
-                case = GENERIC_CLUSTER_CASE,
-                serverLogs = "promotion_3000000d51_pre_registration_games",
-            )
-
-        assertFalse(liveClassifier.isAd(liveClassifier.classify(presentation)))
-        hidePreRegistration = true
-        assertTrue(liveClassifier.isAd(liveClassifier.classify(presentation)))
-        hidePreRegistration = false
-        assertFalse(liveClassifier.isAd(liveClassifier.classify(presentation)))
-    }
-
-    @Test
-    fun `a sponsored cluster stays an ad whatever optional markers it carries`() {
-        val presentation =
-            cluster(
-                case = GENERIC_CLUSTER_CASE,
-                serverLogs = "pre_registration_games_ads_slot_1",
-            )
-        for (enabled in listOf(false, true)) {
-            val candidate = classifier(hidePreRegistrationGames = enabled)
-            assertEquals(
-                PresentationClassifier.GENERIC_AD_CLUSTER,
-                candidate.classify(presentation),
-            )
-            assertTrue(candidate.isAd(candidate.classify(presentation)))
-        }
-    }
-
-    @Test
-    fun `an optional marker inside the cluster payload is detected`() {
-        val presentation =
-            cluster(
-                case = GENERIC_CLUSTER_CASE,
-                payload = "x_pre_registration_games_y".toByteArray(),
-            )
-        val enabledClassifier = classifier(hidePreRegistrationGames = true)
-        assertEquals(
-            PresentationClassifier.GENERIC_PRE_REGISTRATION_CLUSTER,
-            enabledClassifier.classify(presentation),
-        )
-    }
-
-    @Test
-    fun `ordinary search result ranges stay organic`() {
-        val presentation =
-            cluster(
-                case = 67,
-                serverLogs = "search_results_cluster_apps_range_1_2",
-            )
-
-        assertEquals(67, classifier.classify(presentation))
         assertFalse(classifier.isAd(classifier.classify(presentation)))
     }
 
@@ -303,13 +171,10 @@ class PresentationClassifierTest {
                 ),
         )
 
-    private fun card(
-        payload: Any,
-        kind: Int = 1,
-    ): Presentation =
+    private fun card(payload: Any): Presentation =
         Presentation(
             kind = CARD_PRESENTATION_KIND,
-            payload = Card(kind = kind, payload = payload),
+            payload = Card(kind = 1, payload = payload),
         )
 
     private fun disclosurePayload(
@@ -366,6 +231,5 @@ class PresentationClassifierTest {
         const val GENERIC_CLUSTER_CASE = 2
         const val ITEM_AD_INFO_BIT = 2
         const val AD_DISCLOSURE_ENUM = 3
-        const val LIVE_OPS_CARD_CASE = 32
     }
 }

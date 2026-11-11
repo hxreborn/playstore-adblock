@@ -69,7 +69,6 @@ internal object SampleTargets {
             byteStringToByteArrayMethod = method("byteStringToByteArray"),
             protobufToByteArrayMethod = method("protobufToByteArray"),
             repeatedListCopyMethod = method("repeatedListCopy"),
-            presentationCaseMapper = method("presentationCaseMapper"),
             suggestion =
                 ResolvedTargets.Suggestion(
                     constructor =
@@ -86,51 +85,5 @@ internal object SampleTargets {
                     tabDefaultInstanceField = field("spotlightTabDefault"),
                 ),
             spotlightFailure = null,
-            manageApps =
-                ResolvedTargets.ManageApps(
-                    manageListClassName = "manageList",
-                    playProtectRowClassNames = listOf("protectRow"),
-                    veMetadataTypeField = field("veMetadataType"),
-                ),
-            manageAppsFailure = null,
-            persistentNav =
-                ResolvedTargets.PersistentNav(
-                    navConstructor =
-                        ConstructorRef(
-                            className = "nav",
-                            paramTypeNames = listOf("java.util.List", "int", "navAction"),
-                        ),
-                    navItemTypeField = field("navItemType"),
-                    navPrimaryCallbackField = field("navPrimaryCallback"),
-                    navSecondaryCallbackField = field("navSecondaryCallback"),
-                    navActionConstructor =
-                        ConstructorRef(
-                            className = "navAction",
-                            paramTypeNames = listOf("navCallback", "navCallback"),
-                        ),
-                    navCallbackMethod = method("navCallback"),
-                    navHiddenInstanceField = field("navHiddenInstance"),
-                ),
-            persistentNavFailure = null,
-            accountMenu =
-                ResolvedTargets.AccountMenu(
-                    featureClassName = "accountFeature",
-                    actionClassName = "accountAction",
-                    featuresClassName = "accountFeatures",
-                    immutableListClassName = "immutableList",
-                    notificationTopBarConstructor =
-                        ConstructorRef(
-                            className = "notificationTopBar",
-                            paramTypeNames = listOf("notificationBadge", "notificationAction"),
-                        ),
-                    playPointsRetrieverClassName = "playPointsRetriever",
-                ),
-            accountMenuFailure = null,
-            selfUpdate =
-                ResolvedTargets.SelfUpdate(
-                    schedulerMethod = method("selfUpdateScheduler"),
-                    autoUpdateMethod = method("autoUpdate"),
-                ),
-            selfUpdateFailure = null,
         )
 }

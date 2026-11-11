@@ -15,6 +15,10 @@ android {
         minSdk = 30
     }
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -29,6 +33,7 @@ val ktlint = configurations.create("ktlint")
 
 dependencies {
     add(ktlint.name, libs.ktlint.cli)
+    testImplementation(libs.junit)
 }
 
 val ktlintCheck =

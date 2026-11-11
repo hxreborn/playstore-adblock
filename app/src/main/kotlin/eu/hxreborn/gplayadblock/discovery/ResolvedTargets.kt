@@ -1,36 +1,6 @@
 package eu.hxreborn.gplayadblock.discovery
 
 sealed interface ResolvedTargets {
-    data class AccountMenu(
-        val featureClassName: String,
-        val actionClassName: String,
-        val featuresClassName: String,
-        val immutableListClassName: String,
-        val notificationTopBarConstructor: ConstructorRef?,
-        val playPointsRetrieverClassName: String? = null,
-    )
-
-    data class SelfUpdate(
-        val schedulerMethod: MethodRef,
-        val autoUpdateMethod: MethodRef?,
-    )
-
-    data class ManageApps(
-        val manageListClassName: String,
-        val playProtectRowClassNames: List<String> = emptyList(),
-        val veMetadataTypeField: FieldRef? = null,
-    )
-
-    data class PersistentNav(
-        val navConstructor: ConstructorRef,
-        val navItemTypeField: FieldRef,
-        val navPrimaryCallbackField: FieldRef,
-        val navSecondaryCallbackField: FieldRef,
-        val navActionConstructor: ConstructorRef,
-        val navCallbackMethod: MethodRef,
-        val navHiddenInstanceField: FieldRef?,
-    )
-
     data class Suggestion(
         val constructor: ConstructorRef,
         val adInfoField: FieldRef,
@@ -87,19 +57,10 @@ sealed interface ResolvedTargets {
         val byteStringToByteArrayMethod: MethodRef,
         val protobufToByteArrayMethod: MethodRef,
         val repeatedListCopyMethod: MethodRef,
-        val presentationCaseMapper: MethodRef? = null,
         val suggestion: Suggestion?,
         val suggestionFailure: String?,
         val spotlight: Spotlight?,
         val spotlightFailure: String?,
-        val manageApps: ManageApps?,
-        val manageAppsFailure: String?,
-        val persistentNav: PersistentNav?,
-        val persistentNavFailure: String?,
-        val accountMenu: AccountMenu?,
-        val accountMenuFailure: String?,
-        val selfUpdate: SelfUpdate?,
-        val selfUpdateFailure: String?,
     ) : ResolvedTargets
 
     data class Missing(
@@ -108,22 +69,12 @@ sealed interface ResolvedTargets {
     ) : ResolvedTargets
 
     companion object {
-        /** Marks an optional failure caused by an exception during the scan, not a missing target. */
         const val TRANSIENT_FAILURE_MARKER = "resolution threw"
     }
 }
 
-/**
- * True when an optional lookup failed with an exception. Such a result is used for this process
- * but not cached, so the next start scans again instead of keeping the filter off.
- */
 internal val ResolvedTargets.Resolved.hasTransientFailure: Boolean
     get() =
-        listOf(
-            suggestionFailure,
-            spotlightFailure,
-            manageAppsFailure,
-            persistentNavFailure,
-            accountMenuFailure,
-            selfUpdateFailure,
-        ).any { failure -> failure?.contains(ResolvedTargets.TRANSIENT_FAILURE_MARKER) == true }
+        listOf(suggestionFailure, spotlightFailure).any { failure ->
+            failure?.contains(ResolvedTargets.TRANSIENT_FAILURE_MARKER) == true
+        }

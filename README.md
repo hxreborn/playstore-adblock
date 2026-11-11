@@ -121,6 +121,7 @@ is rejected.
 | 53.0.27-XX | 853027XX | supported |
 | 53.3.21-XX | 853321XX | supported |
 | 53.4.23-XX | 853423XX | supported |
+| 54.0.09-XX | 854009XX | supported |
 
 Find your build either in Play Store → Settings → About or with:
 

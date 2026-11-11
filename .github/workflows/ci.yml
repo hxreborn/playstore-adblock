@@ -35,6 +35,14 @@ jobs:
           :app:lintCoreRelease :app:lintFullRelease
           :app:assembleCoreRelease :app:assembleFullRelease
 
+      - name: Check the module APKs
+        run: |
+          for flavor in core full; do
+            python3 tools/check_module_apk.py --flavor "$flavor" --release \
+              --mapping "app/build/outputs/mapping/${flavor}Release/mapping.txt" \
+              "app/build/outputs/apk/$flavor/release/app-$flavor-release-unsigned.apk"
+          done
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

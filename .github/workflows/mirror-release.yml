@@ -22,6 +22,10 @@ jobs:
       TAG_NAME: ${{ inputs.tag || github.event.release.tag_name }}
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
       - name: Validate tag
         run: |
           if [[ ! "$TAG_NAME" =~ ^v ]]; then
@@ -36,9 +40,11 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           name=${TAG_NAME#v}
-          code=$(gh api "repos/$REPO/contents/gradle.properties" --jq '.content' | base64 -d \
-            | grep '^version\.code=' | cut -d= -f2)
+          code=$(gh api "repos/$REPO/contents/gradle.properties?ref=$TAG_NAME" --jq '.content' \
+            | base64 -d | grep '^version\.code=' | cut -d= -f2)
+          [[ "$code" =~ ^[0-9]+$ ]] || { echo "::error::no version.code at $TAG_NAME"; exit 1; }
           echo "mirror_tag=${code}-${name}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${code}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch release info
         id: release
@@ -53,20 +59,26 @@ jobs:
           gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
           echo "BODY_EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Download APK from release
+      - name: Download APKs from release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          version=${TAG_NAME#v}
           mkdir -p ./artifacts
-          gh release download "$TAG_NAME" \
-            --repo "$REPO" \
-            --pattern "playstore-adblock-v*.apk" \
-            --dir ./artifacts
+          assets=$(gh release view "$TAG_NAME" --repo "$REPO" --json assets --jq '.assets[].name')
+          selected=$(python3 tools/check_release_assets.py select "$version" <<<"$assets")
+          while IFS= read -r asset; do
+            gh release download "$TAG_NAME" --repo "$REPO" --pattern "$asset" --dir ./artifacts
+          done <<<"$selected"
 
-          apk_count=$(find ./artifacts -name '*.apk' | wc -l)
-          echo "Found $apk_count APK(s)"
-          [ "$apk_count" -gt 0 ] || { echo "::error::No APK found on release"; exit 1; }
+      - name: Validate APKs
+        env:
+          VERSION_CODE: ${{ steps.mirror_tag.outputs.version_code }}
+        run: |
+          build_tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          python3 tools/check_release_assets.py verify "${TAG_NAME#v}" "$VERSION_CODE" ./artifacts \
+            --build-tools "$build_tools"
 
       - name: Tag the mirror head
         env:

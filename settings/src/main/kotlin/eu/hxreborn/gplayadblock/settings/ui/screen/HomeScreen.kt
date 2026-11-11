@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -53,6 +54,7 @@ fun HomeScreen(
     state: SettingsUiState.Ready,
     onOpenCategory: (FilterCategory) -> Unit,
     onOpenAppearance: () -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val bottomPadding = listBottomPadding()
@@ -122,12 +124,25 @@ fun HomeScreen(
             }
             item(key = "appearance", contentType = "category") {
                 NavigationRow(
-                    shape = shapeForPosition(1, 0),
+                    shape = shapeForPosition(2, 0),
                     icon = Icons.Outlined.Palette,
                     title = stringResource(R.string.appearance_title),
                     summary = appearanceSummary(state.appearance),
                     onClick = onOpenAppearance,
                     modifier = Modifier.padding(horizontal = Tokens.ScreenMargin),
+                )
+            }
+            item(key = "about", contentType = "category") {
+                NavigationRow(
+                    shape = shapeForPosition(2, 1),
+                    icon = Icons.Outlined.Info,
+                    title = stringResource(R.string.about_title),
+                    summary = stringResource(R.string.about_summary),
+                    onClick = onOpenAbout,
+                    modifier =
+                        Modifier
+                            .padding(horizontal = Tokens.ScreenMargin)
+                            .padding(top = Tokens.RowGap),
                 )
             }
         }

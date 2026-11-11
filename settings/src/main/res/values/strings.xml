@@ -120,4 +120,26 @@
     <string name="appearance_summary_dynamic_color">Dynamic color</string>
     <string name="dynamic_color_title">Dynamic color</string>
     <string name="dynamic_color_summary">Colors from your wallpaper</string>
+    <string name="about_whats_new">What\'s new</string>
+    <string name="about_whats_new_summary">Changes in version %1$s</string>
+    <string name="about_changelog">Changelog</string>
+    <string name="about_changelog_summary">Notes for every release</string>
+    <string name="about_source_code">Source code</string>
+    <string name="about_issues">Suggest a feature or report a bug</string>
+    <string name="about_issues_summary">Opens the issue form on GitHub</string>
+    <string name="about_licenses">Open source licenses</string>
+    <string name="about_licenses_summary">Libraries this app uses</string>
+    <string name="about_star_on_github">Star on GitHub</string>
+    <string name="about_buy_coffee">Buy me a coffee</string>
+    <string name="about_contributors">Contributors</string>
+    <string name="contributor_owner">Owner</string>
+    <string name="contributor_owner_spoken">owner</string>
+    <plurals name="contributor_lines_added">
+        <item quantity="one">%d line added</item>
+        <item quantity="other">%d lines added</item>
+    </plurals>
+    <plurals name="contributor_lines_removed">
+        <item quantity="one">%d line removed</item>
+        <item quantity="other">%d lines removed</item>
+    </plurals>
 </resources>

@@ -151,8 +151,14 @@ fun GPlayAdblockTheme(
         motionScheme = MotionScheme.standard(),
         typography = SettingsTypography,
     ) {
-        ProvideReducedMotion {
-            ProvidePreferenceTheme(theme = preferenceTheme(), content = content)
+        val extendedColors =
+            remember(darkTheme, colorScheme.primary) {
+                extendedColorsFor(darkTheme, colorScheme.primary)
+            }
+        CompositionLocalProvider(LocalExtendedColors provides extendedColors) {
+            ProvideReducedMotion {
+                ProvidePreferenceTheme(theme = preferenceTheme(), content = content)
+            }
         }
     }
 }

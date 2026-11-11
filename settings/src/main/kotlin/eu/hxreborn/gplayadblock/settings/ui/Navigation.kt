@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
@@ -49,9 +50,11 @@ import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplyBar
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplyBarContent
 import eu.hxreborn.gplayadblock.settings.ui.component.LocalApplyBarInset
+import eu.hxreborn.gplayadblock.settings.ui.screen.AboutScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.AppearanceScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.CategoryScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.HomeScreen
+import eu.hxreborn.gplayadblock.settings.ui.screen.LicensesScreen
 import eu.hxreborn.gplayadblock.settings.ui.theme.GPlayAdblockTheme
 import eu.hxreborn.gplayadblock.settings.ui.theme.rememberReducedMotion
 
@@ -64,22 +67,38 @@ sealed interface Destination {
 
     data object Appearance : Destination
 
+    data object About : Destination
+
+    data object Licenses : Destination
+
     fun toRoute(): String =
         when (this) {
             Home -> HOME
             is Category -> "$CATEGORY${category.name}"
             Appearance -> APPEARANCE
+            About -> ABOUT
+            Licenses -> LICENSES
         }
 
     companion object {
         private const val HOME = "home"
         private const val CATEGORY = "category:"
         private const val APPEARANCE = "appearance"
+        private const val ABOUT = "about"
+        private const val LICENSES = "licenses"
 
         fun fromRoute(route: String): Destination =
             when {
                 route == APPEARANCE -> {
                     Appearance
+                }
+
+                route == ABOUT -> {
+                    About
+                }
+
+                route == LICENSES -> {
+                    Licenses
                 }
 
                 route.startsWith(CATEGORY) -> {
@@ -168,6 +187,7 @@ private fun SettingsNavigation(
                                 state = state,
                                 onOpenCategory = { backStack.add(Destination.Category(it)) },
                                 onOpenAppearance = { backStack.add(Destination.Appearance) },
+                                onOpenAbout = { backStack.add(Destination.About) },
                             )
                         }
                         entry<Destination.Category> { key ->
@@ -179,6 +199,19 @@ private fun SettingsNavigation(
                                 onStartTabChange = viewModel::setStartTab,
                                 onBack = { backStack.removeLastOrNull() },
                             )
+                        }
+                        entry<Destination.About> {
+                            val aboutViewModel: AboutViewModel =
+                                viewModel(factory = AboutViewModel.Factory)
+                            val about by aboutViewModel.about.collectAsStateWithLifecycle()
+                            AboutScreen(
+                                about = about,
+                                onOpenLicenses = { backStack.add(Destination.Licenses) },
+                                onBack = { backStack.removeLastOrNull() },
+                            )
+                        }
+                        entry<Destination.Licenses> {
+                            LicensesScreen(onBack = { backStack.removeLastOrNull() })
                         }
                         entry<Destination.Appearance> {
                             AppearanceScreen(

@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.aboutlibraries.android)
 }
 
 android {
@@ -19,6 +20,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets
+        .getByName("main")
+        .assets.directories
+        .add(file("contributors").path)
 
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -55,8 +61,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.aboutlibraries.compose.m3)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 }
 

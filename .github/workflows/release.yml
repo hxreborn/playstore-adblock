@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install Pillow
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pil
+
       - name: Decode keystore
         env:
           RELEASE_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE }}

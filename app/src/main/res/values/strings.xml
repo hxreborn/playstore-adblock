@@ -33,6 +33,8 @@
     <string name="hide_payments_and_subscriptions_summary">Removes the payments and subscriptions entry from the account menu.</string>
     <string name="hide_pre_registration_games">Hide pre-registration games</string>
     <string name="hide_pre_registration_games_summary">Removes the pre-registration games section from the Games tab.</string>
+    <string name="hide_search_promotions">Hide promoted search shelves</string>
+    <string name="hide_search_promotions_summary">Removes the collapsed promotional shelf (such as limited-time events) shown among search results. It is not labeled as an ad by Play Store.</string>
     <string name="hide_device_sync">Hide device sync</string>
     <string name="hide_device_sync_summary">Removes “Sync apps to devices” from Manage apps &amp; device.</string>
     <string name="hide_ratings_and_reviews">Hide ratings and reviews</string>

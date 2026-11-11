@@ -34,6 +34,9 @@ class FilterPreferences(
     fun hidePreRegistrationGames(): Boolean =
         preferences.getBoolean(KEY_HIDE_PRE_REGISTRATION_GAMES, false)
 
+    fun hideSearchPromotions(): Boolean =
+        preferences.getBoolean(KEY_HIDE_SEARCH_PROMOTIONS, DEFAULT_HIDE_SEARCH_PROMOTIONS)
+
     fun hideDeviceSync(): Boolean = preferences.getBoolean(KEY_HIDE_DEVICE_SYNC, false)
 
     fun hideRatingsAndReviews(): Boolean =
@@ -71,6 +74,11 @@ class FilterPreferences(
         const val KEY_HIDE_EXPERIMENTAL_FEATURES = "hide_experimental_features"
         const val KEY_HIDE_PAYMENTS_AND_SUBSCRIPTIONS = "hide_payments_and_subscriptions"
         const val KEY_HIDE_PRE_REGISTRATION_GAMES = "hide_pre_registration_games"
+        const val KEY_HIDE_SEARCH_PROMOTIONS = "hide_search_promotions"
+
+        // Promotional search shelves count as advertising, so they are hidden by default
+        // like the main ad filter; the switch still lets users keep them.
+        const val DEFAULT_HIDE_SEARCH_PROMOTIONS = true
         const val KEY_HIDE_DEVICE_SYNC = "hide_device_sync"
         const val KEY_HIDE_RATINGS_AND_REVIEWS = "hide_ratings_and_reviews"
         const val KEY_HIDE_CONTRIBUTIONS = "hide_contributions"

@@ -29,6 +29,7 @@ object StreamNodeFilter {
                 targets,
                 preferences::hideLiveOps,
                 preferences::hidePreRegistrationGames,
+                preferences::hideSearchPromotions,
             )
         val streamDataClass = classLoader.loadClass(targets.streamDataMethod.returnTypeName)
         val streamDataConstructor = targets.streamDataConstructor.resolve(classLoader)

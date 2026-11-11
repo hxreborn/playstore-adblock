@@ -7,6 +7,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.util.IdentityHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamResponseFilter {
     fun install(
@@ -21,6 +22,7 @@ object StreamResponseFilter {
                 targets,
                 preferences::hideLiveOps,
                 preferences::hidePreRegistrationGames,
+                preferences::hideSearchPromotions,
             )
         val editor = ProtoEditor.from(classLoader, targets)
         val transformer =
@@ -104,6 +106,7 @@ object StreamResponseFilter {
         private val editor: ProtoEditor,
     ) {
         private val nodeWrapperClass: Class<*> = nodeWrapperKindField.declaringClass
+        private val liveOpsFailureLogged = AtomicBoolean(false)
         private val rootWrapperClass: Class<*> = rootWrapperKindField.declaringClass
 
         fun transform(response: Any): Any? {
@@ -127,9 +130,14 @@ object StreamResponseFilter {
                 val decoded = decodeNode(wrapper) ?: continue
                 decodedNodes[wrapper] = decoded
                 val presentation = nodePresentationField.get(decoded) ?: continue
-                classifier.stripEmbeddedLiveOps(presentation, editor)?.let { stripped ->
-                    presentationRewrites[wrapper] = stripped
-                }
+                // Optional LiveOps stripping must not abort ad removal for the whole response.
+                runCatching { classifier.stripEmbeddedLiveOps(presentation, editor) }
+                    .onFailure { error ->
+                        if (liveOpsFailureLogged.compareAndSet(false, true)) {
+                            Logger.warn("embedded LiveOps stripping skipped", error)
+                        }
+                    }.getOrNull()
+                    ?.let { stripped -> presentationRewrites[wrapper] = stripped }
                 val case = classifier.classify(presentation)
                 if (!classifier.isAd(case)) continue
                 val id = nodeIdField.get(wrapper) ?: continue

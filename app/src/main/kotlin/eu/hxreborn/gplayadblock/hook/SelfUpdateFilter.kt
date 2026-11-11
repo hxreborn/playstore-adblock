@@ -6,7 +6,7 @@ import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 object SelfUpdateFilter {
     fun install(
@@ -42,27 +42,34 @@ object SelfUpdateFilter {
                         return@intercept chain.proceed(arguments)
                     }
 
-                    completeCallback(chain.getArg(0))
+                    // Skipping the request is only safe when its caller is told it finished;
+                    // otherwise the auto-update job would wait forever, so let it run instead.
+                    if (!completeCallback(chain.getArg(0))) {
+                        logOnce("Play Store auto-update callback not found, request allowed")
+                        return@intercept chain.proceed()
+                    }
                     logOnce("blocked Play Store auto-update request")
                     null
                 }
         }
     }
 
-    private fun completeCallback(callback: Any?) {
-        if (callback == null) return
+    private fun completeCallback(callback: Any?): Boolean {
+        if (callback == null) return false
         val candidates =
             callback.javaClass.methods.filter { method ->
                 method.returnType == Void.TYPE &&
                     method.parameterTypes.size == 1 &&
                     Set::class.java.isAssignableFrom(method.parameterTypes[0])
             }
-        candidates.singleOrNull()?.invoke(callback, emptySet<String>())
+        val completion = candidates.singleOrNull() ?: return false
+        completion.invoke(callback, emptySet<String>())
+        return true
     }
 
     private fun logOnce(message: String) {
-        if (logged.compareAndSet(false, true)) Logger.info(message)
+        if (logged.add(message)) Logger.info(message)
     }
 
-    private val logged = AtomicBoolean(false)
+    private val logged: MutableSet<String> = ConcurrentHashMap.newKeySet()
 }

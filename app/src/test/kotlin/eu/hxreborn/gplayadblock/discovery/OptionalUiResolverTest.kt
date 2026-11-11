@@ -19,6 +19,12 @@ class OptionalUiResolverTest {
         assertTrue("full target resolution failed: $resolved", resolved is ResolvedTargets.Resolved)
         resolved as ResolvedTargets.Resolved
         assertNotNull(resolved.manageAppsFailure, resolved.manageApps)
+        val manageApps = requireNotNull(resolved.manageApps)
+        assertTrue(
+            "play protect rows=${manageApps.playProtectRowClassNames}",
+            manageApps.playProtectRowClassNames.isNotEmpty(),
+        )
+        assertNotNull("visual element type field", manageApps.veMetadataTypeField)
         assertNotNull(resolved.persistentNavFailure, resolved.persistentNav)
         assertNotNull(resolved.accountMenuFailure, resolved.accountMenu)
         assertNotNull(resolved.selfUpdateFailure, resolved.selfUpdate)

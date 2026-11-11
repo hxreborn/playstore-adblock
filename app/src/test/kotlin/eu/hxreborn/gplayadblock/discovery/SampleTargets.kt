@@ -88,6 +88,8 @@ internal object SampleTargets {
             manageApps =
                 ResolvedTargets.ManageApps(
                     manageListClassName = "manageList",
+                    playProtectRowClassNames = listOf("protectRow"),
+                    veMetadataTypeField = field("veMetadataType"),
                 ),
             manageAppsFailure = null,
             persistentNav =

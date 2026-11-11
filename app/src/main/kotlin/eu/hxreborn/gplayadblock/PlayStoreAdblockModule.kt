@@ -29,6 +29,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.File
 
 @PublishedApi
 internal lateinit var module: PlayStoreAdblockModule
@@ -90,9 +91,6 @@ class PlayStoreAdblockModule : XposedModule() {
         classLoader: ClassLoader,
     ) {
         try {
-            installRestartReceiver(context)
-            val preferences =
-                FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
             val packageInfo = context.packageManager.getPackageInfo(TARGET_PACKAGE, 0)
             val cacheKey =
                 TargetCache.Key(
@@ -101,6 +99,14 @@ class PlayStoreAdblockModule : XposedModule() {
                     moduleVersionCode = BuildConfig.VERSION_CODE.toLong(),
                     moduleApkPath = moduleApplicationInfo.sourceDir,
                 )
+            val crashGuard =
+                CrashLoopGuard(
+                    file = File(context.applicationInfo.dataDir, CRASH_GUARD_PATH),
+                    fingerprint = cacheKey.toString(),
+                )
+            installRestartReceiver(context, crashGuard)
+            val preferences =
+                FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
             val status =
                 "Play Store ${packageInfo.versionName} (${packageInfo.longVersionCode}) " +
                     "module v${BuildConfig.VERSION_NAME}"
@@ -142,54 +148,22 @@ class PlayStoreAdblockModule : XposedModule() {
                     }
                     val installed =
                         installHookGroups(classLoader, targets, preferences).toMutableSet()
-                    try {
-                        targets.accountMenu?.let { accountMenu ->
-                            AccountMenuFilter.install(
-                                this,
+                    installCrashRecorder(crashGuard)
+                    if (crashGuard.isTripped()) {
+                        Logger.error(
+                            "optional UI filters skipped after repeated Play Store crashes; " +
+                                "use Apply and restart in module settings to retry",
+                        )
+                        notifyOptionalFiltersDisabled(context)
+                    } else {
+                        installed +=
+                            installOptionalFilters(
                                 context,
-                                classLoader,
-                                preferences,
-                                accountMenu,
-                            )
-                            installed += "account"
-                        }
-                    } catch (exception: Exception) {
-                        Logger.warn("optional account filters unavailable", exception)
-                    }
-                    try {
-                        targets.selfUpdate?.let { selfUpdate ->
-                            SelfUpdateFilter.install(this, classLoader, preferences, selfUpdate)
-                            installed += "self-update"
-                        }
-                    } catch (exception: Exception) {
-                        Logger.warn("optional self-update filter unavailable", exception)
-                    }
-                    try {
-                        targets.manageApps?.let { manageApps ->
-                            ManageAppsFilter.install(
-                                this,
-                                classLoader,
-                                preferences,
-                                manageApps,
-                            )
-                            installed += "manage-apps"
-                        }
-                    } catch (exception: Exception) {
-                        Logger.warn("optional manage apps filters unavailable", exception)
-                    }
-                    try {
-                        targets.persistentNav?.let { persistentNav ->
-                            PersistentNavFilter.install(
-                                this,
                                 application,
                                 classLoader,
                                 preferences,
-                                persistentNav,
+                                targets,
                             )
-                            installed += "persistent-nav"
-                        }
-                    } catch (exception: Exception) {
-                        Logger.warn("optional persistent nav filters unavailable", exception)
                     }
                     targets.manageAppsFailure?.let { reason ->
                         Logger.warn("optional manage apps targets unresolved reason=$reason")
@@ -223,7 +197,73 @@ class PlayStoreAdblockModule : XposedModule() {
         }
     }
 
-    private fun installRestartReceiver(context: Context) {
+    private fun installOptionalFilters(
+        context: Context,
+        application: Application,
+        classLoader: ClassLoader,
+        preferences: FilterPreferences,
+        targets: ResolvedTargets.Resolved,
+    ): Set<String> {
+        val installed = mutableSetOf<String>()
+
+        fun optional(
+            label: String,
+            install: () -> Unit,
+        ) {
+            try {
+                install()
+                installed += label
+            } catch (exception: Exception) {
+                Logger.warn("optional $label filters unavailable", exception)
+            }
+        }
+
+        targets.accountMenu?.let { accountMenu ->
+            optional("account") {
+                AccountMenuFilter.install(this, application, classLoader, preferences, accountMenu)
+            }
+        }
+        targets.selfUpdate?.let { selfUpdate ->
+            optional("self-update") {
+                SelfUpdateFilter.install(this, classLoader, preferences, selfUpdate)
+            }
+        }
+        targets.manageApps?.let { manageApps ->
+            optional("manage-apps") {
+                ManageAppsFilter.install(this, application, classLoader, preferences, manageApps)
+            }
+        }
+        targets.persistentNav?.let { persistentNav ->
+            optional("persistent-nav") {
+                PersistentNavFilter.install(
+                    this,
+                    application,
+                    classLoader,
+                    preferences,
+                    persistentNav,
+                )
+            }
+        }
+        return installed
+    }
+
+    private fun installCrashRecorder(guard: CrashLoopGuard) {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching(guard::recordCrash)
+            if (previous != null) {
+                previous.uncaughtException(thread, error)
+            } else {
+                Process.killProcess(Process.myPid())
+                System.exit(CRASH_EXIT_STATUS)
+            }
+        }
+    }
+
+    private fun installRestartReceiver(
+        context: Context,
+        crashGuard: CrashLoopGuard,
+    ) {
         context.registerReceiver(
             object : BroadcastReceiver() {
                 @Suppress("DEPRECATION")
@@ -236,6 +276,9 @@ class PlayStoreAdblockModule : XposedModule() {
                         intent.getParcelableExtra(RestartProtocol.EXTRA_CALLBACK) as? ResultReceiver
                     val pendingResult = goAsync()
                     Thread {
+                        // An explicit restart after changing settings re-enables optional
+                        // filters that a previous crash loop switched off.
+                        runCatching(crashGuard::reset)
                         val cleared =
                             runCatching {
                                 clearDirectoryContents(receiverContext.cacheDir)
@@ -331,18 +374,30 @@ class PlayStoreAdblockModule : XposedModule() {
     private companion object {
         val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
         const val RESTART_KILL_DELAY_MILLIS = 150L
+        const val CRASH_EXIT_STATUS = 10
+        const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
+        const val OPTIONAL_FILTERS_DISABLED_MESSAGE =
+            "GPlay Adblock disabled optional UI filters after repeated Play Store crashes. " +
+                "Ad blocking is still active."
         const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
 
-        fun notifyFilteringUnavailable(context: Context) {
+        fun notifyFilteringUnavailable(context: Context) =
+            showDelayedToast(context, FILTERING_UNAVAILABLE_MESSAGE)
+
+        fun notifyOptionalFiltersDisabled(context: Context) =
+            showDelayedToast(context, OPTIONAL_FILTERS_DISABLED_MESSAGE)
+
+        private fun showDelayedToast(
+            context: Context,
+            message: String,
+        ) {
             Handler(Looper.getMainLooper()).postDelayed(
                 {
                     try {
-                        Toast
-                            .makeText(context, FILTERING_UNAVAILABLE_MESSAGE, Toast.LENGTH_LONG)
-                            .show()
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     } catch (_: Exception) {
                     }
                 },

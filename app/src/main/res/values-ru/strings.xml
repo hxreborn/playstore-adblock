@@ -33,6 +33,8 @@
     <string name="hide_payments_and_subscriptions_summary">Убирает пункт «Платежи и подписки» из меню аккаунта.</string>
     <string name="hide_pre_registration_games">Скрывать игры с предрегистрацией</string>
     <string name="hide_pre_registration_games_summary">Убирает раздел игр с предрегистрацией со вкладки «Игры».</string>
+    <string name="hide_search_promotions">Скрывать промоблоки в поиске</string>
+    <string name="hide_search_promotions_summary">Убирает свёрнутый промоблок (например, «События, ограниченные по времени») среди результатов поиска. Play Store не помечает его как рекламу.</string>
     <string name="hide_device_sync">Скрывать синхронизацию с устройствами</string>
     <string name="hide_device_sync_summary">Убирает «Синхронизация приложений с устройствами» со страницы управления.</string>
     <string name="hide_ratings_and_reviews">Скрывать оценки и отзывы</string>

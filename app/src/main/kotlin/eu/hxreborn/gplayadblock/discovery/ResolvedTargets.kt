@@ -16,6 +16,8 @@ sealed interface ResolvedTargets {
 
     data class ManageApps(
         val manageListClassName: String,
+        val playProtectRowClassNames: List<String> = emptyList(),
+        val veMetadataTypeField: FieldRef? = null,
     )
 
     data class PersistentNav(

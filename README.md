@@ -64,6 +64,21 @@ filter fails open and the original interface remains available rather than riski
 UI entries are matched by model shape, semantic roles, and product identifiers rather than translated
 labels, so the filters are not limited to English or Russian Play Store installations.
 
+**Hide promoted search shelves** removes the collapsed promotional shelf shown among search results
+(for example limited-time events). It is promotional placement, so it is hidden by default together with
+ads; Play Store does not label it as an ad, so it keeps its own switch for users who want to see it.
+
+Before trusting a new Play Store release, `python tools/check_play_store_apk.py base.apk --aapt2 <path>`
+checks that every DexKit anchor and every English UI label the filters rely on is still present. A
+label the module cannot find at runtime is also reported in the Xposed log. For a full DexKit
+resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`
+and run the unit tests with `-Dgplayadblock.playStoreApk=/path/to/base.apk`.
+
+The start tab is applied once when Play Store is opened from the launcher; tabs chosen afterwards are
+kept. If Play Store crashes repeatedly (three times within two minutes), the optional interface filters
+are skipped on the following launches while ad filtering stays active. Updating Play Store or the module,
+or using **Apply and restart Play Store**, re-enables them.
+
 The compatibility section contains two additional controls:
 
 - **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does

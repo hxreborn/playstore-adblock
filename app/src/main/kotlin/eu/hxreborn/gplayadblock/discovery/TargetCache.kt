@@ -267,10 +267,19 @@ object TargetCache {
     private fun encodeManageApps(value: ResolvedTargets.ManageApps): JSONObject =
         JSONObject()
             .put("manageListClassName", value.manageListClassName)
+            .put("playProtectRowClassNames", JSONArray(value.playProtectRowClassNames))
+            .putOpt("veMetadataTypeField", value.veMetadataTypeField?.let(::encodeField))
 
     private fun decodeManageApps(value: JSONObject): ResolvedTargets.ManageApps =
         ResolvedTargets.ManageApps(
             manageListClassName = value.getString("manageListClassName"),
+            playProtectRowClassNames =
+                value
+                    .optJSONArray("playProtectRowClassNames")
+                    ?.let { names ->
+                        List(names.length(), names::getString)
+                    }.orEmpty(),
+            veMetadataTypeField = value.optJSONObject("veMetadataTypeField")?.let(::decodeField),
         )
 
     private fun encodePersistentNav(value: ResolvedTargets.PersistentNav): JSONObject =

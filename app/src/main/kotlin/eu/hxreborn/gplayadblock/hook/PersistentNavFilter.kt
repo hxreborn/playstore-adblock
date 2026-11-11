@@ -16,7 +16,9 @@ import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 object PersistentNavFilter {
     fun install(
@@ -26,24 +28,52 @@ object PersistentNavFilter {
         preferences: FilterPreferences,
         targets: ResolvedTargets.PersistentNav,
     ) {
-        val externalNavigationDeadline = AtomicLong(0L)
-        installLaunchTracking(module, application, classLoader, externalNavigationDeadline)
-
         val constructor = targets.navConstructor.resolve(classLoader)
         val itemTypeField = targets.navItemTypeField.resolve(classLoader)
         val primaryCallbackField = targets.navPrimaryCallbackField.resolve(classLoader)
         val secondaryCallbackField = targets.navSecondaryCallbackField.resolve(classLoader)
         val actionConstructor = targets.navActionConstructor.resolve(classLoader)
         val callbackMethod = targets.navCallbackMethod.resolve(classLoader)
-        val navHidden = targets.navHiddenInstanceField?.resolve(classLoader)?.get(null)
         val callbackClass = callbackMethod.declaringClass
+
+        // Arguments are rewritten by position, so refuse any shape other than the verified one
+        // instead of handing the original constructor arguments of the wrong type.
+        val parameterTypes = constructor.parameterTypes
+        require(parameterTypes.size == CONSTRUCTOR_PARAMETER_COUNT) {
+            "nav constructor parameters=${parameterTypes.size}"
+        }
+        require(List::class.java.isAssignableFrom(parameterTypes[ITEMS_ARG])) {
+            "nav items parameter is ${parameterTypes[ITEMS_ARG].name}"
+        }
+        require(parameterTypes[SELECTED_ARG] == Int::class.javaPrimitiveType) {
+            "nav selected parameter is ${parameterTypes[SELECTED_ARG].name}"
+        }
+        require(parameterTypes[ACTION_ARG].isAssignableFrom(actionConstructor.declaringClass)) {
+            "nav action parameter is ${parameterTypes[ACTION_ARG].name}"
+        }
+        require(callbackClass.isInterface) { "nav callback ${callbackClass.name} is no interface" }
+        val navHidden =
+            targets.navHiddenInstanceField
+                ?.resolve(classLoader)
+                ?.get(null)
+                ?.takeIf { hidden ->
+                    parameterTypes[VISIBILITY_ARG].isInstance(hidden).also { compatible ->
+                        if (!compatible) Logger.warn("nav hidden state type mismatch, ignored")
+                    }
+                }
+
+        installLaunchTracking(module, application, classLoader) {
+            runPendingRecovery(callbackMethod)
+        }
 
         module
             .hook(constructor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
-                val original = chain.getArg(0) as? List<*> ?: return@intercept chain.proceed()
-                val selected = chain.getArg(1) as Int
+                val original =
+                    chain.getArg(ITEMS_ARG) as? List<*> ?: return@intercept chain.proceed()
+                val selected = chain.getArg(SELECTED_ARG) as Int
+                lastSelectedIndex.set(selected)
                 val indexed: List<IndexedValue<Any>> =
                     original.mapIndexedNotNull { index, item ->
                         val value = item ?: return@mapIndexedNotNull null
@@ -58,63 +88,31 @@ object PersistentNavFilter {
                     }
                 if (retained.isEmpty()) return@intercept chain.proceed()
 
-                val originalAction = chain.getArg(5)
+                val originalAction = chain.getArg(ACTION_ARG)
                 val originalCallback = primaryCallbackField.get(originalAction)
                 val originalIndices = retained.map { it.index }
-                val isExternalNavigation =
-                    SystemClock.elapsedRealtime() < externalNavigationDeadline.get()
-                val configuredType =
-                    if (isExternalNavigation) {
-                        FilterPreferences.START_TAB_UNCHANGED
-                    } else {
-                        preferences.startTab()
-                    }
-                val configuredPosition =
-                    retained.indexOfFirst { item ->
-                        itemTypeField.get(item.value)?.toString() == configuredType
-                    }
-                val currentPosition = originalIndices.indexOf(selected)
-                val recoveryPosition =
-                    preferences
-                        .startTab()
-                        .let { preferredType ->
-                            retained.indexOfFirst { item ->
-                                itemTypeField.get(item.value)?.toString() == preferredType
-                            }
-                        }.takeIf { it >= 0 }
-                        ?: currentPosition.takeIf { it >= 0 }
-                        ?: 0
-                val externalRecoveryTargetIndex =
-                    if (isExternalNavigation) retained[recoveryPosition].index else null
-                val selectedNew =
-                    when {
-                        configuredType != FilterPreferences.START_TAB_UNCHANGED &&
-                            configuredPosition >= 0 -> configuredPosition
+                val retainedTypes =
+                    retained.map { item -> itemTypeField.get(item.value)?.toString() }
+                val now = SystemClock.elapsedRealtime()
+                val isExternalNavigation = now < externalNavigationDeadline.get()
+                val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
+                val externalRecoveryRequested =
+                    isExternalNavigation && externalRecoveryPending.compareAndSet(true, false)
+                val plan =
+                    NavSelectionPlanner.plan(
+                        retainedTypes = retainedTypes,
+                        retainedIndices = originalIndices,
+                        selected = selected,
+                        startTab = preferences.startTab(),
+                        applyStartTab = applyStartTab,
+                        isExternalNavigation = isExternalNavigation,
+                        externalRecoveryRequested = externalRecoveryRequested,
+                    )
+                if (plan.consumesStartTab) {
+                    startTabDeadline.set(0L)
+                    Logger.debug { "start tab applied" }
+                }
 
-                        currentPosition >= 0 -> currentPosition
-
-                        else -> 0
-                    }
-                val targetIndex =
-                    when {
-                        isExternalNavigation -> {
-                            null
-                        }
-
-                        configuredType != FilterPreferences.START_TAB_UNCHANGED &&
-                            configuredPosition >= 0 &&
-                            retained[configuredPosition].index != selected -> {
-                            retained[configuredPosition].index
-                        }
-
-                        currentPosition < 0 -> {
-                            originalIndices.first()
-                        }
-
-                        else -> {
-                            null
-                        }
-                    }
                 val filteredCallback =
                     Proxy.newProxyInstance(
                         classLoader,
@@ -158,49 +156,39 @@ object PersistentNavFilter {
                     )
 
                 val arguments = chain.args.toTypedArray()
-                arguments[0] = retained.map { it.value }
-                arguments[1] = selectedNew
-                val selectedType =
-                    retained
-                        .getOrNull(selectedNew)
-                        ?.value
-                        ?.let(itemTypeField::get)
-                        ?.toString()
+                arguments[ITEMS_ARG] = retained.map { it.value }
+                arguments[SELECTED_ARG] = plan.selectedPosition
+                val selectedType = retainedTypes.getOrNull(plan.selectedPosition)
                 minimalSearchRootVisible =
                     preferences.minimalSearchHome() &&
                     navHidden != null &&
                     selectedType == FilterPreferences.START_TAB_SEARCH &&
-                    chain.getArg(3)?.toString()?.startsWith("NavShown") == true
-                if (preferences.minimalSearchHome() && navHidden != null) {
-                    arguments[3] = navHidden
+                    chain.getArg(VISIBILITY_ARG)?.toString()?.startsWith("NavShown") == true
+                // Hiding the bar is only safe once a single tab remains; otherwise the user
+                // would lose the only way to reach the other visible tabs.
+                if (preferences.minimalSearchHome() && navHidden != null && retained.size == 1) {
+                    arguments[VISIBILITY_ARG] = navHidden
                 }
-                arguments[5] = filteredAction
+                arguments[ACTION_ARG] = filteredAction
                 val result = chain.proceed(arguments)
 
-                if (targetIndex != null && navigationInFlight.compareAndSet(false, true)) {
+                val navigateToIndex = plan.navigateToIndex
+                if (navigateToIndex != null && navigationInFlight.compareAndSet(false, true)) {
                     try {
                         navigateBeforeReturning {
-                            callbackMethod.invoke(originalCallback, targetIndex)
+                            callbackMethod.invoke(originalCallback, navigateToIndex)
                         }
                     } finally {
                         navigationInFlight.set(false)
                     }
                 }
-                if (
-                    externalRecoveryTargetIndex != null &&
-                    externalRecoveryScheduled.compareAndSet(false, true)
-                ) {
-                    Handler(Looper.getMainLooper()).postDelayed(
-                        {
-                            runCatching {
-                                callbackMethod.invoke(originalCallback, externalRecoveryTargetIndex)
-                            }.onFailure { error ->
-                                Logger.warn("external navigation recovery failed", error)
-                            }
-                            externalRecoveryScheduled.set(false)
-                        },
-                        EXTERNAL_NAVIGATION_GRACE_MILLIS,
-                    )
+                latestCallback.set(originalCallback)
+                // Switching tabs while the details sheet opened by the link is showing
+                // dismisses it, so the switch waits until the sheet is closed and the main
+                // activity is resumed again (see installLaunchTracking).
+                plan.externalRecoveryIndex?.let { index ->
+                    pendingRecoveryIndex.set(index)
+                    Logger.debug { "external recovery pending index=$index" }
                 }
                 if (retained.size != original.size) {
                     Logger.debug { "persistent nav tabs=${original.size}->${retained.size}" }
@@ -209,19 +197,38 @@ object PersistentNavFilter {
             }
     }
 
+    private fun runPendingRecovery(callbackMethod: java.lang.reflect.Method) {
+        val index = pendingRecoveryIndex.getAndSet(NO_RECOVERY)
+        if (index == NO_RECOVERY) return
+        // Re-selecting the tab that is already current pops it to its root, so skip it.
+        if (lastSelectedIndex.get() == index) {
+            Logger.debug { "external recovery skipped, tab already selected" }
+            return
+        }
+        val callback = latestCallback.get() ?: return
+        runCatching {
+            Logger.debug { "external recovery index=$index" }
+            callbackMethod.invoke(callback, index)
+        }.onFailure { error -> Logger.warn("external navigation recovery failed", error) }
+    }
+
     private fun installLaunchTracking(
         module: XposedModule,
         application: Application,
         classLoader: ClassLoader,
-        externalNavigationDeadline: AtomicLong,
+        onMainResumedAfterOverlay: () -> Unit,
     ) {
+        val mainActivityClass = classLoader.loadClass(MAIN_ACTIVITY_CLASS)
+        val mainHandler = Handler(Looper.getMainLooper())
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityPreCreated(
                     activity: Activity,
                     savedInstanceState: Bundle?,
                 ) {
-                    updateLaunchState(externalNavigationDeadline, activity.intent)
+                    // A recreated activity (rotation, process restore) is not a new launch.
+                    if (savedInstanceState != null) return
+                    updateLaunchState(activity.intent, newTask = true)
                 }
 
                 override fun onActivityCreated(
@@ -231,7 +238,16 @@ object PersistentNavFilter {
 
                 override fun onActivityStarted(activity: Activity) = Unit
 
-                override fun onActivityResumed(activity: Activity) = Unit
+                override fun onActivityResumed(activity: Activity) {
+                    if (!mainActivityClass.isInstance(activity)) {
+                        // An overlay such as the details sheet opened by an external link.
+                        overlaySeenSinceExternal.set(true)
+                        return
+                    }
+                    if (overlaySeenSinceExternal.getAndSet(false)) {
+                        mainHandler.postAtFrontOfQueue(onMainResumedAfterOverlay)
+                    }
+                }
 
                 override fun onActivityPaused(activity: Activity) = Unit
 
@@ -258,29 +274,35 @@ object PersistentNavFilter {
                     .hook(method)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
-                        updateLaunchState(
-                            externalNavigationDeadline,
-                            chain.getArg(0) as? Intent,
-                        )
+                        updateLaunchState(chain.getArg(0) as? Intent, newTask = false)
                         chain.proceed()
                     }
             }
     }
 
     private fun updateLaunchState(
-        externalNavigationDeadline: AtomicLong,
         intent: Intent?,
+        newTask: Boolean,
     ) {
+        val now = SystemClock.elapsedRealtime()
         when {
             intent?.action == Intent.ACTION_VIEW || intent?.data != null -> {
-                externalNavigationDeadline.set(
-                    SystemClock.elapsedRealtime() + EXTERNAL_NAVIGATION_GRACE_MILLIS,
-                )
+                externalNavigationDeadline.set(now + EXTERNAL_NAVIGATION_GRACE_MILLIS)
+                externalRecoveryPending.set(true)
+                pendingRecoveryIndex.set(NO_RECOVERY)
+                overlaySeenSinceExternal.set(false)
+                startTabDeadline.set(0L)
                 Logger.debug { "external navigation detected" }
             }
 
             intent?.action == Intent.ACTION_MAIN -> {
                 externalNavigationDeadline.set(0L)
+                externalRecoveryPending.set(false)
+                pendingRecoveryIndex.set(NO_RECOVERY)
+                overlaySeenSinceExternal.set(false)
+                // The start tab is a launch preference: apply it once for a fresh launcher
+                // launch, never again while the user moves between tabs.
+                if (newTask) startTabDeadline.set(now + START_TAB_WINDOW_MILLIS)
                 Logger.debug { "launcher navigation detected" }
             }
         }
@@ -317,12 +339,25 @@ object PersistentNavFilter {
     }
 
     private val navigationInFlight = AtomicBoolean(false)
-    private val externalRecoveryScheduled = AtomicBoolean(false)
+    private val externalNavigationDeadline = AtomicLong(0L)
+    private val externalRecoveryPending = AtomicBoolean(false)
+    private val pendingRecoveryIndex = AtomicInteger(NO_RECOVERY)
+    private val overlaySeenSinceExternal = AtomicBoolean(false)
+    private val latestCallback = AtomicReference<Any?>(null)
+    private val lastSelectedIndex = AtomicInteger(-1)
+    private val startTabDeadline = AtomicLong(0L)
 
     @Volatile
     internal var minimalSearchRootVisible = false
         private set
+    private const val NO_RECOVERY = Int.MIN_VALUE
+    private const val CONSTRUCTOR_PARAMETER_COUNT = 6
+    private const val ITEMS_ARG = 0
+    private const val SELECTED_ARG = 1
+    private const val VISIBILITY_ARG = 3
+    private const val ACTION_ARG = 5
     private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
     private const val EXTERNAL_NAVIGATION_GRACE_MILLIS = 2_000L
+    private const val START_TAB_WINDOW_MILLIS = 10_000L
     private const val MAIN_ACTIVITY_CLASS = "com.google.android.finsky.activities.MainActivity"
 }

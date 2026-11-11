@@ -1,11 +1,11 @@
 package eu.hxreborn.gplayadblock.hook
 
 import android.content.Context
-import android.view.View
 import eu.hxreborn.gplayadblock.FilterPreferences
 import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ConstructorRef
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
+import eu.hxreborn.gplayadblock.hook.UiEntryMatcher.AccountAction
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
@@ -69,58 +69,28 @@ object AccountMenuFilter {
                 }.apply {
                     isAccessible = true
                 }
-        val listenerField =
+        // CustomActionSpec carries exactly one String: the displayed label.
+        val labelField =
             itemClass.declaredFields
-                .singleOrNull { field ->
-                    !Modifier.isStatic(field.modifiers) &&
-                        View.OnClickListener::class.java.isAssignableFrom(field.type)
-                }?.apply { isAccessible = true }
-        val roleByDiscriminator = ConcurrentHashMap<Int, AccountActionRole>()
-
-        fun discriminatorOf(item: Any): Int? {
-            val listener =
-                listenerField?.let { field -> runCatching { field.get(item) }.getOrNull() }
-                    ?: return null
-            val discriminatorField =
-                listener.javaClass.declaredFields.singleOrNull { field ->
-                    !Modifier.isStatic(field.modifiers) &&
-                        field.type == Int::class.javaPrimitiveType
-                } ?: return null
-            discriminatorField.isAccessible = true
-            return runCatching { discriminatorField.getInt(listener) }.getOrNull()
-        }
+                .single { field ->
+                    !Modifier.isStatic(field.modifiers) && field.type == String::class.java
+                }.apply { isAccessible = true }
+        val labels = LocalizedLabels.of(context)
 
         module
             .hook(actionsAccessor)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { chain ->
                 val original = chain.proceed() as? List<*> ?: return@intercept null
-                val actions = original.filterNotNull().filter(itemClass::isInstance)
-                val discriminators = actions.map(::discriminatorOf)
-                val matchesKnownLayout =
-                    actions.size == AccountActionRole.entries.size &&
-                        actions.size == original.size &&
-                        discriminators.none { it == null } &&
-                        discriminators.filterNotNull().distinct().size == actions.size
-                val currentRoles =
-                    if (matchesKnownLayout) {
-                        actions.zip(AccountActionRole.entries).toMap().also { roles ->
-                            roles.forEach { (item, role) ->
-                                discriminatorOf(item)?.let { discriminator ->
-                                    roleByDiscriminator.putIfAbsent(discriminator, role)
-                                }
-                            }
-                        }
-                    } else {
-                        emptyMap()
-                    }
+                if (AccountAction.entries.none { action -> shouldHide(action, preferences) }) {
+                    return@intercept original
+                }
                 val retained =
                     original.filterNot { item ->
                         if (item == null || !itemClass.isInstance(item)) return@filterNot false
-                        val role =
-                            discriminatorOf(item)?.let(roleByDiscriminator::get)
-                                ?: currentRoles[item]
-                        role != null && shouldHide(role, preferences)
+                        val label = runCatching { labelField.get(item) as? String }.getOrNull()
+                        val action = UiEntryMatcher.accountAction(label, labels::localized)
+                        action != null && shouldHide(action, preferences)
                     }
                 if (retained.size == original.size) {
                     original
@@ -201,35 +171,35 @@ object AccountMenuFilter {
     }
 
     private fun shouldHide(
-        role: AccountActionRole,
+        action: AccountAction,
         preferences: FilterPreferences,
     ): Boolean =
-        when (role) {
-            AccountActionRole.MANAGE_APPS -> {
+        when (action) {
+            AccountAction.MANAGE_APPS -> {
                 false
             }
 
-            AccountActionRole.NOTIFICATIONS -> {
+            AccountAction.NOTIFICATIONS -> {
                 preferences.hideNotifications()
             }
 
-            AccountActionRole.PAYMENTS_AND_SUBSCRIPTIONS -> {
+            AccountAction.PAYMENTS_AND_SUBSCRIPTIONS -> {
                 preferences.hidePaymentsAndSubscriptions()
             }
 
-            AccountActionRole.PLAY_PROTECT -> {
+            AccountAction.PLAY_PROTECT -> {
                 preferences.hidePlayProtect()
             }
 
-            AccountActionRole.EXPERIMENTAL_FEATURES -> {
+            AccountAction.EXPERIMENTAL_FEATURES -> {
                 preferences.hideExperimentalFeatures()
             }
 
-            AccountActionRole.LIBRARY -> {
+            AccountAction.LIBRARY -> {
                 preferences.hideLibrary()
             }
 
-            AccountActionRole.PLAY_PASS -> {
+            AccountAction.PLAY_PASS -> {
                 preferences.hidePlayPass()
             }
         }
@@ -367,16 +337,6 @@ object AccountMenuFilter {
                 Logger.debug { "notification badge suppressed" }
                 chain.proceed(arguments)
             }
-    }
-
-    private enum class AccountActionRole {
-        MANAGE_APPS,
-        NOTIFICATIONS,
-        PAYMENTS_AND_SUBSCRIPTIONS,
-        PLAY_PROTECT,
-        EXPERIMENTAL_FEATURES,
-        LIBRARY,
-        PLAY_PASS,
     }
 
     private val COMMON_ACTION_ROLES = setOf("PRIVACY_ADVISOR", "HELP_AND_FEEDBACK")

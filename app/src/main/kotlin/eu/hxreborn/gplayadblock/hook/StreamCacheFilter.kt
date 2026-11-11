@@ -30,6 +30,7 @@ object StreamCacheFilter {
                 targets,
                 preferences::hideLiveOps,
                 preferences::hidePreRegistrationGames,
+                preferences::hideSearchPromotions,
             )
         val editor = ProtoEditor.from(classLoader, targets)
         val interceptor =

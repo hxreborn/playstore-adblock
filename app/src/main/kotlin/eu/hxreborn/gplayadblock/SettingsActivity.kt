@@ -57,6 +57,13 @@ class SettingsActivity : Activity() {
                     FilterPreferences.KEY_HIDE_PRE_REGISTRATION_GAMES,
                     preferences,
                 )
+                addFilter(
+                    R.string.hide_search_promotions,
+                    R.string.hide_search_promotions_summary,
+                    FilterPreferences.KEY_HIDE_SEARCH_PROMOTIONS,
+                    preferences,
+                    defaultValue = FilterPreferences.DEFAULT_HIDE_SEARCH_PROMOTIONS,
+                )
 
                 addHeader(R.string.category_account_menu)
                 addFilter(
@@ -208,7 +215,8 @@ class SettingsActivity : Activity() {
         summary: Int,
         key: String,
         preferences: SharedPreferences,
-    ) = addSwitch(title, summary, key, preferences.getBoolean(key, false))
+        defaultValue: Boolean = false,
+    ) = addSwitch(title, summary, key, preferences.getBoolean(key, defaultValue))
 
     @Suppress("DEPRECATION")
     private fun LinearLayout.addSwitch(

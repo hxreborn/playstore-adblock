@@ -47,6 +47,13 @@ class PresentationClassifierTest {
     private fun classifier(
         hideLiveOps: Boolean = false,
         hidePreRegistrationGames: Boolean = false,
+        hideSearchPromotions: Boolean = false,
+    ) = classifier({ hideLiveOps }, { hidePreRegistrationGames }, { hideSearchPromotions })
+
+    private fun classifier(
+        hideLiveOps: () -> Boolean,
+        hidePreRegistrationGames: () -> Boolean,
+        hideSearchPromotions: () -> Boolean,
     ) = PresentationClassifier(
         presentationKindField = field<Presentation>("kind"),
         presentationPayloadField = field<Presentation>("payload"),
@@ -64,8 +71,9 @@ class PresentationClassifierTest {
                 AppCard::class.java to listOf(field<AppCard>("itemAdInfo")),
             ),
         adPresenceField = field<AdMetadata>("bitField"),
-        hideLiveOps = { hideLiveOps },
-        hidePreRegistrationGames = { hidePreRegistrationGames },
+        hideLiveOps = hideLiveOps,
+        hidePreRegistrationGames = hidePreRegistrationGames,
+        hideSearchPromotions = hideSearchPromotions,
     )
 
     private val classifier = classifier()
@@ -180,7 +188,7 @@ class PresentationClassifierTest {
     }
 
     @Test
-    fun `a collapsed search quality promotion is always removed`() {
+    fun `a collapsed search quality promotion is optional promotional content`() {
         val presentation =
             cluster(
                 case = 67,
@@ -191,7 +199,62 @@ class PresentationClassifierTest {
             PresentationClassifier.GENERIC_SEARCH_QUALITY_PROMOTION,
             classifier.classify(presentation),
         )
-        assertTrue(classifier.isAd(classifier.classify(presentation)))
+        assertFalse(classifier.isAd(classifier.classify(presentation)))
+        val enabledClassifier = classifier(hideSearchPromotions = true)
+        assertTrue(enabledClassifier.isAd(enabledClassifier.classify(presentation)))
+    }
+
+    @Test
+    fun `optional categories follow preference changes after classification is cached`() {
+        var hidePreRegistration = false
+        val liveClassifier =
+            classifier(
+                hideLiveOps = { false },
+                hidePreRegistrationGames = { hidePreRegistration },
+                hideSearchPromotions = { false },
+            )
+        val presentation =
+            cluster(
+                case = GENERIC_CLUSTER_CASE,
+                serverLogs = "promotion_3000000d51_pre_registration_games",
+            )
+
+        assertFalse(liveClassifier.isAd(liveClassifier.classify(presentation)))
+        hidePreRegistration = true
+        assertTrue(liveClassifier.isAd(liveClassifier.classify(presentation)))
+        hidePreRegistration = false
+        assertFalse(liveClassifier.isAd(liveClassifier.classify(presentation)))
+    }
+
+    @Test
+    fun `a sponsored cluster stays an ad whatever optional markers it carries`() {
+        val presentation =
+            cluster(
+                case = GENERIC_CLUSTER_CASE,
+                serverLogs = "pre_registration_games_ads_slot_1",
+            )
+        for (enabled in listOf(false, true)) {
+            val candidate = classifier(hidePreRegistrationGames = enabled)
+            assertEquals(
+                PresentationClassifier.GENERIC_AD_CLUSTER,
+                candidate.classify(presentation),
+            )
+            assertTrue(candidate.isAd(candidate.classify(presentation)))
+        }
+    }
+
+    @Test
+    fun `an optional marker inside the cluster payload is detected`() {
+        val presentation =
+            cluster(
+                case = GENERIC_CLUSTER_CASE,
+                payload = "x_pre_registration_games_y".toByteArray(),
+            )
+        val enabledClassifier = classifier(hidePreRegistrationGames = true)
+        assertEquals(
+            PresentationClassifier.GENERIC_PRE_REGISTRATION_CLUSTER,
+            enabledClassifier.classify(presentation),
+        )
     }
 
     @Test

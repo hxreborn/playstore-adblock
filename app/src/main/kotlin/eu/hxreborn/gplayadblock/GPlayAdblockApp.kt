@@ -64,6 +64,12 @@ class GPlayAdblockApp :
                 FilterPreferences.KEY_HIDE_PRE_REGISTRATION_GAMES,
                 local.getBoolean(FilterPreferences.KEY_HIDE_PRE_REGISTRATION_GAMES, false),
             ).putBoolean(
+                FilterPreferences.KEY_HIDE_SEARCH_PROMOTIONS,
+                local.getBoolean(
+                    FilterPreferences.KEY_HIDE_SEARCH_PROMOTIONS,
+                    FilterPreferences.DEFAULT_HIDE_SEARCH_PROMOTIONS,
+                ),
+            ).putBoolean(
                 FilterPreferences.KEY_HIDE_DEVICE_SYNC,
                 local.getBoolean(FilterPreferences.KEY_HIDE_DEVICE_SYNC, false),
             ).putBoolean(

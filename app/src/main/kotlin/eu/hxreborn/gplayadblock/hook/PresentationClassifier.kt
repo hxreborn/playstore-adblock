@@ -27,6 +27,7 @@ class PresentationClassifier(
     private val adPresenceField: Field,
     private val hideLiveOps: () -> Boolean = { false },
     private val hidePreRegistrationGames: () -> Boolean = { false },
+    private val hideSearchPromotions: () -> Boolean = { false },
 ) {
     private val cases = Collections.synchronizedMap(WeakHashMap<Any, Int>())
 
@@ -47,7 +48,7 @@ class PresentationClassifier(
             case == GENERIC_AD_CARD ||
             case == GENERIC_AD_CLUSTER ||
             case == GENERIC_AD_DISCLOSURE_CLUSTER ||
-            case == GENERIC_SEARCH_QUALITY_PROMOTION ||
+            (case == GENERIC_SEARCH_QUALITY_PROMOTION && hideSearchPromotions()) ||
             (case == GENERIC_PROMOTIONAL_CARD && hideLiveOps()) ||
             (case == GENERIC_PRE_REGISTRATION_CLUSTER && hidePreRegistrationGames())
 
@@ -143,17 +144,12 @@ class PresentationClassifier(
         val payload = presentationPayloadField.get(presentation)
         if (payload == null || !clusterCaseField.declaringClass.isInstance(payload)) return 0
         val case = clusterCaseField.getInt(payload)
+        // Results are cached per presentation, so classification must not depend on user
+        // preferences: sponsored checks run first, optional categories are always detected,
+        // and isAd() applies the live preference values.
         return when {
             case in AD_CLUSTER_CASES -> {
                 case
-            }
-
-            hasMarker(payload, SEARCH_QUALITY_PROMOTION_MARKER) -> {
-                GENERIC_SEARCH_QUALITY_PROMOTION
-            }
-
-            hidePreRegistrationGames() && hasPreRegistrationMarker(payload) -> {
-                GENERIC_PRE_REGISTRATION_CLUSTER
             }
 
             hasAdSlotMetadata(payload) -> {
@@ -169,32 +165,44 @@ class PresentationClassifier(
             }
 
             else -> {
-                case
+                optionalClusterCase(payload) ?: case
             }
         }
     }
 
-    private fun hasPreRegistrationMarker(cluster: Any): Boolean =
-        hasMarker(cluster, PRE_REGISTRATION_GAMES_MARKER)
-
-    private fun hasMarker(
-        cluster: Any,
-        marker: ByteArray,
-    ): Boolean {
-        val serverLogs = clusterServerLogsField.get(cluster)
+    private fun optionalClusterCase(cluster: Any): Int? {
         val serverLogBytes =
-            serverLogs?.let { value ->
+            clusterServerLogsField.get(cluster)?.let { value ->
                 byteStringToByteArrayMethod.invoke(value) as? ByteArray
             }
-        if (serverLogBytes?.containsSubsequence(marker) == true) return true
+        optionalMarkerCase(serverLogBytes)?.let { return it }
 
-        val candidates = listOfNotNull(clusterPayloadField.get(cluster), cluster)
-        return candidates.any { candidate ->
-            protobufToByteArrayMethod.declaringClass.isInstance(candidate) &&
-                (protobufToByteArrayMethod.invoke(candidate) as? ByteArray)
-                    ?.containsSubsequence(marker) == true
-        }
+        // A serialized cluster message already contains its payload, so serialize only once.
+        val serialized =
+            listOfNotNull(cluster, clusterPayloadField.get(cluster))
+                .firstOrNull(protobufToByteArrayMethod.declaringClass::isInstance)
+                ?.let { message -> protobufToByteArrayMethod.invoke(message) as? ByteArray }
+        return optionalMarkerCase(serialized)
     }
+
+    private fun optionalMarkerCase(bytes: ByteArray?): Int? =
+        when {
+            bytes == null -> {
+                null
+            }
+
+            bytes.containsSubsequence(SEARCH_QUALITY_PROMOTION_MARKER) -> {
+                GENERIC_SEARCH_QUALITY_PROMOTION
+            }
+
+            bytes.containsSubsequence(PRE_REGISTRATION_GAMES_MARKER) -> {
+                GENERIC_PRE_REGISTRATION_CLUSTER
+            }
+
+            else -> {
+                null
+            }
+        }
 
     private fun hasAdDisclosureMetadata(cluster: Any): Boolean {
         val genericPayload = clusterPayloadField.get(cluster) ?: return false
@@ -283,6 +291,7 @@ class PresentationClassifier(
             targets: ResolvedTargets.Resolved,
             hideLiveOps: () -> Boolean = { false },
             hidePreRegistrationGames: () -> Boolean = { false },
+            hideSearchPromotions: () -> Boolean = { false },
         ): PresentationClassifier =
             PresentationClassifier(
                 presentationKindField = targets.presentationKindField.resolve(classLoader),
@@ -302,6 +311,7 @@ class PresentationClassifier(
                 adPresenceField = targets.adPresenceField.resolve(classLoader),
                 hideLiveOps = hideLiveOps,
                 hidePreRegistrationGames = hidePreRegistrationGames,
+                hideSearchPromotions = hideSearchPromotions,
             )
 
         val AD_CLUSTER_CASES = setOf(69, 85, 86, 224)

@@ -52,6 +52,8 @@ object DexKitResolver {
             "HOME_UI_MODEL_RECEIVED",
         )
     private const val MANAGE_LIST_ANCHOR = "VerticalScrollerUiModelContent(itemList="
+    private const val PROTECT_SECTION_ANCHOR = "ProtectSectionStateFlowProvider"
+    private const val VE_METADATA_ANCHOR = "VeMetadata(uiElementType="
     private const val NAV_CONTENT_ANCHOR = "PersistentNavDataUiContent(items="
     private const val NAV_ITEM_ANCHOR = "PersistentNavItem(title="
     private const val NAV_ACTION_ANCHOR = "PersistentNavUiAction(onPersistentNavItemClicked="
@@ -69,6 +71,7 @@ object DexKitResolver {
     private const val AUTO_UPDATE_ANCHOR =
         "UChk: document %s is not qualified for auto update v2"
     private val navTypeAnchors = listOf("APPS", "GAMES", "BOOKS", "YOU")
+    private const val NAV_CONSTRUCTOR_PARAM_COUNT = 6
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -640,7 +643,9 @@ object DexKitResolver {
                 is Resolution.Failure -> return missing(protobufResult.reason)
             }
         val suggestionResult =
-            resolveSuggestions(bridge, adMetadataClass, adPresenceField)
+            optional("search suggestions") {
+                resolveSuggestions(bridge, adMetadataClass, adPresenceField)
+            }
         val suggestion =
             when (suggestionResult) {
                 is Resolution.Success -> {
@@ -656,12 +661,16 @@ object DexKitResolver {
                     null
                 }
             }
+        // Optional targets must never turn a successful core resolution into Missing:
+        // any unexpected DexKit/runtime error is reported as an ordinary optional failure.
         val spotlightResult =
-            resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
-        val manageAppsResult = resolveManageApps(bridge)
-        val persistentNavResult = resolvePersistentNav(bridge)
-        val accountMenuResult = resolveAccountMenu(bridge)
-        val selfUpdateResult = resolveSelfUpdate(bridge)
+            optional("spotlight") {
+                resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
+            }
+        val manageAppsResult = optional("manage apps") { resolveManageApps(bridge) }
+        val persistentNavResult = optional("persistent nav") { resolvePersistentNav(bridge) }
+        val accountMenuResult = optional("account menu") { resolveAccountMenu(bridge) }
+        val selfUpdateResult = optional("self-update") { resolveSelfUpdate(bridge) }
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -838,9 +847,58 @@ object DexKitResolver {
         return Resolution.Success(
             ResolvedTargets.ManageApps(
                 manageListClassName = manageClass.name,
+                playProtectRowClassNames = resolvePlayProtectRows(bridge),
+                veMetadataTypeField = resolveVeMetadataType(bridge)?.toRef(),
             ),
         )
     }
+
+    /**
+     * Row models created by the Play Protect section provider of the Manage overview. They are
+     * single-state wrappers built directly by the class that logs under the provider's tag.
+     */
+    private fun resolvePlayProtectRows(bridge: DexKitBridge): List<String> =
+        runCatching {
+            val provider =
+                bridge
+                    .findClass { matcher { usingStrings = listOf(PROTECT_SECTION_ANCHOR) } }
+                    .singleOrNull() ?: return@runCatching emptyList()
+            provider.methods
+                .asSequence()
+                .flatMap { method -> method.invokes.asSequence() }
+                .filter { method ->
+                    method.isConstructor &&
+                        method.paramCount == 1 &&
+                        !method.declaredClassName.startsWith("java.") &&
+                        !method.declaredClassName.startsWith("kotlin.")
+                }.mapNotNull(MethodData::declaredClass)
+                .filter { row ->
+                    // A row wraps one UI state; plain text wrappers are not rows.
+                    row.fields
+                        .filter { field -> !field.isStatic }
+                        .singleOrNull()
+                        ?.typeName
+                        .let { type -> type != null && !type.startsWith("java.") }
+                }.map(ClassData::name)
+                .distinct()
+                .toList()
+        }.getOrDefault(emptyList())
+
+    /** The visual element type of Play Store's VeMetadata(uiElementType=...) logging model. */
+    private fun resolveVeMetadataType(bridge: DexKitBridge): FieldData? =
+        runCatching {
+            when (val result = findAnchoredClass(bridge, VE_METADATA_ANCHOR)) {
+                is Resolution.Success -> {
+                    result.value.fields.singleOrNull { field ->
+                        !field.isStatic && field.typeName == "int"
+                    }
+                }
+
+                is Resolution.Failure -> {
+                    null
+                }
+            }
+        }.getOrNull()
 
     private fun resolvePersistentNav(
         bridge: DexKitBridge,
@@ -887,6 +945,10 @@ object DexKitResolver {
         val callbackClass =
             bridge.getClassData(callbackClassName)
                 ?: return fail("nav callback class missing")
+        // The filter wraps the callback in a java.lang.reflect.Proxy, which needs an interface.
+        if (!Modifier.isInterface(callbackClass.modifiers)) {
+            return fail("nav callback type is not an interface")
+        }
         val callbackMethods =
             callbackClass.methods.filter { method ->
                 !method.isConstructor &&
@@ -907,9 +969,14 @@ object DexKitResolver {
                 ?: return fail("nav action constructors=${actionConstructors.size}")
         val navConstructors =
             navClass.methods.filter { method ->
+                // PersistentNavFilter rewrites arguments by position: items (0), selected
+                // index (1), visibility (3) and action (5). Require exactly that shape.
                 method.isConstructor &&
-                    method.paramTypeNames.firstOrNull() == "java.util.List" &&
-                    method.paramTypeNames.lastOrNull() == navActionClass.name
+                    method.paramTypeNames.size == NAV_CONSTRUCTOR_PARAM_COUNT &&
+                    method.paramTypeNames[0] == "java.util.List" &&
+                    method.paramTypeNames[1] == "int" &&
+                    method.paramTypeNames[3] !in primitiveTypes &&
+                    method.paramTypeNames[5] == navActionClass.name
             }
         val navConstructor =
             navConstructors.singleOrNull()
@@ -1491,6 +1558,16 @@ object DexKitResolver {
     }
 
     private fun fail(reason: String): Resolution<Nothing> = Resolution.Failure(reason)
+
+    private inline fun <T> optional(
+        name: String,
+        block: () -> Resolution<T>,
+    ): Resolution<T> =
+        try {
+            block()
+        } catch (exception: Exception) {
+            fail("$name resolution threw ${exception.javaClass.simpleName}: ${exception.message}")
+        }
 
     private sealed interface Resolution<out T> {
         data class Success<T>(

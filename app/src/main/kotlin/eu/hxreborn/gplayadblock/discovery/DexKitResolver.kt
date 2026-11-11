@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock.discovery
 
 import org.luckypray.dexkit.DexKitBridge
+import org.luckypray.dexkit.query.enums.StringMatchType
 import org.luckypray.dexkit.result.ClassData
 import org.luckypray.dexkit.result.FieldData
 import org.luckypray.dexkit.result.MethodData
@@ -50,6 +51,31 @@ object DexKitResolver {
             "https://play.google.com/store/apps",
             "HOME_UI_MODEL_RECEIVED",
         )
+    private const val MANAGE_LIST_ANCHOR = "VerticalScrollerUiModelContent(itemList="
+    private const val PROTECT_SECTION_ANCHOR = "ProtectSectionStateFlowProvider"
+    private const val VE_METADATA_ANCHOR = "VeMetadata(uiElementType="
+    private const val PURCHASE_READY_ANCHOR = "PurchaseReadyPersistentReminder"
+    private const val NAV_HIDDEN_ANCHOR = "NavHidden"
+    private const val GROUP_SEPARATOR = "|"
+    private const val NAV_CONTENT_ANCHOR = "PersistentNavDataUiContent(items="
+    private const val NAV_ITEM_ANCHOR = "PersistentNavItem(title="
+    private const val NAV_ACTION_ANCHOR = "PersistentNavUiAction(onPersistentNavItemClicked="
+    private const val ACCOUNT_FEATURE_ANCHOR =
+        "CollapsibleAccountManagementFeatureImpl{commonCards="
+    private const val ACCOUNT_ACTION_ANCHOR = "CustomActionSpec{id="
+    private const val ACCOUNT_FEATURES_ANCHOR = "AccountMenuFeatures{deactivatedAccountsFeature="
+    private const val NOTIFICATION_TOP_BAR_ANCHOR =
+        "NotificationTopBarItemUiContent(notificationIndicatorBadge="
+    private val selfUpdateSchedulerAnchors =
+        listOf(
+            "Skipping DFE self-update check as there is an update already queued.",
+            "Bulk scheduling self-update with policies",
+        )
+    private const val AUTO_UPDATE_ANCHOR =
+        "UChk: document %s is not qualified for auto update v2"
+    private val navTypeAnchors = listOf("APPS", "GAMES", "BOOKS", "YOU")
+    private const val NAV_CONSTRUCTOR_PARAM_COUNT = 6
+    private val NULL_CHECK_BRANCHES = setOf("if-nez", "if-eqz")
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -74,6 +100,8 @@ object DexKitResolver {
 
     internal fun hasNativeLoadFailure(): Boolean = nativeLoadFailure != null
 
+    // One resolution at a time: the prefetched optional anchors belong to the APK being scanned.
+    @Synchronized
     fun resolve(apkPaths: List<String>): ResolvedTargets {
         nativeLoadFailure?.let { return ResolvedTargets.Missing(it, retryable = true) }
         val failures = ArrayList<String>()
@@ -152,8 +180,12 @@ object DexKitResolver {
                 !field.isStatic && field.typeName == "java.lang.Object"
             } ?: return missing("presentation payload field not found")
 
+        val presentationMapper = resolvePresentationMapper(bridge)
         val cluster =
-            when (val clusterResult = resolveClusterCase(bridge, presentationKindField)) {
+            when (
+                val clusterResult =
+                    resolveClusterCase(presentationMapper, presentationKindField)
+            ) {
                 is Resolution.Success -> clusterResult.value
                 is Resolution.Failure -> return missing(clusterResult.reason)
             }
@@ -620,8 +652,11 @@ object DexKitResolver {
                 is Resolution.Success -> protobufResult.value
                 is Resolution.Failure -> return missing(protobufResult.reason)
             }
+        prefetchOptionalAnchors(bridge)
         val suggestionResult =
-            resolveSuggestions(bridge, adMetadataClass, adPresenceField)
+            optional("search suggestions") {
+                resolveSuggestions(bridge, adMetadataClass, adPresenceField)
+            }
         val suggestion =
             when (suggestionResult) {
                 is Resolution.Success -> {
@@ -637,8 +672,17 @@ object DexKitResolver {
                     null
                 }
             }
+        // Optional targets must never turn a successful core resolution into Missing:
+        // any unexpected DexKit/runtime error is reported as an ordinary optional failure.
         val spotlightResult =
-            resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
+            optional("spotlight") {
+                resolveSpotlight(bridge, protobuf.newBuilderMethod.declaredClassName)
+            }
+        val manageAppsResult = optional("manage apps") { resolveManageApps(bridge) }
+        val persistentNavResult = optional("persistent nav") { resolvePersistentNav(bridge) }
+        val accountMenuResult = optional("account menu") { resolveAccountMenu(bridge) }
+        val selfUpdateResult = optional("self-update") { resolveSelfUpdate(bridge) }
+        prefetchedAnchors = emptyMap()
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -686,11 +730,391 @@ object DexKitResolver {
             byteStringToByteArrayMethod = protobuf.byteStringToByteArrayMethod.toRef(),
             protobufToByteArrayMethod = protobuf.protobufToByteArrayMethod.toRef(),
             repeatedListCopyMethod = repeatedListCopyMethod.toRef(),
+            presentationCaseMapper = presentationMapper?.toRef(),
             suggestion = suggestion,
             suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
             spotlight = (spotlightResult as? Resolution.Success)?.value,
             spotlightFailure = (spotlightResult as? Resolution.Failure)?.reason,
+            manageApps = (manageAppsResult as? Resolution.Success)?.value,
+            manageAppsFailure = (manageAppsResult as? Resolution.Failure)?.reason,
+            persistentNav = (persistentNavResult as? Resolution.Success)?.value,
+            persistentNavFailure = (persistentNavResult as? Resolution.Failure)?.reason,
+            accountMenu = (accountMenuResult as? Resolution.Success)?.value,
+            accountMenuFailure = (accountMenuResult as? Resolution.Failure)?.reason,
+            selfUpdate = (selfUpdateResult as? Resolution.Success)?.value,
+            selfUpdateFailure = (selfUpdateResult as? Resolution.Failure)?.reason,
         )
+    }
+
+    private fun resolveAccountMenu(bridge: DexKitBridge): Resolution<ResolvedTargets.AccountMenu> {
+        fun anchored(anchor: String): ClassData =
+            when (val result = findAnchoredClass(bridge, anchor)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> throw AccountResolutionFailure(result.reason)
+            }
+
+        return try {
+            val featureClass = anchored(ACCOUNT_FEATURE_ANCHOR)
+            val actionClass = anchored(ACCOUNT_ACTION_ANCHOR)
+            val featuresClass = anchored(ACCOUNT_FEATURES_ANCHOR)
+            val notificationTopBarConstructor =
+                classesUsing(bridge, listOf(NOTIFICATION_TOP_BAR_ANCHOR))
+                    .singleOrNull()
+                    ?.methods
+                    ?.filter { method -> method.isConstructor && method.paramCount == 2 }
+                    ?.singleOrNull()
+                    ?.takeIf(::acceptsNullBadge)
+            val immutableCandidates =
+                featureClass.methods
+                    .asSequence()
+                    .filter { method ->
+                        !method.isConstructor &&
+                            !Modifier.isStatic(method.modifiers) &&
+                            method.paramCount == 0
+                    }.mapNotNull(MethodData::returnType)
+                    .filter { candidate ->
+                        candidate.methods.any { method ->
+                            Modifier.isStatic(method.modifiers) &&
+                                method.returnTypeName == candidate.name &&
+                                method.paramTypeNames == listOf("java.util.Collection")
+                        }
+                    }.distinctBy(ClassData::name)
+                    .toList()
+            val immutableListClass =
+                immutableCandidates.singleOrNull()
+                    ?: return fail("account immutable lists=${immutableCandidates.size}")
+            Resolution.Success(
+                ResolvedTargets.AccountMenu(
+                    featureClassName = featureClass.name,
+                    actionClassName = actionClass.name,
+                    featuresClassName = featuresClass.name,
+                    immutableListClassName = immutableListClass.name,
+                    notificationTopBarConstructor =
+                        notificationTopBarConstructor
+                            ?.toConstructorRef(),
+                    playPointsRetrieverClassName = resolvePlayPointsRetriever(bridge),
+                ),
+            )
+        } catch (failure: AccountResolutionFailure) {
+            fail(failure.message.orEmpty())
+        }
+    }
+
+    /**
+     * The lazy card supplier of the account menu header: a synthetic lambda (one int case, one
+     * captured object) whose cases build the Play Points card and, by default, the
+     * "PurchaseReadyPersistentReminder" card. Null when not unique, which disables the filter.
+     */
+    private fun resolvePlayPointsRetriever(bridge: DexKitBridge): String? =
+        runCatching {
+            classesUsing(bridge, listOf(PURCHASE_READY_ANCHOR))
+                .filter { candidate ->
+                    val fields = candidate.fields.filter { field -> !field.isStatic }
+                    fields.size == 2 &&
+                        fields.count { field -> field.typeName == "int" } == 1 &&
+                        fields.count { field -> field.typeName == "java.lang.Object" } == 1
+                }.singleOrNull()
+                ?.name
+        }.getOrNull()
+
+    /**
+     * The badge filter passes null as the constructor's first argument. That is only safe while
+     * the field is nullable: Kotlin then emits a null check for it at the start of the data
+     * class's hashCode (`iget-object` + `if-nez`). A non-null field has no such branch, so the
+     * hook is not installed instead of crashing every time the top bar is drawn.
+     */
+    private fun acceptsNullBadge(constructor: MethodData): Boolean {
+        val badgeType = constructor.paramTypeNames.firstOrNull() ?: return false
+        val hashCode =
+            constructor.declaredClass
+                ?.methods
+                ?.singleOrNull { method ->
+                    method.methodName == "hashCode" && method.paramCount == 0
+                }
+                ?: return false
+        val operations = hashCode.opNames
+        val firstRead = hashCode.usingFields.firstOrNull()?.field
+        return operations.size >= 2 &&
+            operations[0].startsWith("iget-object") &&
+            operations[1] in NULL_CHECK_BRANCHES &&
+            firstRead?.typeName == badgeType
+    }
+
+    private fun resolveSelfUpdate(bridge: DexKitBridge): Resolution<ResolvedTargets.SelfUpdate> {
+        val schedulers =
+            bridge.findMethod {
+                matcher {
+                    returnType = "boolean"
+                    usingStrings(selfUpdateSchedulerAnchors, StringMatchType.Contains)
+                }
+            }
+        val scheduler =
+            schedulers.singleOrNull()
+                ?: return fail("self-update schedulers=${schedulers.size}")
+
+        val autoAnchors =
+            bridge.findMethod {
+                matcher {
+                    usingStrings(listOf(AUTO_UPDATE_ANCHOR), StringMatchType.Contains)
+                }
+            }
+        val autoUpdateMethod =
+            autoAnchors
+                .singleOrNull()
+                ?.declaredClass
+                ?.methods
+                ?.filter { method ->
+                    val parameters = method.paramTypeNames
+                    method.returnTypeName == "void" &&
+                        parameters.size == 4 &&
+                        parameters[1] == "int" &&
+                        parameters[2] == "java.util.List" &&
+                        bridge.getClassData(parameters[0])?.methods?.any { callback ->
+                            callback.returnTypeName == "void" &&
+                                callback.paramTypeNames == listOf("java.util.Set")
+                        } == true
+                }?.singleOrNull()
+
+        return Resolution.Success(
+            ResolvedTargets.SelfUpdate(
+                schedulerMethod = scheduler.toRef(),
+                autoUpdateMethod = autoUpdateMethod?.toRef(),
+            ),
+        )
+    }
+
+    private fun resolveManageApps(bridge: DexKitBridge): Resolution<ResolvedTargets.ManageApps> {
+        val manageClass =
+            when (val result = findAnchoredClass(bridge, MANAGE_LIST_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val manageConstructors =
+            manageClass.methods.filter { method ->
+                method.isConstructor && method.paramTypeNames.firstOrNull() == "java.util.List"
+            }
+        if (manageConstructors.isEmpty()) {
+            return fail("manage list constructors=0")
+        }
+
+        return Resolution.Success(
+            ResolvedTargets.ManageApps(
+                manageListClassName = manageClass.name,
+                playProtectRowClassNames = resolvePlayProtectRows(bridge),
+                veMetadataTypeField = resolveVeMetadataType(bridge)?.toRef(),
+            ),
+        )
+    }
+
+    /**
+     * Row models created by the Play Protect section provider of the Manage overview. They are
+     * single-state wrappers built directly by the class that logs under the provider's tag.
+     */
+    private fun resolvePlayProtectRows(bridge: DexKitBridge): List<String> =
+        runCatching {
+            val provider =
+                classesUsing(bridge, listOf(PROTECT_SECTION_ANCHOR))
+                    .singleOrNull() ?: return@runCatching emptyList()
+            provider.methods
+                .asSequence()
+                .flatMap { method -> method.invokes.asSequence() }
+                .filter { method ->
+                    method.isConstructor &&
+                        method.paramCount == 1 &&
+                        !method.declaredClassName.startsWith("java.") &&
+                        !method.declaredClassName.startsWith("kotlin.")
+                }.mapNotNull(MethodData::declaredClass)
+                .filter { row ->
+                    // A row wraps one UI state; plain text wrappers are not rows.
+                    row.fields
+                        .filter { field -> !field.isStatic }
+                        .singleOrNull()
+                        ?.typeName
+                        .let { type -> type != null && !type.startsWith("java.") }
+                }.map(ClassData::name)
+                .distinct()
+                .toList()
+        }.getOrDefault(emptyList())
+
+    /** The visual element type of Play Store's VeMetadata(uiElementType=...) logging model. */
+    private fun resolveVeMetadataType(bridge: DexKitBridge): FieldData? =
+        runCatching {
+            when (val result = findAnchoredClass(bridge, VE_METADATA_ANCHOR)) {
+                is Resolution.Success -> {
+                    result.value.fields.singleOrNull { field ->
+                        !field.isStatic && field.typeName == "int"
+                    }
+                }
+
+                is Resolution.Failure -> {
+                    null
+                }
+            }
+        }.getOrNull()
+
+    private fun resolvePersistentNav(
+        bridge: DexKitBridge,
+    ): Resolution<ResolvedTargets.PersistentNav> {
+        val navClass =
+            when (val result = findAnchoredClass(bridge, NAV_CONTENT_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navItemClass =
+            when (val result = findAnchoredClass(bridge, NAV_ITEM_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navActionClass =
+            when (val result = findAnchoredClass(bridge, NAV_ACTION_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> return result
+            }
+        val navTypeClasses = classesUsing(bridge, navTypeAnchors)
+        val navTypeNames = navTypeClasses.mapTo(mutableSetOf(), ClassData::name)
+        val navItemTypeFields =
+            navItemClass.fields.filter { field ->
+                !Modifier.isStatic(field.modifiers) && field.typeName in navTypeNames
+            }
+        val navItemTypeField =
+            navItemTypeFields.singleOrNull()
+                ?: return fail(
+                    "nav type candidates=${navTypeClasses.size} " +
+                        "item intersections=${navItemTypeFields.size}",
+                )
+
+        val actionInstanceFields =
+            navActionClass.fields.filter { field -> !Modifier.isStatic(field.modifiers) }
+        if (actionInstanceFields.size != 2 ||
+            actionInstanceFields.map(FieldData::typeName).distinct().size != 1
+        ) {
+            return fail("nav action fields=${actionInstanceFields.size}")
+        }
+        val callbackClassName = actionInstanceFields.first().typeName
+        val callbackClass =
+            bridge.getClassData(callbackClassName)
+                ?: return fail("nav callback class missing")
+        // The filter wraps the callback in a java.lang.reflect.Proxy, which needs an interface.
+        if (!Modifier.isInterface(callbackClass.modifiers)) {
+            return fail("nav callback type is not an interface")
+        }
+        val callbackMethods =
+            callbackClass.methods.filter { method ->
+                !method.isConstructor &&
+                    !Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames == listOf("java.lang.Object") &&
+                    method.returnTypeName == "java.lang.Object"
+            }
+        val callbackMethod =
+            callbackMethods.singleOrNull()
+                ?: return fail("nav callback methods=${callbackMethods.size}")
+        val actionConstructors =
+            navActionClass.methods.filter { method ->
+                method.isConstructor &&
+                    method.paramTypeNames == listOf(callbackClassName, callbackClassName)
+            }
+        val actionConstructor =
+            actionConstructors.singleOrNull()
+                ?: return fail("nav action constructors=${actionConstructors.size}")
+        val navConstructors =
+            navClass.methods.filter { method ->
+                // PersistentNavFilter rewrites arguments by position: items (0), selected
+                // index (1), visibility (3) and action (5). Require exactly that shape.
+                method.isConstructor &&
+                    method.paramTypeNames.size == NAV_CONSTRUCTOR_PARAM_COUNT &&
+                    method.paramTypeNames[0] == "java.util.List" &&
+                    method.paramTypeNames[1] == "int" &&
+                    method.paramTypeNames[3] !in primitiveTypes &&
+                    method.paramTypeNames[5] == navActionClass.name
+            }
+        val navConstructor =
+            navConstructors.singleOrNull()
+                ?: return fail("nav constructors=${navConstructors.size}")
+        val navHiddenClass =
+            when (val result = findAnchoredClass(bridge, NAV_HIDDEN_ANCHOR)) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> null
+            }
+        val navHiddenField =
+            navHiddenClass?.fields?.singleOrNull { field ->
+                Modifier.isStatic(field.modifiers) && field.typeName == navHiddenClass.name
+            }
+
+        return Resolution.Success(
+            ResolvedTargets.PersistentNav(
+                navConstructor = navConstructor.toConstructorRef(),
+                navItemTypeField = navItemTypeField.toRef(),
+                navPrimaryCallbackField = actionInstanceFields[0].toRef(),
+                navSecondaryCallbackField = actionInstanceFields[1].toRef(),
+                navActionConstructor = actionConstructor.toConstructorRef(),
+                navCallbackMethod = callbackMethod.toRef(),
+                navHiddenInstanceField = navHiddenField?.toRef(),
+            ),
+        )
+    }
+
+    /**
+     * Classes using all [strings]. Optional targets are looked up from one batched DexKit pass
+     * (see [prefetchOptionalAnchors]); anything else falls back to an individual search.
+     */
+    private fun classesUsing(
+        bridge: DexKitBridge,
+        strings: List<String>,
+    ): List<ClassData> =
+        prefetchedAnchors[strings]
+            ?: bridge.findClass { matcher { usingStrings = strings } }
+
+    @Volatile
+    private var prefetchedAnchors: Map<List<String>, List<ClassData>> = emptyMap()
+
+    private val optionalAnchorGroups: List<List<String>> by lazy {
+        listOf(
+            listOf(MANAGE_LIST_ANCHOR),
+            listOf(PROTECT_SECTION_ANCHOR),
+            listOf(VE_METADATA_ANCHOR),
+            listOf(NAV_CONTENT_ANCHOR),
+            listOf(NAV_ITEM_ANCHOR),
+            listOf(NAV_ACTION_ANCHOR),
+            listOf(NAV_HIDDEN_ANCHOR),
+            navTypeAnchors,
+            listOf(ACCOUNT_FEATURE_ANCHOR),
+            listOf(ACCOUNT_ACTION_ANCHOR),
+            listOf(ACCOUNT_FEATURES_ANCHOR),
+            listOf(NOTIFICATION_TOP_BAR_ANCHOR),
+            listOf(PURCHASE_READY_ANCHOR),
+            remoteSuggestionAnchors,
+            appSuggestionAnchors,
+            appsHomeAnchors,
+        )
+    }
+
+    /**
+     * Resolves every optional anchor in a single scan instead of one full string search each,
+     * which keeps the first launch after a Play Store update short. On any batch failure the
+     * individual searches are used, so results never depend on the batch succeeding.
+     */
+    private fun prefetchOptionalAnchors(bridge: DexKitBridge) {
+        val groups =
+            optionalAnchorGroups.associateBy { strings -> strings.joinToString(GROUP_SEPARATOR) }
+        prefetchedAnchors =
+            runCatching {
+                val found =
+                    bridge.batchFindClassUsingStrings {
+                        groups(groups, StringMatchType.Contains, false)
+                    }
+                groups.entries.associate { (key, strings) ->
+                    strings to found[key].orEmpty().toList()
+                }
+            }.getOrDefault(emptyMap())
+    }
+
+    private fun findAnchoredClass(
+        bridge: DexKitBridge,
+        anchor: String,
+    ): Resolution<ClassData> {
+        val candidates = classesUsing(bridge, listOf(anchor))
+        return candidates.singleOrNull()?.let(Resolution<ClassData>::Success)
+            ?: fail("anchor '$anchor' candidates=${candidates.size}")
     }
 
     private fun resolveStreamChain(bridge: DexKitBridge): Resolution<StreamChain> {
@@ -845,11 +1269,11 @@ object DexKitResolver {
     }
 
     private fun resolveClusterCase(
-        bridge: DexKitBridge,
+        presentationMapper: MethodData?,
         presentationKindField: FieldData,
     ): Resolution<ClusterCase> {
         val caseFieldReaders =
-            resolvePresentationMapper(bridge)?.callers
+            presentationMapper?.callers
                 ?: presentationKindField.readers
         val caseFieldScores =
             caseFieldReaders
@@ -1092,11 +1516,7 @@ object DexKitResolver {
         adPresenceField: FieldData,
     ): Resolution<SuggestionTargets> {
         val remoteSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = remoteSuggestionAnchors
-                }
-            }
+            classesUsing(bridge, remoteSuggestionAnchors)
         val remoteSuggestionClass =
             remoteSuggestionClasses.singleOrNull()
                 ?: return fail("remote suggestion candidates=${remoteSuggestionClasses.size}")
@@ -1126,11 +1546,7 @@ object DexKitResolver {
         }
 
         val appSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = appSuggestionAnchors
-                }
-            }
+            classesUsing(bridge, appSuggestionAnchors)
         val appSuggestionClass =
             appSuggestionClasses.singleOrNull()
                 ?: return fail("app suggestion candidates=${appSuggestionClasses.size}")
@@ -1201,11 +1617,7 @@ object DexKitResolver {
         protobufMessageClassName: String,
     ): Resolution<ResolvedTargets.Spotlight> {
         val pageClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = appsHomeAnchors
-                }
-            }
+            classesUsing(bridge, appsHomeAnchors)
         val pageClass =
             pageClasses.singleOrNull()
                 ?: return fail("apps home page candidates=${pageClasses.size}")
@@ -1235,6 +1647,19 @@ object DexKitResolver {
     }
 
     private fun fail(reason: String): Resolution<Nothing> = Resolution.Failure(reason)
+
+    private inline fun <T> optional(
+        name: String,
+        block: () -> Resolution<T>,
+    ): Resolution<T> =
+        try {
+            block()
+        } catch (exception: Exception) {
+            fail(
+                "$name ${ResolvedTargets.TRANSIENT_FAILURE_MARKER} " +
+                    "${exception.javaClass.simpleName}: ${exception.message}",
+            )
+        }
 
     private sealed interface Resolution<out T> {
         data class Success<T>(
@@ -1287,6 +1712,10 @@ object DexKitResolver {
         val remoteSuggestionConstructor: MethodData,
         val suggestionAdInfoField: FieldData,
     )
+
+    private class AccountResolutionFailure(
+        reason: String,
+    ) : RuntimeException(reason)
 
     private fun streamDataConstructor(method: MethodData): MethodData? =
         method.invokes

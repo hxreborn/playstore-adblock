@@ -47,6 +47,7 @@ object TargetCache {
             }
 
             is ResolvedTargets.Resolved -> {
+                if (targets.hasTransientFailure) return
                 root.put("status", "resolved")
                 root.put("targets", encodeResolved(targets))
             }
@@ -148,10 +149,19 @@ object TargetCache {
             ).put(
                 "repeatedListCopyMethod",
                 encodeMethod(targets.repeatedListCopyMethod),
-            ).putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
+            ).putOpt("presentationCaseMapper", targets.presentationCaseMapper?.let(::encodeMethod))
+            .putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
             .putOpt("suggestionFailure", targets.suggestionFailure)
             .putOpt("spotlight", targets.spotlight?.let(::encodeSpotlight))
             .putOpt("spotlightFailure", targets.spotlightFailure)
+            .putOpt("manageApps", targets.manageApps?.let(::encodeManageApps))
+            .putOpt("manageAppsFailure", targets.manageAppsFailure)
+            .putOpt("persistentNav", targets.persistentNav?.let(::encodePersistentNav))
+            .putOpt("persistentNavFailure", targets.persistentNavFailure)
+            .putOpt("accountMenu", targets.accountMenu?.let(::encodeAccountMenu))
+            .putOpt("accountMenuFailure", targets.accountMenuFailure)
+            .putOpt("selfUpdate", targets.selfUpdate?.let(::encodeSelfUpdate))
+            .putOpt("selfUpdateFailure", targets.selfUpdateFailure)
 
     private fun decodeResolved(value: JSONObject): ResolvedTargets.Resolved =
         ResolvedTargets.Resolved(
@@ -210,10 +220,100 @@ object TargetCache {
                 decodeMethod(value.getJSONObject("protobufToByteArrayMethod")),
             repeatedListCopyMethod =
                 decodeMethod(value.getJSONObject("repeatedListCopyMethod")),
+            presentationCaseMapper =
+                value.optJSONObject("presentationCaseMapper")?.let(::decodeMethod),
             suggestion = value.optJSONObject("suggestion")?.let(::decodeSuggestion),
             suggestionFailure = value.optString("suggestionFailure").ifEmpty { null },
             spotlight = value.optJSONObject("spotlight")?.let(::decodeSpotlight),
             spotlightFailure = value.optString("spotlightFailure").ifEmpty { null },
+            manageApps = value.optJSONObject("manageApps")?.let(::decodeManageApps),
+            manageAppsFailure = value.optString("manageAppsFailure").ifEmpty { null },
+            persistentNav = value.optJSONObject("persistentNav")?.let(::decodePersistentNav),
+            persistentNavFailure = value.optString("persistentNavFailure").ifEmpty { null },
+            accountMenu = value.optJSONObject("accountMenu")?.let(::decodeAccountMenu),
+            accountMenuFailure = value.optString("accountMenuFailure").ifEmpty { null },
+            selfUpdate = value.optJSONObject("selfUpdate")?.let(::decodeSelfUpdate),
+            selfUpdateFailure = value.optString("selfUpdateFailure").ifEmpty { null },
+        )
+
+    private fun encodeAccountMenu(value: ResolvedTargets.AccountMenu): JSONObject =
+        JSONObject()
+            .put("featureClassName", value.featureClassName)
+            .put("actionClassName", value.actionClassName)
+            .put("featuresClassName", value.featuresClassName)
+            .put("immutableListClassName", value.immutableListClassName)
+            .putOpt(
+                "notificationTopBarConstructor",
+                value.notificationTopBarConstructor?.let(::encodeConstructor),
+            ).putOpt("playPointsRetrieverClassName", value.playPointsRetrieverClassName)
+
+    private fun decodeAccountMenu(value: JSONObject): ResolvedTargets.AccountMenu =
+        ResolvedTargets.AccountMenu(
+            featureClassName = value.getString("featureClassName"),
+            actionClassName = value.getString("actionClassName"),
+            featuresClassName = value.getString("featuresClassName"),
+            immutableListClassName = value.getString("immutableListClassName"),
+            notificationTopBarConstructor =
+                value.optJSONObject("notificationTopBarConstructor")?.let(::decodeConstructor),
+            playPointsRetrieverClassName =
+                value.optString("playPointsRetrieverClassName").ifEmpty { null },
+        )
+
+    private fun encodeSelfUpdate(value: ResolvedTargets.SelfUpdate): JSONObject =
+        JSONObject()
+            .put("schedulerMethod", encodeMethod(value.schedulerMethod))
+            .putOpt("autoUpdateMethod", value.autoUpdateMethod?.let(::encodeMethod))
+
+    private fun decodeSelfUpdate(value: JSONObject): ResolvedTargets.SelfUpdate =
+        ResolvedTargets.SelfUpdate(
+            schedulerMethod = decodeMethod(value.getJSONObject("schedulerMethod")),
+            autoUpdateMethod = value.optJSONObject("autoUpdateMethod")?.let(::decodeMethod),
+        )
+
+    private fun encodeManageApps(value: ResolvedTargets.ManageApps): JSONObject =
+        JSONObject()
+            .put("manageListClassName", value.manageListClassName)
+            .put("playProtectRowClassNames", JSONArray(value.playProtectRowClassNames))
+            .putOpt("veMetadataTypeField", value.veMetadataTypeField?.let(::encodeField))
+
+    private fun decodeManageApps(value: JSONObject): ResolvedTargets.ManageApps =
+        ResolvedTargets.ManageApps(
+            manageListClassName = value.getString("manageListClassName"),
+            playProtectRowClassNames =
+                value
+                    .optJSONArray("playProtectRowClassNames")
+                    ?.let { names ->
+                        List(names.length(), names::getString)
+                    }.orEmpty(),
+            veMetadataTypeField = value.optJSONObject("veMetadataTypeField")?.let(::decodeField),
+        )
+
+    private fun encodePersistentNav(value: ResolvedTargets.PersistentNav): JSONObject =
+        JSONObject()
+            .put("navConstructor", encodeConstructor(value.navConstructor))
+            .put("navItemTypeField", encodeField(value.navItemTypeField))
+            .put("navPrimaryCallbackField", encodeField(value.navPrimaryCallbackField))
+            .put("navSecondaryCallbackField", encodeField(value.navSecondaryCallbackField))
+            .put("navActionConstructor", encodeConstructor(value.navActionConstructor))
+            .put("navCallbackMethod", encodeMethod(value.navCallbackMethod))
+            .putOpt(
+                "navHiddenInstanceField",
+                value.navHiddenInstanceField?.let(::encodeField),
+            )
+
+    private fun decodePersistentNav(value: JSONObject): ResolvedTargets.PersistentNav =
+        ResolvedTargets.PersistentNav(
+            navConstructor = decodeConstructor(value.getJSONObject("navConstructor")),
+            navItemTypeField = decodeField(value.getJSONObject("navItemTypeField")),
+            navPrimaryCallbackField =
+                decodeField(value.getJSONObject("navPrimaryCallbackField")),
+            navSecondaryCallbackField =
+                decodeField(value.getJSONObject("navSecondaryCallbackField")),
+            navActionConstructor =
+                decodeConstructor(value.getJSONObject("navActionConstructor")),
+            navCallbackMethod = decodeMethod(value.getJSONObject("navCallbackMethod")),
+            navHiddenInstanceField =
+                value.optJSONObject("navHiddenInstanceField")?.let(::decodeField),
         )
 
     private fun encodeSuggestion(value: ResolvedTargets.Suggestion): JSONObject =

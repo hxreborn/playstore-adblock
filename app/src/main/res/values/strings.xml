@@ -2,4 +2,69 @@
 <resources>
     <string name="app_name">Google Play Store Adblock</string>
     <string name="app_description">Removes ads, sponsored apps, and promoted recommendations from the Google Play Store</string>
+    <string name="settings_title">Optional filters</string>
+    <string name="settings_description">All optional filters are disabled by default. Regular sponsored-ad filtering remains active.</string>
+    <string name="category_content">Content</string>
+    <string name="category_account_menu">Account menu</string>
+    <string name="category_manage_apps">Manage apps &amp; device</string>
+    <string name="category_bottom_navigation">Bottom navigation</string>
+    <string name="category_maintenance">Apply and compatibility</string>
+    <string name="hide_live_ops">Hide editorial promotions</string>
+    <string name="hide_live_ops_summary">Removes large LiveOps cards such as promoted apps, games and events.</string>
+    <string name="hide_play_points_reminder">Hide Play Points reminder</string>
+    <string name="hide_play_points_reminder_summary">Removes the Play Points reminder card from the account menu.</string>
+    <string name="hide_play_protect">Hide Play Protect</string>
+    <string name="hide_play_protect_summary">Removes the Play Protect account entry and the internal warning card from Manage apps &amp; device.</string>
+    <string name="hide_notifications">Hide notifications and offers</string>
+    <string name="hide_notifications_summary">Removes the notifications row from the account menu.</string>
+    <string name="suppress_notification_badge">Suppress notification badge</string>
+    <string name="suppress_notification_badge_summary">Forces the unread count to zero when Play Store shows a stale +1 badge.</string>
+    <string name="hide_play_pass">Hide Play Pass</string>
+    <string name="hide_play_pass_summary">Removes the Play Pass entry from the account menu.</string>
+    <string name="hide_library">Hide Library</string>
+    <string name="hide_library_summary">Removes the Library entry from the account menu.</string>
+    <string name="hide_help">Hide Help &amp; feedback</string>
+    <string name="hide_help_summary">Removes the Help &amp; feedback entry from the account menu.</string>
+    <string name="hide_personalization">Hide personalization</string>
+    <string name="hide_personalization_summary">Removes the Google Play personalization entry from the account menu.</string>
+    <string name="hide_experimental_features">Hide experimental features</string>
+    <string name="hide_experimental_features_summary">Removes the experimental features entry from the account menu.</string>
+    <string name="hide_payments_and_subscriptions">Hide payments and subscriptions</string>
+    <string name="hide_payments_and_subscriptions_summary">Removes the payments and subscriptions entry from the account menu.</string>
+    <string name="hide_pre_registration_games">Hide pre-registration games</string>
+    <string name="hide_pre_registration_games_summary">Removes the pre-registration games section from the Games tab.</string>
+    <string name="hide_search_promotions">Hide promoted search shelves</string>
+    <string name="hide_search_promotions_summary">Removes the collapsed promotional shelf (such as limited-time events) shown among search results. It is not labeled as an ad by Play Store.</string>
+    <string name="hide_device_sync">Hide device sync</string>
+    <string name="hide_device_sync_summary">Removes “Sync apps to devices” from Manage apps &amp; device.</string>
+    <string name="hide_ratings_and_reviews">Hide ratings and reviews</string>
+    <string name="hide_ratings_and_reviews_summary">Removes “Ratings &amp; reviews” from Manage apps &amp; device.</string>
+    <string name="hide_contributions">Hide your contributions</string>
+    <string name="hide_contributions_summary">Removes “Your contributions” from Manage apps &amp; device.</string>
+    <string name="hide_games_tab">Hide Games tab</string>
+    <string name="hide_apps_tab">Hide Apps tab</string>
+    <string name="hide_books_tab">Hide Books tab</string>
+    <string name="hide_you_tab">Hide You tab</string>
+    <string name="hide_tab_summary">Removes this item from the bottom navigation while keeping Search available.</string>
+    <string name="minimal_search_home">Minimal Search home</string>
+    <string name="minimal_search_home_summary">Hides the bottom Search item and its landing suggestions. The top search bar and search results remain available.</string>
+    <string name="start_tab">Start screen</string>
+    <string name="start_tab_summary">Opens the selected visible tab when Play Store starts. “Keep Play Store choice” leaves its normal behavior unchanged.</string>
+    <string-array name="start_tab_labels">
+        <item>Keep Play Store choice</item>
+        <item>Games</item>
+        <item>Apps</item>
+        <item>Search</item>
+        <item>Books</item>
+        <item>You</item>
+    </string-array>
+    <string name="restart_hint">Restart Google Play Store after changing filters so cached screens are rebuilt.</string>
+    <string name="block_store_self_updates">Block Play Store self-updates</string>
+    <string name="block_store_self_updates_summary">Keeps the tested Play Store version installed. Normal updates for other apps are not affected.</string>
+    <string name="restart_play_store">Apply filters and restart Play Store</string>
+    <string name="restart_play_store_summary">Uses the active module to stop Play Store, clears only its cached feed responses, then opens it again. Root is a fallback. Accounts and app data are preserved.</string>
+    <string name="restart_play_store_working">Restarting Play Store…</string>
+    <string name="restart_play_store_success">Play Store restarted. The new filters are active.</string>
+    <string name="restart_play_store_busy">Play Store is busy installing apps or completing a purchase. Try again when it has finished.</string>
+    <string name="restart_play_store_failed">Could not restart Play Store. Ensure the module is active or grant root access.</string>
 </resources>

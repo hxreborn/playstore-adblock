@@ -1,16 +1,29 @@
 package eu.hxreborn.gplayadblock
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
+import android.os.ResultReceiver
+import android.os.SystemClock
 import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
+import eu.hxreborn.gplayadblock.hook.AccountMenuFilter
+import eu.hxreborn.gplayadblock.hook.LocalizedLabels
+import eu.hxreborn.gplayadblock.hook.ManageAppsFilter
+import eu.hxreborn.gplayadblock.hook.PersistentNavFilter
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
+import eu.hxreborn.gplayadblock.hook.SelfUpdateFilter
 import eu.hxreborn.gplayadblock.hook.SpotlightHeaderFilter
 import eu.hxreborn.gplayadblock.hook.StreamCacheFilter
 import eu.hxreborn.gplayadblock.hook.StreamNodeFilter
@@ -19,6 +32,8 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 @PublishedApi
 internal lateinit var module: PlayStoreAdblockModule
@@ -68,13 +83,15 @@ class PlayStoreAdblockModule : XposedModule() {
                 installed = true
             }
             val context = chain.getArg(0) as Context
-            module.install(context, classLoader)
+            val application = chain.thisObject as Application
+            module.install(context, application, classLoader)
             return null
         }
     }
 
     private fun install(
         context: Context,
+        application: Application,
         classLoader: ClassLoader,
     ) {
         try {
@@ -86,25 +103,41 @@ class PlayStoreAdblockModule : XposedModule() {
                     moduleVersionCode = BuildConfig.VERSION_CODE.toLong(),
                     moduleApkPath = moduleApplicationInfo.sourceDir,
                 )
+            val crashGuard =
+                CrashLoopGuard(
+                    file = File(context.applicationInfo.dataDir, RestartProtocol.CRASH_GUARD_PATH),
+                    fingerprint = cacheKey.toString(),
+                )
+            trackPurchaseFlows(application)
+            installRestartReceiver(context, crashGuard)
+            val preferences =
+                FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
             val status =
                 "Play Store ${packageInfo.versionName} (${packageInfo.longVersionCode}) " +
                     "module v${BuildConfig.VERSION_NAME}"
             val applicationInfo = context.applicationInfo
             val cached = TargetCache.load(dataDir = applicationInfo.dataDir, key = cacheKey)
             val targets =
-                cached ?: DexKitResolver
-                    .resolve(
-                        buildList {
-                            add(applicationInfo.sourceDir)
-                            applicationInfo.splitSourceDirs?.let(::addAll)
-                        },
-                    ).also { resolved ->
-                        TargetCache.store(
-                            dataDir = applicationInfo.dataDir,
-                            key = cacheKey,
-                            targets = resolved,
-                        )
-                    }
+                cached ?: run {
+                    val started = SystemClock.elapsedRealtime()
+                    DexKitResolver
+                        .resolve(
+                            buildList {
+                                add(applicationInfo.sourceDir)
+                                applicationInfo.splitSourceDirs?.let(::addAll)
+                            },
+                        ).also {
+                            Logger.info(
+                                "target scan took ${SystemClock.elapsedRealtime() - started} ms",
+                            )
+                        }
+                }.also { resolved ->
+                    TargetCache.store(
+                        dataDir = applicationInfo.dataDir,
+                        key = cacheKey,
+                        targets = resolved,
+                    )
+                }
             val source =
                 when {
                     cached != null -> "from-cache"
@@ -125,7 +158,40 @@ class PlayStoreAdblockModule : XposedModule() {
                         "targets resolved streamMethod=${targets.streamDataMethod.className}." +
                             targets.streamDataMethod.methodName
                     }
-                    val installed = installHookGroups(classLoader, targets)
+                    val installed =
+                        installHookGroups(classLoader, targets, preferences).toMutableSet()
+                    installCrashRecorder(crashGuard)
+                    if (crashGuard.isTripped()) {
+                        Logger.error(
+                            "optional UI filters skipped after repeated Play Store crashes; " +
+                                "use Apply and restart in module settings to retry",
+                        )
+                        notifyOptionalFiltersDisabled(context)
+                    } else {
+                        installed +=
+                            installOptionalFilters(
+                                context,
+                                application,
+                                classLoader,
+                                preferences,
+                                targets,
+                            )
+                        // Scan UI labels in the background before the first menu needs them.
+                        runCatching { LocalizedLabels.of(application).warmUp() }
+                            .onFailure { Logger.warn("label warm-up failed", it) }
+                    }
+                    targets.manageAppsFailure?.let { reason ->
+                        Logger.warn("optional manage apps targets unresolved reason=$reason")
+                    }
+                    targets.persistentNavFailure?.let { reason ->
+                        Logger.warn("optional persistent nav targets unresolved reason=$reason")
+                    }
+                    targets.accountMenuFailure?.let { reason ->
+                        Logger.warn("optional account targets unresolved reason=$reason")
+                    }
+                    targets.selfUpdateFailure?.let { reason ->
+                        Logger.warn("optional self-update target unresolved reason=$reason")
+                    }
                     val active = installed.joinToString(",", "[", "]")
                     val missing = REQUIRED_HOOK_GROUPS - installed
                     if (missing.isEmpty()) {
@@ -146,9 +212,202 @@ class PlayStoreAdblockModule : XposedModule() {
         }
     }
 
+    private fun installOptionalFilters(
+        context: Context,
+        application: Application,
+        classLoader: ClassLoader,
+        preferences: FilterPreferences,
+        targets: ResolvedTargets.Resolved,
+    ): Set<String> {
+        val installed = mutableSetOf<String>()
+
+        fun optional(
+            label: String,
+            install: () -> Unit,
+        ) {
+            try {
+                install()
+                installed += label
+            } catch (exception: Exception) {
+                Logger.warn("optional $label filters unavailable", exception)
+            }
+        }
+
+        targets.accountMenu?.let { accountMenu ->
+            optional("account") {
+                AccountMenuFilter.install(this, application, classLoader, preferences, accountMenu)
+            }
+        }
+        targets.selfUpdate?.let { selfUpdate ->
+            optional("self-update") {
+                SelfUpdateFilter.install(this, classLoader, preferences, selfUpdate)
+            }
+        }
+        targets.manageApps?.let { manageApps ->
+            optional("manage-apps") {
+                ManageAppsFilter.install(this, application, classLoader, preferences, manageApps)
+            }
+        }
+        targets.persistentNav?.let { persistentNav ->
+            optional("persistent-nav") {
+                PersistentNavFilter.install(
+                    this,
+                    application,
+                    classLoader,
+                    preferences,
+                    persistentNav,
+                )
+            }
+        }
+        return installed
+    }
+
+    private fun installCrashRecorder(guard: CrashLoopGuard) {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching(guard::recordCrash)
+            if (previous != null) {
+                previous.uncaughtException(thread, error)
+            } else {
+                Process.killProcess(Process.myPid())
+                System.exit(CRASH_EXIT_STATUS)
+            }
+        }
+    }
+
+    // Runs only inside Play Store, which requires API 34, so RECEIVER_EXPORTED is honoured.
+    @SuppressLint("InlinedApi")
+    private fun installRestartReceiver(
+        context: Context,
+        crashGuard: CrashLoopGuard,
+    ) {
+        context.registerReceiver(
+            object : BroadcastReceiver() {
+                @Suppress("DEPRECATION")
+                override fun onReceive(
+                    receiverContext: Context,
+                    intent: Intent,
+                ) {
+                    if (intent.action != RestartProtocol.ACTION) return
+                    val callback =
+                        intent.getParcelableExtra(RestartProtocol.EXTRA_CALLBACK) as? ResultReceiver
+                    val pendingResult = goAsync()
+                    val deadline = intent.getLongExtra(RestartProtocol.EXTRA_DEADLINE, 0L)
+                    Thread {
+                        // A late request: the caller has moved on, so it must not restart now.
+                        if (SystemClock.elapsedRealtime() > deadline) {
+                            Logger.info("restart refused: request expired")
+                            callback?.send(RestartProtocol.RESULT_FAILED, Bundle.EMPTY)
+                            pendingResult.finish()
+                            return@Thread
+                        }
+                        // Killing the process mid-installation would abort it: refuse instead.
+                        val busy =
+                            when {
+                                hasActiveInstallSession(receiverContext) -> "installing apps"
+                                livePurchaseActivities.get() > 0 -> "in a purchase flow"
+                                else -> null
+                            }
+                        if (busy != null) {
+                            Logger.info("restart refused: Play Store is $busy")
+                            callback?.send(RestartProtocol.RESULT_BUSY, Bundle.EMPTY)
+                            pendingResult.finish()
+                            return@Thread
+                        }
+                        // An explicit restart after changing settings re-enables optional
+                        // filters that a previous crash loop switched off.
+                        val cleared =
+                            runCatching {
+                                check(crashGuard.reset()) { "crash guard kept" }
+                                java.io
+                                    .File(
+                                        receiverContext.cacheDir,
+                                        RestartProtocol.STREAM_DATA_STORE_DIR,
+                                    ).deleteRecursively()
+                                    .also { removed -> check(removed) { "streamdatastore kept" } }
+                            }.onFailure { error ->
+                                Logger.warn("Play Store cache cleanup failed", error)
+                            }.isSuccess
+                        // Decided again at the last moment: the checks and cleanup may have run past
+                        // the caller's deadline, and a later request may have been answered since.
+                        val reply =
+                            RestartProtocol.finalReply(
+                                now = SystemClock.elapsedRealtime(),
+                                deadline = deadline,
+                                cleared = cleared,
+                            )
+                        if (cleared && reply != RestartProtocol.RESULT_OK) {
+                            Logger.info("restart refused: request expired")
+                        }
+                        callback?.send(reply, Bundle.EMPTY)
+                        pendingResult.finish()
+                        // Only an approved restart stops Play Store; otherwise it keeps running.
+                        if (reply != RestartProtocol.RESULT_OK) return@Thread
+                        Handler(Looper.getMainLooper()).postDelayed(
+                            { Process.killProcess(Process.myPid()) },
+                            RESTART_KILL_DELAY_MILLIS,
+                        )
+                    }.start()
+                }
+            },
+            IntentFilter(RestartProtocol.ACTION),
+            RestartProtocol.PERMISSION,
+            Handler(Looper.getMainLooper()),
+            Context.RECEIVER_EXPORTED,
+        )
+    }
+
+    /**
+     * Counts live purchase activities (manifest components under finsky.billing, e.g. the
+     * acquire sheet). A restart while one exists would abort the purchase.
+     */
+    private fun trackPurchaseFlows(application: Application) {
+        application.registerActivityLifecycleCallbacks(
+            object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) {
+                    if (activity.isPurchaseFlow()) livePurchaseActivities.incrementAndGet()
+                }
+
+                override fun onActivityDestroyed(activity: Activity) {
+                    if (activity.isPurchaseFlow()) livePurchaseActivities.decrementAndGet()
+                }
+
+                override fun onActivityStarted(activity: Activity) = Unit
+
+                override fun onActivityResumed(activity: Activity) = Unit
+
+                override fun onActivityPaused(activity: Activity) = Unit
+
+                override fun onActivityStopped(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) = Unit
+            },
+        )
+    }
+
+    private fun Activity.isPurchaseFlow(): Boolean =
+        javaClass.name.startsWith(RestartProtocol.PURCHASE_ACTIVITY_PACKAGE)
+
+    private val livePurchaseActivities = AtomicInteger(0)
+
+    // A failed check counts as busy: an unknown state must not let a restart abort an install.
+    private fun hasActiveInstallSession(context: Context): Boolean =
+        runCatching {
+            context.packageManager.packageInstaller.mySessions
+                .any { session -> session.isActive }
+        }.onFailure { error -> Logger.warn("install session check failed", error) }
+            .getOrDefault(true)
+
     private fun installHookGroups(
         classLoader: ClassLoader,
         targets: ResolvedTargets.Resolved,
+        preferences: FilterPreferences,
     ): Set<String> {
         targets.suggestionFailure?.let { reason ->
             Logger.warn("search suggestion targets unresolved reason=$reason")
@@ -159,7 +418,7 @@ class PlayStoreAdblockModule : XposedModule() {
         val mismatches = HookGroup.inputMismatches(targets)
         return listOfNotNull(
             install(HookGroup.GRAPH, mismatches) {
-                StreamNodeFilter.install(this, classLoader, targets)
+                StreamNodeFilter.install(this, classLoader, targets, preferences)
             },
             targets.suggestion?.let { suggestion ->
                 install(HookGroup.SEARCH, mismatches) {
@@ -167,10 +426,10 @@ class PlayStoreAdblockModule : XposedModule() {
                 }
             },
             install(HookGroup.CACHE, mismatches) {
-                StreamCacheFilter.install(this, classLoader, targets)
+                StreamCacheFilter.install(this, classLoader, targets, preferences)
             },
             install(HookGroup.RESPONSE, mismatches) {
-                StreamResponseFilter.install(this, classLoader, targets)
+                StreamResponseFilter.install(this, classLoader, targets, preferences)
             },
             targets.spotlight?.let { spotlight ->
                 install(HookGroup.SPOTLIGHT, mismatches) {
@@ -203,18 +462,30 @@ class PlayStoreAdblockModule : XposedModule() {
 
     private companion object {
         val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
+        const val RESTART_KILL_DELAY_MILLIS = 150L
+        const val CRASH_EXIT_STATUS = 10
+        const val OPTIONAL_FILTERS_DISABLED_MESSAGE =
+            "GPlay Adblock disabled optional UI filters after repeated Play Store crashes. " +
+                "Ad blocking is still active."
         const val FILTERING_UNAVAILABLE_TOAST_DELAY_MS = 3000L
         const val FILTERING_UNAVAILABLE_MESSAGE =
             "GPlay Adblock couldn't start. Ads may appear. Check Xposed logs."
         val TARGET_PACKAGE: String = BuildConfig.TARGET_PACKAGE
 
-        fun notifyFilteringUnavailable(context: Context) {
+        fun notifyFilteringUnavailable(context: Context) =
+            showDelayedToast(context, FILTERING_UNAVAILABLE_MESSAGE)
+
+        fun notifyOptionalFiltersDisabled(context: Context) =
+            showDelayedToast(context, OPTIONAL_FILTERS_DISABLED_MESSAGE)
+
+        private fun showDelayedToast(
+            context: Context,
+            message: String,
+        ) {
             Handler(Looper.getMainLooper()).postDelayed(
                 {
                     try {
-                        Toast
-                            .makeText(context, FILTERING_UNAVAILABLE_MESSAGE, Toast.LENGTH_LONG)
-                            .show()
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     } catch (_: Exception) {
                     }
                 },

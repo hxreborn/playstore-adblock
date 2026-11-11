@@ -49,6 +49,54 @@
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
+## Optional interface filters
+
+The module settings also expose opt-in filters for Play Store interface elements. They can hide selected
+home shelves, account-menu entries, management-page rows, persistent navigation tabs, Play Points and
+notification indicators. A replacement start tab can be selected when its original tab is hidden.
+The **Minimal Search home** option keeps the top search field and results routing intact while removing
+the Search landing suggestions and the remaining bottom-navigation item.
+
+These filters are disabled by default, except **Hide promoted search shelves** (see below). Unlike the main ad filter, they depend on internal Play Store UI
+models that Google can change without notice. Targets are resolved from code structure and stable string
+fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
+filter fails open and the original interface remains available rather than risking a Play Store crash.
+UI entries are matched by model shape, semantic roles, product identifiers, and Play Store's own
+translations of their English labels, so the filters are not limited to English or Russian Play Store
+installations.
+
+**Hide promoted search shelves** removes the collapsed promotional shelf shown among search results
+(for example limited-time events). It is promotional placement, so it is hidden by default together with
+ads; Play Store does not label it as an ad, so it keeps its own switch for users who want to see it.
+
+Before trusting a new Play Store release, `python tools/check_play_store_apk.py base.apk --aapt2 <path>`
+checks that every DexKit anchor and every English UI label the filters rely on is still present. A
+label the module cannot find at runtime is also reported in the Xposed log. For a full DexKit
+resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`
+and run the unit tests with `-Dgplayadblock.playStoreApk=/path/to/base.apk`. That check is strict: it
+requires every optional target, so older releases that lack some of them (for example 43.9.18 without
+persistent navigation) are expected to fail it. Recorded releases are checked against their own
+fingerprints instead.
+
+The start tab is applied once when Play Store is opened from the launcher; tabs chosen afterwards are
+kept. If Play Store crashes repeatedly (three times within two minutes), the optional interface filters
+are skipped on the following launches while ad filtering stays active. Updating Play Store or the module,
+or using **Apply and restart Play Store**, re-enables them.
+
+The compatibility section contains two additional controls:
+
+- **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does
+  not block updates of other apps and is disabled by default.
+- **Apply and restart Play Store** asks the active module inside Play Store to remove only its cached feed
+  responses (`cache/streamdatastore`), terminate the process, discard its old task snapshot, and relaunch. Root is used
+  only as a fallback. Accounts, installed-app records, preferences, the rest of the cache, and Play Store app data
+  are not cleared.
+
+Some filters require a restart before an already-created screen changes. Hiding a currently selected
+persistent tab may still briefly expose cached content on unusual Play Store builds; the module switches to
+the configured replacement tab synchronously and falls back to a main-thread callback if the direct switch
+is rejected.
+
 ## Compatibility
 
 | Play Store release | Version code | Status |

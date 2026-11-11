@@ -106,6 +106,7 @@ internal object SampleTargets {
                             paramTypeNames = listOf("navCallback", "navCallback"),
                         ),
                     navCallbackMethod = method("navCallback"),
+                    navHiddenInstanceField = field("navHiddenInstance"),
                 ),
             persistentNavFailure = null,
             accountMenu =

@@ -51,6 +51,16 @@ object ManageAppsFilter {
                     .intercept { chain ->
                         val original =
                             chain.getArg(0) as? List<*> ?: return@intercept chain.proceed()
+                        if (
+                            preferences.minimalSearchHome() &&
+                            PersistentNavFilter.minimalSearchRootVisible &&
+                            isSearchLandingList(original)
+                        ) {
+                            Logger.debug { "minimal search landing removed=${original.size}" }
+                            val arguments = chain.args.toTypedArray()
+                            arguments[0] = emptyList<Any>()
+                            return@intercept chain.proceed(arguments)
+                        }
                         val nonNullItems = original.filterNotNull()
                         val stringActionItems =
                             nonNullItems.filter { item -> shapeOf(item).hasDirectString }
@@ -124,4 +134,27 @@ object ManageAppsFilter {
         val hasDirectString: Boolean,
         val isStateWrapper: Boolean,
     )
+
+    private fun isSearchLandingList(items: List<*>): Boolean {
+        if (items.size != 2) return false
+        val first = items[0] ?: return false
+        val second = items[1] ?: return false
+        val wrapperType = first.javaClass
+        val directFields = wrapperType.instanceFields()
+        val inheritedFields = wrapperType.superclass?.instanceFields().orEmpty()
+        if (directFields.size != 1 || inheritedFields.size != 2) return false
+        if (second.javaClass == wrapperType) return true
+
+        val placeholderTypes =
+            second.javaClass
+                .instanceFields()
+                .map { field -> field.type }
+                .toSet()
+        return placeholderTypes == setOf(String::class.java, Integer::class.java)
+    }
+
+    private fun Class<*>.instanceFields() =
+        declaredFields.filterNot { field ->
+            field.isSynthetic || Modifier.isStatic(field.modifiers)
+        }
 }

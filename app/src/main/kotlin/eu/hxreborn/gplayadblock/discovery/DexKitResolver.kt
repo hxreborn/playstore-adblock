@@ -914,6 +914,15 @@ object DexKitResolver {
         val navConstructor =
             navConstructors.singleOrNull()
                 ?: return fail("nav constructors=${navConstructors.size}")
+        val navHiddenClass =
+            when (val result = findAnchoredClass(bridge, "NavHidden")) {
+                is Resolution.Success -> result.value
+                is Resolution.Failure -> null
+            }
+        val navHiddenField =
+            navHiddenClass?.fields?.singleOrNull { field ->
+                Modifier.isStatic(field.modifiers) && field.typeName == navHiddenClass.name
+            }
 
         return Resolution.Success(
             ResolvedTargets.PersistentNav(
@@ -923,6 +932,7 @@ object DexKitResolver {
                 navSecondaryCallbackField = actionInstanceFields[1].toRef(),
                 navActionConstructor = actionConstructor.toConstructorRef(),
                 navCallbackMethod = callbackMethod.toRef(),
+                navHiddenInstanceField = navHiddenField?.toRef(),
             ),
         )
     }

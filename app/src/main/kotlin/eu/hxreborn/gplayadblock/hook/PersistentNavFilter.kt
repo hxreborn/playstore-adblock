@@ -35,6 +35,7 @@ object PersistentNavFilter {
         val secondaryCallbackField = targets.navSecondaryCallbackField.resolve(classLoader)
         val actionConstructor = targets.navActionConstructor.resolve(classLoader)
         val callbackMethod = targets.navCallbackMethod.resolve(classLoader)
+        val navHidden = targets.navHiddenInstanceField?.resolve(classLoader)?.get(null)
         val callbackClass = callbackMethod.declaringClass
 
         module
@@ -159,6 +160,20 @@ object PersistentNavFilter {
                 val arguments = chain.args.toTypedArray()
                 arguments[0] = retained.map { it.value }
                 arguments[1] = selectedNew
+                val selectedType =
+                    retained
+                        .getOrNull(selectedNew)
+                        ?.value
+                        ?.let(itemTypeField::get)
+                        ?.toString()
+                minimalSearchRootVisible =
+                    preferences.minimalSearchHome() &&
+                    navHidden != null &&
+                    selectedType == FilterPreferences.START_TAB_SEARCH &&
+                    chain.getArg(3)?.toString()?.startsWith("NavShown") == true
+                if (preferences.minimalSearchHome() && navHidden != null) {
+                    arguments[3] = navHidden
+                }
                 arguments[5] = filteredAction
                 val result = chain.proceed(arguments)
 
@@ -303,6 +318,10 @@ object PersistentNavFilter {
 
     private val navigationInFlight = AtomicBoolean(false)
     private val externalRecoveryScheduled = AtomicBoolean(false)
+
+    @Volatile
+    internal var minimalSearchRootVisible = false
+        private set
     private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
     private const val EXTERNAL_NAVIGATION_GRACE_MILLIS = 2_000L
     private const val MAIN_ACTIVITY_CLASS = "com.google.android.finsky.activities.MainActivity"

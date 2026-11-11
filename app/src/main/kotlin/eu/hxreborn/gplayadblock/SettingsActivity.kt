@@ -165,6 +165,12 @@ class SettingsActivity : Activity() {
                     FilterPreferences.KEY_HIDE_YOU_TAB,
                     preferences,
                 )
+                addFilter(
+                    R.string.minimal_search_home,
+                    R.string.minimal_search_home_summary,
+                    FilterPreferences.KEY_MINIMAL_SEARCH_HOME,
+                    preferences,
+                )
                 addStartTabPreference(preferences)
 
                 addHeader(R.string.category_maintenance)

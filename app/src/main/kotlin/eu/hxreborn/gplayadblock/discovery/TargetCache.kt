@@ -281,6 +281,10 @@ object TargetCache {
             .put("navSecondaryCallbackField", encodeField(value.navSecondaryCallbackField))
             .put("navActionConstructor", encodeConstructor(value.navActionConstructor))
             .put("navCallbackMethod", encodeMethod(value.navCallbackMethod))
+            .putOpt(
+                "navHiddenInstanceField",
+                value.navHiddenInstanceField?.let(::encodeField),
+            )
 
     private fun decodePersistentNav(value: JSONObject): ResolvedTargets.PersistentNav =
         ResolvedTargets.PersistentNav(
@@ -293,6 +297,8 @@ object TargetCache {
             navActionConstructor =
                 decodeConstructor(value.getJSONObject("navActionConstructor")),
             navCallbackMethod = decodeMethod(value.getJSONObject("navCallbackMethod")),
+            navHiddenInstanceField =
+                value.optJSONObject("navHiddenInstanceField")?.let(::decodeField),
         )
 
     private fun encodeSuggestion(value: ResolvedTargets.Suggestion): JSONObject =

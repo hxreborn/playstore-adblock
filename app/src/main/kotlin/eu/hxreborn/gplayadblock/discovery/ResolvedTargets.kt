@@ -25,6 +25,7 @@ sealed interface ResolvedTargets {
         val navSecondaryCallbackField: FieldRef,
         val navActionConstructor: ConstructorRef,
         val navCallbackMethod: MethodRef,
+        val navHiddenInstanceField: FieldRef?,
     )
 
     data class Suggestion(

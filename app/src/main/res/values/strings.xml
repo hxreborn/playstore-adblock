@@ -44,6 +44,8 @@
     <string name="hide_books_tab">Hide Books tab</string>
     <string name="hide_you_tab">Hide You tab</string>
     <string name="hide_tab_summary">Removes this item from the bottom navigation while keeping Search available.</string>
+    <string name="minimal_search_home">Minimal Search home</string>
+    <string name="minimal_search_home_summary">Hides the bottom Search item and its landing suggestions. The top search bar and search results remain available.</string>
     <string name="start_tab">Start screen</string>
     <string name="start_tab_summary">Opens the selected visible tab when Play Store starts. “Keep Play Store choice” leaves its normal behavior unchanged.</string>
     <string-array name="start_tab_labels">

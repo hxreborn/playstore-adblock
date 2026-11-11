@@ -44,6 +44,8 @@
     <string name="hide_books_tab">Скрывать вкладку «Книги»</string>
     <string name="hide_you_tab">Скрывать вкладку «Вы»</string>
     <string name="hide_tab_summary">Убирает пункт из нижней навигации; вкладка «Поиск» всегда остаётся доступной.</string>
+    <string name="minimal_search_home">Минимальный экран поиска</string>
+    <string name="minimal_search_home_summary">Скрывает нижнюю вкладку «Поиск» и подсказки на её стартовом экране. Верхняя строка и результаты поиска продолжают работать.</string>
     <string name="start_tab">Стартовый экран</string>
     <string name="start_tab_summary">Открывает выбранную видимую вкладку при запуске Play Market. Первый вариант сохраняет обычное поведение магазина.</string>
     <string-array name="start_tab_labels">

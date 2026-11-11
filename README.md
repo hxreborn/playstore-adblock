@@ -54,6 +54,8 @@
 The module settings also expose opt-in filters for Play Store interface elements. They can hide selected
 home shelves, account-menu entries, management-page rows, persistent navigation tabs, Play Points and
 notification indicators. A replacement start tab can be selected when its original tab is hidden.
+The **Minimal Search home** option keeps the top search field and results routing intact while removing
+the Search landing suggestions and the remaining bottom-navigation item.
 
 These filters are disabled by default. Unlike the main ad filter, they depend on internal Play Store UI
 models that Google can change without notice. Targets are resolved from code structure and stable string

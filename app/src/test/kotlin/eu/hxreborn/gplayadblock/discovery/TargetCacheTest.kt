@@ -129,6 +129,18 @@ class TargetCacheTest {
     }
 
     @Test
+    fun `persistent navigation remains usable when hidden visibility is unavailable`() {
+        val withoutHiddenVisibility =
+            RESOLVED.copy(
+                persistentNav =
+                    RESOLVED.persistentNav?.copy(navHiddenInstanceField = null),
+            )
+        TargetCache.store(root(), key, withoutHiddenVisibility)
+
+        assertEquals(withoutHiddenVisibility, TargetCache.load(root(), key))
+    }
+
+    @Test
     fun `a target set stored before the module was reinstalled is not reused`() {
         TargetCache.store(root(), key, RESOLVED)
 

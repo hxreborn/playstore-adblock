@@ -84,6 +84,9 @@ class GPlayAdblockApp :
             ).putBoolean(
                 FilterPreferences.KEY_HIDE_YOU_TAB,
                 local.getBoolean(FilterPreferences.KEY_HIDE_YOU_TAB, false),
+            ).putBoolean(
+                FilterPreferences.KEY_MINIMAL_SEARCH_HOME,
+                local.getBoolean(FilterPreferences.KEY_MINIMAL_SEARCH_HOME, false),
             ).putString(
                 FilterPreferences.KEY_START_TAB,
                 local.getString(

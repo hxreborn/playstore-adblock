@@ -49,6 +49,8 @@ class FilterPreferences(
 
     fun hideYouTab(): Boolean = preferences.getBoolean(KEY_HIDE_YOU_TAB, false)
 
+    fun minimalSearchHome(): Boolean = preferences.getBoolean(KEY_MINIMAL_SEARCH_HOME, false)
+
     fun startTab(): String =
         preferences.getString(KEY_START_TAB, START_TAB_UNCHANGED) ?: START_TAB_UNCHANGED
 
@@ -76,6 +78,7 @@ class FilterPreferences(
         const val KEY_HIDE_APPS_TAB = "hide_apps_tab"
         const val KEY_HIDE_BOOKS_TAB = "hide_books_tab"
         const val KEY_HIDE_YOU_TAB = "hide_you_tab"
+        const val KEY_MINIMAL_SEARCH_HOME = "minimal_search_home"
         const val KEY_START_TAB = "start_tab"
         const val KEY_BLOCK_STORE_SELF_UPDATES = "block_store_self_updates"
 

@@ -184,9 +184,3 @@ releases:
     tested_on: 2026-10-06
     module_version_code: 10500
     notes: cache filtering tested from an ad-bearing cache
-  - version_name: "54.0.09-34 [0] [PR] 1014031620"
-    version_code: 85400940
-    status: untested
-    tested_on: 2026-11-11
-    module_version_code: 10601
-    notes: run on a device without a paired control; awaiting maintainer verification

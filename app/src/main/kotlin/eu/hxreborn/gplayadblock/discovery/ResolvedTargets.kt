@@ -87,6 +87,7 @@ sealed interface ResolvedTargets {
         val byteStringToByteArrayMethod: MethodRef,
         val protobufToByteArrayMethod: MethodRef,
         val repeatedListCopyMethod: MethodRef,
+        val presentationCaseMapper: MethodRef? = null,
         val suggestion: Suggestion?,
         val suggestionFailure: String?,
         val spotlight: Spotlight?,

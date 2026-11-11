@@ -3,9 +3,6 @@ package eu.hxreborn.gplayadblock
 import android.app.Activity
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.ResultReceiver
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
@@ -16,9 +13,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
+import java.lang.ref.WeakReference
 
 class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -335,26 +330,34 @@ class SettingsActivity : Activity() {
                 setOnClickListener { button ->
                     button.isEnabled = false
                     status.text = getString(R.string.restart_play_store_working)
+                    // The worker holds the screen only weakly: closing it during a restart
+                    // (up to a minute on the root path) must not keep the activity alive.
+                    val appContext = applicationContext
+                    val screen = WeakReference(this@SettingsActivity)
+                    val statusView = WeakReference(status)
+                    val buttonView = WeakReference(button)
                     Thread {
-                        val result = restartPlayStore()
-                        runOnUiThread {
-                            status.text =
-                                getString(
+                        val result = PlayStoreRestarter.restart(appContext)
+                        val activity = screen.get() ?: return@Thread
+                        activity.runOnUiThread {
+                            if (activity.isDestroyed) return@runOnUiThread
+                            statusView.get()?.text =
+                                activity.getString(
                                     when (result) {
-                                        RestartOutcome.RESTARTED -> {
+                                        PlayStoreRestarter.Outcome.RESTARTED -> {
                                             R.string.restart_play_store_success
                                         }
 
-                                        RestartOutcome.BUSY -> {
+                                        PlayStoreRestarter.Outcome.BUSY -> {
                                             R.string.restart_play_store_busy
                                         }
 
-                                        RestartOutcome.FAILED -> {
+                                        PlayStoreRestarter.Outcome.FAILED -> {
                                             R.string.restart_play_store_failed
                                         }
                                     },
                                 )
-                            button.isEnabled = true
+                            buttonView.get()?.isEnabled = true
                         }
                     }.start()
                 }
@@ -367,87 +370,5 @@ class SettingsActivity : Activity() {
         addView(status)
     }
 
-    private enum class RestartOutcome { RESTARTED, BUSY, FAILED }
-
-    private fun restartPlayStore(): RestartOutcome =
-        when (val viaModule = restartViaModule()) {
-            // A busy Play Store must not be force-stopped through root either.
-            RestartOutcome.RESTARTED, RestartOutcome.BUSY -> viaModule
-
-            RestartOutcome.FAILED -> if (restartViaRoot()) RestartOutcome.RESTARTED else viaModule
-        }
-
-    private fun restartViaModule(): RestartOutcome =
-        runCatching {
-            val completed = CountDownLatch(1)
-            val received = AtomicInteger(RestartProtocol.RESULT_FAILED)
-            val callback =
-                object : ResultReceiver(Handler(Looper.getMainLooper())) {
-                    override fun onReceiveResult(
-                        resultCode: Int,
-                        resultData: Bundle?,
-                    ) {
-                        received.set(resultCode)
-                        completed.countDown()
-                    }
-                }
-            sendBroadcast(
-                android.content
-                    .Intent(RestartProtocol.ACTION)
-                    .setPackage(BuildConfig.TARGET_PACKAGE)
-                    .putExtra(RestartProtocol.EXTRA_CALLBACK, callback),
-            )
-            if (!completed.await(MODULE_RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                return@runCatching RestartOutcome.FAILED
-            }
-            when (received.get()) {
-                RestartProtocol.RESULT_OK -> Unit
-                RestartProtocol.RESULT_BUSY -> return@runCatching RestartOutcome.BUSY
-                else -> return@runCatching RestartOutcome.FAILED
-            }
-            Thread.sleep(MODULE_RELAUNCH_DELAY_MILLIS)
-            val launchIntent =
-                packageManager.getLaunchIntentForPackage(BuildConfig.TARGET_PACKAGE)
-                    ?: return@runCatching RestartOutcome.FAILED
-            launchIntent.addFlags(
-                android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
-            )
-            startActivity(launchIntent)
-            RestartOutcome.RESTARTED
-        }.getOrDefault(RestartOutcome.FAILED)
-
-    private fun restartViaRoot(): Boolean =
-        runCatching {
-            // Target the Android user this settings screen runs in (secondary users and work
-            // profiles have their own data directory and their own Play Store process).
-            val userId = android.os.Process.myUid() / PER_USER_UID_RANGE
-            val target = BuildConfig.TARGET_PACKAGE
-            val dataDir = "/data/user/$userId/$target"
-            val command =
-                listOf(
-                    "am force-stop --user $userId $target",
-                    "rm -rf $dataDir/cache/*",
-                    "rm -rf $dataDir/code_cache/*",
-                    "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
-                        "-c android.intent.category.LAUNCHER -p $target",
-                ).joinToString("; ")
-            ProcessBuilder("su", "-c", command)
-                .redirectErrorStream(true)
-                .start()
-                .let { process ->
-                    val completed = process.waitFor(RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    if (!completed) process.destroyForcibly()
-                    completed && process.exitValue() == 0
-                }
-        }.getOrDefault(false)
-
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private companion object {
-        const val MODULE_RESTART_TIMEOUT_SECONDS = 3L
-        const val MODULE_RELAUNCH_DELAY_MILLIS = 500L
-        const val RESTART_TIMEOUT_SECONDS = 60L
-        const val PER_USER_UID_RANGE = 100_000
-    }
 }

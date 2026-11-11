@@ -148,7 +148,8 @@ object TargetCache {
             ).put(
                 "repeatedListCopyMethod",
                 encodeMethod(targets.repeatedListCopyMethod),
-            ).putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
+            ).putOpt("presentationCaseMapper", targets.presentationCaseMapper?.let(::encodeMethod))
+            .putOpt("suggestion", targets.suggestion?.let(::encodeSuggestion))
             .putOpt("suggestionFailure", targets.suggestionFailure)
             .putOpt("spotlight", targets.spotlight?.let(::encodeSpotlight))
             .putOpt("spotlightFailure", targets.spotlightFailure)
@@ -218,6 +219,8 @@ object TargetCache {
                 decodeMethod(value.getJSONObject("protobufToByteArrayMethod")),
             repeatedListCopyMethod =
                 decodeMethod(value.getJSONObject("repeatedListCopyMethod")),
+            presentationCaseMapper =
+                value.optJSONObject("presentationCaseMapper")?.let(::decodeMethod),
             suggestion = value.optJSONObject("suggestion")?.let(::decodeSuggestion),
             suggestionFailure = value.optString("suggestionFailure").ifEmpty { null },
             spotlight = value.optJSONObject("spotlight")?.let(::decodeSpotlight),

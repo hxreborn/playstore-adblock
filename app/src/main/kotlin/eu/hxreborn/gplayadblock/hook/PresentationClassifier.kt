@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.hook.ProtoWire.LENGTH_DELIMITED
 import eu.hxreborn.gplayadblock.hook.ProtoWire.VARINT
@@ -28,6 +29,7 @@ class PresentationClassifier(
     private val hideLiveOps: () -> Boolean = { false },
     private val hidePreRegistrationGames: () -> Boolean = { false },
     private val hideSearchPromotions: () -> Boolean = { false },
+    private val adClusterCases: Set<Int> = AD_CLUSTER_CASES,
 ) {
     private val cases = Collections.synchronizedMap(WeakHashMap<Any, Int>())
 
@@ -44,7 +46,7 @@ class PresentationClassifier(
     }
 
     fun isAd(case: Int): Boolean =
-        case in AD_CLUSTER_CASES ||
+        case in adClusterCases ||
             case == GENERIC_AD_CARD ||
             case == GENERIC_AD_CLUSTER ||
             case == GENERIC_AD_DISCLOSURE_CLUSTER ||
@@ -148,7 +150,7 @@ class PresentationClassifier(
         // preferences: sponsored checks run first, optional categories are always detected,
         // and isAd() applies the live preference values.
         return when {
-            case in AD_CLUSTER_CASES -> {
+            case in adClusterCases -> {
                 case
             }
 
@@ -312,7 +314,35 @@ class PresentationClassifier(
                 hideLiveOps = hideLiveOps,
                 hidePreRegistrationGames = hidePreRegistrationGames,
                 hideSearchPromotions = hideSearchPromotions,
+                adClusterCases = adClusterCases(classLoader, targets),
             )
+
+        /**
+         * Sponsored cluster cases read from Play Store's presentation enum through its static
+         * `int -> enum` mapper, so new ad formats are recognised by name. Falls back to
+         * [AD_CLUSTER_CASES] when the mapper is unavailable or yields nothing.
+         */
+        private fun adClusterCases(
+            classLoader: ClassLoader,
+            targets: ResolvedTargets.Resolved,
+        ): Set<Int> {
+            val derived =
+                runCatching {
+                    val mapper = targets.presentationCaseMapper?.resolve(classLoader)
+                    mapper?.let { method ->
+                        AdPresentationCases.derive { case ->
+                            (method.invoke(null, case) as? Enum<*>)?.name
+                        }
+                    }
+                }.getOrNull()
+            val cases = derived?.takeIf(Set<Int>::isNotEmpty) ?: AD_CLUSTER_CASES
+            if (cases != AD_CLUSTER_CASES) {
+                Logger.info(
+                    "sponsored cluster cases ${cases.sorted()} (built-in $AD_CLUSTER_CASES)",
+                )
+            }
+            return cases
+        }
 
         val AD_CLUSTER_CASES = setOf(69, 85, 86, 224)
         const val CLUSTER_PRESENTATION = 1

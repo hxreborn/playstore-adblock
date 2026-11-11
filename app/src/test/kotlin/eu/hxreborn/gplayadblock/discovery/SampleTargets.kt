@@ -69,6 +69,7 @@ internal object SampleTargets {
             byteStringToByteArrayMethod = method("byteStringToByteArray"),
             protobufToByteArrayMethod = method("protobufToByteArray"),
             repeatedListCopyMethod = method("repeatedListCopy"),
+            presentationCaseMapper = method("presentationCaseMapper"),
             suggestion =
                 ResolvedTargets.Suggestion(
                     constructor =

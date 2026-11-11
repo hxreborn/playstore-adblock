@@ -178,8 +178,12 @@ object DexKitResolver {
                 !field.isStatic && field.typeName == "java.lang.Object"
             } ?: return missing("presentation payload field not found")
 
+        val presentationMapper = resolvePresentationMapper(bridge)
         val cluster =
-            when (val clusterResult = resolveClusterCase(bridge, presentationKindField)) {
+            when (
+                val clusterResult =
+                    resolveClusterCase(presentationMapper, presentationKindField)
+            ) {
                 is Resolution.Success -> clusterResult.value
                 is Resolution.Failure -> return missing(clusterResult.reason)
             }
@@ -724,6 +728,7 @@ object DexKitResolver {
             byteStringToByteArrayMethod = protobuf.byteStringToByteArrayMethod.toRef(),
             protobufToByteArrayMethod = protobuf.protobufToByteArrayMethod.toRef(),
             repeatedListCopyMethod = repeatedListCopyMethod.toRef(),
+            presentationCaseMapper = presentationMapper?.toRef(),
             suggestion = suggestion,
             suggestionFailure = (suggestionResult as? Resolution.Failure)?.reason,
             spotlight = (spotlightResult as? Resolution.Success)?.value,
@@ -1262,11 +1267,11 @@ object DexKitResolver {
     }
 
     private fun resolveClusterCase(
-        bridge: DexKitBridge,
+        presentationMapper: MethodData?,
         presentationKindField: FieldData,
     ): Resolution<ClusterCase> {
         val caseFieldReaders =
-            resolvePresentationMapper(bridge)?.callers
+            presentationMapper?.callers
                 ?: presentationKindField.readers
         val caseFieldScores =
             caseFieldReaders

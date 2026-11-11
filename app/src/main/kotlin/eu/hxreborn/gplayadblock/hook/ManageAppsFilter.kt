@@ -69,8 +69,9 @@ object ManageAppsFilter {
                         val original =
                             chain.getArg(0) as? List<*> ?: return@intercept chain.proceed()
                         if (
+                            // The visual categories cluster (VE 7567) only appears on the
+                            // Search landing page (checked on the Apps home and Categories too).
                             preferences.minimalSearchHome() &&
-                            PersistentNavFilter.minimalSearchRootVisible &&
                             elementTypeField != null &&
                             UiEntryMatcher.isSearchLanding(original.map { it?.let(::elementType) })
                         ) {

@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.hook
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
@@ -24,6 +25,11 @@ internal class LocalizedLabels private constructor(
     private var cache: Pair<LocaleList, Map<String, Set<String>>>? = null
 
     fun localized(englishDefault: String): Set<String> = current()[englishDefault].orEmpty()
+
+    /** Runs the resource scan ahead of time (off the main thread) so menus never wait for it. */
+    fun warmUp() {
+        current()
+    }
 
     private fun current(): Map<String, Set<String>> {
         val locales = context.resources.configuration.locales
@@ -59,6 +65,9 @@ internal class LocalizedLabels private constructor(
 
     private fun scan(resources: Resources): Map<String, Set<String>> {
         val stringType = stringTypeBase(resources) ?: return emptyMap()
+
+        // Reads Play Store's own English resources; it does not change any app's locale.
+        @SuppressLint("AppBundleLocaleChanges")
         val englishConfiguration =
             Configuration(resources.configuration).apply { setLocale(Locale.US) }
         val english = context.createConfigurationContext(englishConfiguration).resources
@@ -96,12 +105,18 @@ internal class LocalizedLabels private constructor(
         private const val MAX_ENTRY = 0xFFFF
         private const val MAX_CONSECUTIVE_MISSES = 256
 
+        // Holds only the application context (see of()), which lives as long as the process.
+        @SuppressLint("StaticFieldLeak")
         @Volatile
         private var instance: LocalizedLabels? = null
 
         fun of(context: Context): LocalizedLabels =
             instance ?: synchronized(this) {
-                instance ?: LocalizedLabels(context).also { instance = it }
+                // Application-scoped context only: the process-wide instance must not retain
+                // anything shorter-lived. During Application.attach getApplicationContext() is
+                // still null, and the Application passed in is itself process-scoped.
+                instance
+                    ?: LocalizedLabels(context.applicationContext ?: context).also { instance = it }
             }
     }
 }

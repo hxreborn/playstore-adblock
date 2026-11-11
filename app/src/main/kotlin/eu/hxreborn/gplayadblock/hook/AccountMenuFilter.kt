@@ -135,8 +135,13 @@ object AccountMenuFilter {
                 }
             return fields
                 .asSequence()
-                .mapNotNull { field -> runCatching { field.get(item)?.toString() }.getOrNull() }
-                .firstOrNull(COMMON_ACTION_ROLES::contains)
+                .mapNotNull { field ->
+                    runCatching {
+                        field.get(item)?.let { value ->
+                            (value as? Enum<*>)?.name ?: value.toString()
+                        }
+                    }.getOrNull()
+                }.firstOrNull(COMMON_ACTION_ROLES::contains)
         }
         val immutableCopy =
             immutableListClass.declaredMethods

@@ -102,7 +102,7 @@ class GPlayAdblockApp :
             ).putBoolean(
                 FilterPreferences.KEY_BLOCK_STORE_SELF_UPDATES,
                 local.getBoolean(FilterPreferences.KEY_BLOCK_STORE_SELF_UPDATES, false),
-            ).commit()
+            ).apply()
     }
 
     companion object {

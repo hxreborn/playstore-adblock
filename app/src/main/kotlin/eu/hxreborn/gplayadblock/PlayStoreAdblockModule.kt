@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -18,6 +19,7 @@ import eu.hxreborn.gplayadblock.discovery.HookGroup
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.discovery.TargetCache
 import eu.hxreborn.gplayadblock.hook.AccountMenuFilter
+import eu.hxreborn.gplayadblock.hook.LocalizedLabels
 import eu.hxreborn.gplayadblock.hook.ManageAppsFilter
 import eu.hxreborn.gplayadblock.hook.PersistentNavFilter
 import eu.hxreborn.gplayadblock.hook.SearchSuggestionFilter
@@ -31,6 +33,7 @@ import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 @PublishedApi
 internal lateinit var module: PlayStoreAdblockModule
@@ -105,6 +108,7 @@ class PlayStoreAdblockModule : XposedModule() {
                     file = File(context.applicationInfo.dataDir, CRASH_GUARD_PATH),
                     fingerprint = cacheKey.toString(),
                 )
+            trackPurchaseFlows(application)
             installRestartReceiver(context, crashGuard)
             val preferences =
                 FilterPreferences(getRemotePreferences(FilterPreferences.PREFERENCES_NAME))
@@ -172,6 +176,16 @@ class PlayStoreAdblockModule : XposedModule() {
                                 preferences,
                                 targets,
                             )
+                        // Scan UI labels in the background before the first menu needs them.
+                        // A module thread must never take Play Store down: failures are logged.
+                        Thread(
+                            {
+                                runCatching { LocalizedLabels.of(application).warmUp() }
+                                    .onFailure { Logger.warn("label warm-up failed", it) }
+                            },
+                            "gpab-labels",
+                        ).apply { isDaemon = true }
+                            .start()
                     }
                     targets.manageAppsFailure?.let { reason ->
                         Logger.warn("optional manage apps targets unresolved reason=$reason")
@@ -268,6 +282,8 @@ class PlayStoreAdblockModule : XposedModule() {
         }
     }
 
+    // Runs only inside Play Store, which requires API 34, so RECEIVER_EXPORTED is honoured.
+    @SuppressLint("InlinedApi")
     private fun installRestartReceiver(
         context: Context,
         crashGuard: CrashLoopGuard,
@@ -285,8 +301,14 @@ class PlayStoreAdblockModule : XposedModule() {
                     val pendingResult = goAsync()
                     Thread {
                         // Killing the process mid-installation would abort it: refuse instead.
-                        if (hasActiveInstallSession(receiverContext)) {
-                            Logger.info("restart refused: Play Store is installing apps")
+                        val busy =
+                            when {
+                                hasActiveInstallSession(receiverContext) -> "installing apps"
+                                livePurchaseActivities.get() > 0 -> "in a purchase flow"
+                                else -> null
+                            }
+                        if (busy != null) {
+                            Logger.info("restart refused: Play Store is $busy")
                             callback?.send(RestartProtocol.RESULT_BUSY, Bundle.EMPTY)
                             pendingResult.finish()
                             return@Thread
@@ -323,6 +345,45 @@ class PlayStoreAdblockModule : XposedModule() {
             Context.RECEIVER_EXPORTED,
         )
     }
+
+    /**
+     * Counts live purchase activities (manifest components under finsky.billing, e.g. the
+     * acquire sheet). A restart while one exists would abort the purchase.
+     */
+    private fun trackPurchaseFlows(application: Application) {
+        application.registerActivityLifecycleCallbacks(
+            object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityCreated(
+                    activity: Activity,
+                    savedInstanceState: Bundle?,
+                ) {
+                    if (activity.isPurchaseFlow()) livePurchaseActivities.incrementAndGet()
+                }
+
+                override fun onActivityDestroyed(activity: Activity) {
+                    if (activity.isPurchaseFlow()) livePurchaseActivities.decrementAndGet()
+                }
+
+                override fun onActivityStarted(activity: Activity) = Unit
+
+                override fun onActivityResumed(activity: Activity) = Unit
+
+                override fun onActivityPaused(activity: Activity) = Unit
+
+                override fun onActivityStopped(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(
+                    activity: Activity,
+                    outState: Bundle,
+                ) = Unit
+            },
+        )
+    }
+
+    private fun Activity.isPurchaseFlow(): Boolean =
+        javaClass.name.startsWith(PURCHASE_ACTIVITY_PACKAGE)
+
+    private val livePurchaseActivities = AtomicInteger(0)
 
     private fun hasActiveInstallSession(context: Context): Boolean =
         runCatching {
@@ -393,6 +454,7 @@ class PlayStoreAdblockModule : XposedModule() {
     }
 
     private companion object {
+        const val PURCHASE_ACTIVITY_PACKAGE = "com.google.android.finsky.billing."
         val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
         const val RESTART_KILL_DELAY_MILLIS = 150L
         const val CRASH_EXIT_STATUS = 10

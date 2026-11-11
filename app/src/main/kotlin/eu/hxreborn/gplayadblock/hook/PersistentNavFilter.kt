@@ -13,8 +13,6 @@ import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Proxy
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -81,7 +79,7 @@ object PersistentNavFilter {
                 val retained =
                     indexed.filterNot { indexedValue ->
                         val type =
-                            itemTypeField.get(indexedValue.value)?.toString()
+                            enumName(itemTypeField.get(indexedValue.value))
                                 ?: return@filterNot false
                         shouldHide(type, preferences)
                     }
@@ -91,7 +89,7 @@ object PersistentNavFilter {
                 val originalCallback = primaryCallbackField.get(originalAction)
                 val originalIndices = retained.map { it.index }
                 val retainedTypes =
-                    retained.map { item -> itemTypeField.get(item.value)?.toString() }
+                    retained.map { item -> enumName(itemTypeField.get(item.value)) }
                 val now = SystemClock.elapsedRealtime()
                 val isExternalNavigation = now < externalNavigationDeadline.get()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
@@ -157,12 +155,6 @@ object PersistentNavFilter {
                 val arguments = chain.args.toTypedArray()
                 arguments[ITEMS_ARG] = retained.map { it.value }
                 arguments[SELECTED_ARG] = plan.selectedPosition
-                val selectedType = retainedTypes.getOrNull(plan.selectedPosition)
-                minimalSearchRootVisible =
-                    preferences.minimalSearchHome() &&
-                    navHidden != null &&
-                    selectedType == FilterPreferences.START_TAB_SEARCH &&
-                    chain.getArg(VISIBILITY_ARG)?.toString()?.startsWith("NavShown") == true
                 // Hiding the bar is only safe once a single tab remains; otherwise the user
                 // would lose the only way to reach the other visible tabs.
                 if (preferences.minimalSearchHome() && navHidden != null && retained.size == 1) {
@@ -211,7 +203,7 @@ object PersistentNavFilter {
         classLoader: ClassLoader,
         onMainResumedAfterOverlay: () -> Unit,
     ) {
-        val mainActivityClass = classLoader.loadClass(MAIN_ACTIVITY_CLASS)
+        val mainActivityClass = classLoader.loadClass(mainActivityName(application))
         val mainHandler = Handler(Looper.getMainLooper())
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
@@ -250,7 +242,7 @@ object PersistentNavFilter {
             },
         )
 
-        generateSequence(classLoader.loadClass(MAIN_ACTIVITY_CLASS)) { type -> type.superclass }
+        generateSequence(mainActivityClass as Class<*>) { type -> type.superclass }
             .flatMap { type -> type.declaredMethods.asSequence() }
             .filter { method ->
                 method.name == "onNewIntent" &&
@@ -292,6 +284,23 @@ object PersistentNavFilter {
         }
     }
 
+    /** Enum constant name; enums are compared by name, never by an overridable toString. */
+    private fun enumName(value: Any?): String? = (value as? Enum<*>)?.name ?: value?.toString()
+
+    /**
+     * Play Store's launcher entry (an activity-alias) resolved to the activity class behind it,
+     * with the known class name as fallback.
+     */
+    private fun mainActivityName(application: Application): String =
+        runCatching {
+            val component =
+                application.packageManager
+                    .getLaunchIntentForPackage(application.packageName)
+                    ?.component ?: return@runCatching null
+            val info = application.packageManager.getActivityInfo(component, 0)
+            info.targetActivity ?: info.name
+        }.getOrNull() ?: MAIN_ACTIVITY_CLASS
+
     private fun shouldHide(
         type: String,
         preferences: FilterPreferences,
@@ -304,22 +313,20 @@ object PersistentNavFilter {
             else -> false
         }
 
+    /**
+     * Switches tab before the new model is drawn. On the main thread it runs inline; from a
+     * background producer it is posted to the front of the main queue, which runs before the
+     * next frame, without blocking the producer thread.
+     */
     private fun navigateBeforeReturning(action: () -> Unit) {
+        val run = {
+            runCatching(action).onFailure { Logger.warn("start tab navigation failed", it) }
+        }
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            runCatching(action).onFailure { Logger.warn("start tab navigation failed", it) }
-            return
+            run()
+        } else {
+            Handler(Looper.getMainLooper()).postAtFrontOfQueue { run() }
         }
-
-        val completed = CountDownLatch(1)
-        Handler(Looper.getMainLooper()).postAtFrontOfQueue {
-            runCatching(action).onFailure { Logger.warn("start tab navigation failed", it) }
-            completed.countDown()
-        }
-        runCatching {
-            if (!completed.await(NAVIGATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
-                Logger.warn("start tab navigation timed out")
-            }
-        }.onFailure { Logger.warn("waiting for start tab navigation failed", it) }
     }
 
     private val navigationInFlight = AtomicBoolean(false)
@@ -328,15 +335,11 @@ object PersistentNavFilter {
     private val latestCallback = AtomicReference<Any?>(null)
     private val startTabDeadline = AtomicLong(0L)
 
-    @Volatile
-    internal var minimalSearchRootVisible = false
-        private set
     private const val CONSTRUCTOR_PARAMETER_COUNT = 6
     private const val ITEMS_ARG = 0
     private const val SELECTED_ARG = 1
     private const val VISIBILITY_ARG = 3
     private const val ACTION_ARG = 5
-    private const val NAVIGATION_TIMEOUT_MILLIS = 1_000L
     private const val EXTERNAL_NAVIGATION_GRACE_MILLIS = 2_000L
     private const val START_TAB_WINDOW_MILLIS = 10_000L
     private const val MAIN_ACTIVITY_CLASS = "com.google.android.finsky.activities.MainActivity"

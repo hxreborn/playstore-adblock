@@ -328,17 +328,21 @@ class PlayStoreAdblockModule : XposedModule() {
                             }.onFailure { error ->
                                 Logger.warn("Play Store cache cleanup failed", error)
                             }.isSuccess
-                        callback?.send(
-                            if (cleared) {
-                                RestartProtocol.RESULT_OK
-                            } else {
-                                RestartProtocol.RESULT_FAILED
-                            },
-                            Bundle.EMPTY,
-                        )
+                        // Decided again at the last moment: the checks and cleanup may have run past
+                        // the caller's deadline, and a later request may have been answered since.
+                        val reply =
+                            RestartProtocol.finalReply(
+                                now = SystemClock.elapsedRealtime(),
+                                deadline = deadline,
+                                cleared = cleared,
+                            )
+                        if (cleared && reply != RestartProtocol.RESULT_OK) {
+                            Logger.info("restart refused: request expired")
+                        }
+                        callback?.send(reply, Bundle.EMPTY)
                         pendingResult.finish()
-                        // A failed cleanup is reported and Play Store keeps running.
-                        if (!cleared) return@Thread
+                        // Only an approved restart stops Play Store; otherwise it keeps running.
+                        if (reply != RestartProtocol.RESULT_OK) return@Thread
                         Handler(Looper.getMainLooper()).postDelayed(
                             { Process.killProcess(Process.myPid()) },
                             RESTART_KILL_DELAY_MILLIS,

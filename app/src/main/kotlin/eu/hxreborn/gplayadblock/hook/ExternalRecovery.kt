@@ -1,8 +1,5 @@
 package eu.hxreborn.gplayadblock.hook
 
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
-
 /**
  * Tab recovery after Play Store was opened by an external link, free of Android so it can be
  * unit tested.
@@ -11,83 +8,103 @@ import java.util.concurrent.atomic.AtomicInteger
  * tabs while that sheet shows dismisses it, so the switch waits until the sheet has been seen and
  * the main activity is resumed again. It never re-selects the current tab: that pops the tab to its
  * root.
+ *
+ * Every link gets its own generation. A plan carries the generation it was requested for and is
+ * accepted only while that link is still the current one, so a plan from a link that a launcher
+ * launch or a newer link replaced never runs. All state changes happen under one lock, so
+ * cancellation and planning cannot interleave.
  */
 internal class ExternalRecovery {
-    private val requested = AtomicBoolean(false)
-    private val pendingIndex = AtomicInteger(NONE)
-    private val overlaySeen = AtomicBoolean(false)
-    private val selectedIndex = AtomicInteger(NONE)
+    private var generation = 0
+    private var linkActive = false
+    private var requested = false
+    private var pendingIndex = NONE
+    private var overlaySeen = false
+    private var selectedIndex = NONE
 
     // The main activity is resumed after the overlay closed and no overlay has shown since.
-    private val mainReturned = AtomicBoolean(false)
-
-    // The latest external link is still current (no launcher launch replaced it).
-    private val linkActive = AtomicBoolean(false)
+    private var mainReturned = false
 
     // An activity other than the main one (the details sheet) is resumed in front of it.
-    private val overlayShowing = AtomicBoolean(false)
+    private var overlayShowing = false
 
     /** An external link arrived: forget earlier state and allow one recovery request. */
+    @Synchronized
     fun onExternalLink() {
-        requested.set(true)
-        pendingIndex.set(NONE)
-        overlaySeen.set(false)
-        mainReturned.set(false)
-        linkActive.set(true)
+        generation++
+        linkActive = true
+        requested = true
+        pendingIndex = NONE
+        overlaySeen = false
+        mainReturned = false
     }
 
     /** A launcher launch supersedes any recovery. */
+    @Synchronized
     fun onLauncherLaunch() {
-        requested.set(false)
-        pendingIndex.set(NONE)
-        overlaySeen.set(false)
-        mainReturned.set(false)
-        linkActive.set(false)
+        generation++
+        linkActive = false
+        requested = false
+        pendingIndex = NONE
+        overlaySeen = false
+        mainReturned = false
     }
 
-    /** True once per external link: the first navigation model built for it may plan recovery. */
-    fun consumeRequest(): Boolean = requested.compareAndSet(true, false)
+    /**
+     * Once per external link: the token of the link whose first navigation model may plan
+     * recovery, or null when no request is outstanding.
+     */
+    @Synchronized
+    fun consumeRequest(): Int? {
+        if (!requested) return null
+        requested = false
+        return generation
+    }
 
     /**
-     * Records the tab to recover. Returns true when the main activity already came back after the
-     * overlay: the navigation model was built late, so [takeRecovery] has to run now because no
-     * further resume will trigger it. A plan made for a link that a launcher launch has since
-     * replaced is dropped.
+     * Records the tab to recover for the link identified by [token]. Returns true when the main
+     * activity already came back after the overlay: the navigation model was built late, so
+     * [takeRecovery] has to run now because no further resume will trigger it. A plan for a link
+     * that has since been replaced is dropped.
      */
-    fun plan(index: Int): Boolean {
-        if (!linkActive.get()) return false
-        pendingIndex.set(index)
-        if (!linkActive.get()) {
-            pendingIndex.set(NONE)
-            return false
-        }
-        return mainReturned.get()
+    @Synchronized
+    fun plan(
+        index: Int,
+        token: Int,
+    ): Boolean {
+        if (!linkActive || token != generation) return false
+        pendingIndex = index
+        return mainReturned
     }
 
     /**
      * True while the details sheet opened by the current link is in front of the main activity.
      * Switching tabs then would dismiss the sheet, however long the navigation model took.
      */
-    fun protectsNavigation(): Boolean = linkActive.get() && overlayShowing.get()
+    @Synchronized
+    fun protectsNavigation(): Boolean = linkActive && overlayShowing
 
     /** Records the tab the latest navigation model reports as selected. */
+    @Synchronized
     fun onSelected(index: Int) {
-        selectedIndex.set(index)
+        selectedIndex = index
     }
 
     /**
      * Called for every resumed activity. Returns true when the main activity comes back after an
      * overlay (the details sheet), which is the moment to run [takeRecovery].
      */
+    @Synchronized
     fun onActivityResumed(isMainActivity: Boolean): Boolean {
-        overlayShowing.set(!isMainActivity)
+        overlayShowing = !isMainActivity
         if (!isMainActivity) {
-            overlaySeen.set(true)
-            mainReturned.set(false)
+            overlaySeen = true
+            mainReturned = false
             return false
         }
-        val returned = overlaySeen.getAndSet(false)
-        if (returned) mainReturned.set(true)
+        val returned = overlaySeen
+        overlaySeen = false
+        if (returned) mainReturned = true
         return returned
     }
 
@@ -95,10 +112,12 @@ internal class ExternalRecovery {
      * The tab index to switch to now, or null when nothing is pending, it is already selected, or
      * an overlay came back in front meanwhile (the plan then waits for the next main resume).
      */
+    @Synchronized
     fun takeRecovery(): Int? {
-        if (overlayShowing.get()) return null
-        val index = pendingIndex.getAndSet(NONE)
-        if (index == NONE || selectedIndex.get() == index) return null
+        if (overlayShowing) return null
+        val index = pendingIndex
+        pendingIndex = NONE
+        if (index == NONE || selectedIndex == index) return null
         return index
     }
 

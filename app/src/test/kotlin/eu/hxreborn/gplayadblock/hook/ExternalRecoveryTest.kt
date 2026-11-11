@@ -14,8 +14,8 @@ class ExternalRecoveryTest {
     fun `recovery waits for the details sheet to close`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
-        recovery.plan(search)
+        val token = requireNotNull(recovery.consumeRequest())
+        recovery.plan(search, token)
         recovery.onSelected(hiddenApps)
 
         assertFalse("main resumed before the sheet", recovery.onActivityResumed(true))
@@ -28,13 +28,13 @@ class ExternalRecoveryTest {
     fun `a plan that arrives after the sheet closed runs at once`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
+        val token = requireNotNull(recovery.consumeRequest())
         recovery.onSelected(hiddenApps)
         recovery.onActivityResumed(false)
         assertTrue(recovery.onActivityResumed(true))
         assertNull("nothing planned yet", recovery.takeRecovery())
 
-        assertTrue("late plan must run now", recovery.plan(search))
+        assertTrue("late plan must run now", recovery.plan(search, token))
         assertEquals(search, recovery.takeRecovery())
     }
 
@@ -42,22 +42,22 @@ class ExternalRecoveryTest {
     fun `a plan made while the sheet shows waits for the main activity`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
+        val token = requireNotNull(recovery.consumeRequest())
         recovery.onActivityResumed(true)
         recovery.onActivityResumed(false)
 
-        assertFalse(recovery.plan(search))
+        assertFalse(recovery.plan(search, token))
     }
 
     @Test
     fun `a plan from a link canceled by a launcher launch never runs`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
+        val token = requireNotNull(recovery.consumeRequest())
         recovery.onSelected(hiddenApps)
         recovery.onLauncherLaunch()
 
-        assertFalse(recovery.plan(search))
+        assertFalse(recovery.plan(search, token))
         recovery.onActivityResumed(false)
         assertTrue(recovery.onActivityResumed(true))
         assertNull(recovery.takeRecovery())
@@ -67,9 +67,9 @@ class ExternalRecoveryTest {
     fun `a recovery waits while an overlay came back in front`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
+        val token = requireNotNull(recovery.consumeRequest())
         recovery.onSelected(hiddenApps)
-        recovery.plan(search)
+        recovery.plan(search, token)
         recovery.onActivityResumed(false)
         assertTrue(recovery.onActivityResumed(true))
         recovery.onActivityResumed(false)
@@ -77,6 +77,39 @@ class ExternalRecoveryTest {
         assertNull("overlay in front", recovery.takeRecovery())
         assertTrue(recovery.onActivityResumed(true))
         assertEquals(search, recovery.takeRecovery())
+    }
+
+    @Test
+    fun `a plan from a replaced link is not accepted for the new link`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        val linkA = requireNotNull(recovery.consumeRequest())
+        recovery.onLauncherLaunch()
+        recovery.onExternalLink()
+        val linkB = requireNotNull(recovery.consumeRequest())
+        recovery.onSelected(hiddenApps)
+
+        assertFalse("link A's late plan", recovery.plan(search, linkA))
+        recovery.onActivityResumed(false)
+        assertTrue(recovery.onActivityResumed(true))
+        assertNull("nothing planned for link B", recovery.takeRecovery())
+
+        assertTrue(recovery.plan(search, linkB))
+        assertEquals(search, recovery.takeRecovery())
+    }
+
+    @Test
+    fun `a newer link replaces the plan of the previous one`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        val linkA = requireNotNull(recovery.consumeRequest())
+        recovery.onExternalLink()
+        recovery.onSelected(hiddenApps)
+
+        assertFalse(recovery.plan(search, linkA))
+        recovery.onActivityResumed(false)
+        recovery.onActivityResumed(true)
+        assertNull(recovery.takeRecovery())
     }
 
     @Test
@@ -104,20 +137,21 @@ class ExternalRecoveryTest {
     fun `a launcher launch cancels a late plan`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
+        val token = requireNotNull(recovery.consumeRequest())
         recovery.onActivityResumed(false)
         recovery.onActivityResumed(true)
         recovery.onLauncherLaunch()
 
-        assertFalse(recovery.plan(search))
+        assertFalse(recovery.plan(search, token))
     }
 
     @Test
     fun `one external link plans a single recovery even if delivered repeatedly`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        assertTrue(recovery.consumeRequest())
-        assertFalse(recovery.consumeRequest())
-        recovery.plan(search)
+        val token = requireNotNull(recovery.consumeRequest())
+        assertNull(recovery.consumeRequest())
+        recovery.plan(search, token)
         recovery.onSelected(hiddenApps)
         recovery.onActivityResumed(false)
         recovery.onActivityResumed(true)
@@ -130,7 +164,8 @@ class ExternalRecoveryTest {
     fun `the current tab is never re-selected`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        recovery.plan(search)
+        val token = requireNotNull(recovery.consumeRequest())
+        recovery.plan(search, token)
         recovery.onSelected(search)
         assertNull(recovery.takeRecovery())
     }
@@ -139,14 +174,15 @@ class ExternalRecoveryTest {
     fun `a launcher launch cancels a pending recovery`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
-        recovery.plan(search)
+        val token = requireNotNull(recovery.consumeRequest())
+        recovery.plan(search, token)
         recovery.onSelected(hiddenApps)
         recovery.onActivityResumed(false)
         recovery.onLauncherLaunch()
 
         assertFalse(recovery.onActivityResumed(true))
         assertNull(recovery.takeRecovery())
-        assertFalse(recovery.consumeRequest())
+        assertNull(recovery.consumeRequest())
     }
 
     @Test

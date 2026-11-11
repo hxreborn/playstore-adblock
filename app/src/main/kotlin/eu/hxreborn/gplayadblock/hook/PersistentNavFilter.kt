@@ -96,8 +96,10 @@ object PersistentNavFilter {
                 val isExternalNavigation =
                     now < externalNavigationDeadline.get() || recovery.protectsNavigation()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
-                val externalRecoveryRequested =
-                    isExternalNavigation && recovery.consumeRequest()
+                // The first model after a link always takes the request. If the sheet is already
+                // closed (a late model), nothing has to wait: the planner switches tabs directly.
+                val recoveryToken = recovery.consumeRequest()
+                val externalRecoveryRequested = isExternalNavigation && recoveryToken != null
                 val plan =
                     NavSelectionPlanner.plan(
                         retainedTypes = retainedTypes,
@@ -183,7 +185,7 @@ object PersistentNavFilter {
                 plan.externalRecoveryIndex?.let { index ->
                     Logger.debug { "external recovery pending index=$index" }
                     // The sheet may already be closed when a slow model arrives: recover now.
-                    if (recovery.plan(index)) {
+                    if (recoveryToken != null && recovery.plan(index, recoveryToken)) {
                         Handler(Looper.getMainLooper()).post { runPendingRecovery(callbackMethod) }
                     }
                 }

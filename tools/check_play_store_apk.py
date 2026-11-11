@@ -28,7 +28,8 @@ LABELS = ROOT / "app/src/main/kotlin/eu/hxreborn/gplayadblock/hook/LocalizedLabe
 
 LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
 DECLARATION = re.compile(r"^\s*(?:private\s+)?(?:const\s+)?val\s+(\w+)\s*=", re.MULTILINE)
-ENGLISH_VALUE = re.compile(r'^\((?:en(?:-[^)]*)?)?\) "(.*)"$')
+CONFIG_VALUE = re.compile(r'^\(([^)]*)\) "(.*)"$')
+US_ENGLISH_PREFERENCE = ("en-rUS", "en", "")
 LABEL = re.compile(r'^\s*const val (\w+) = "((?:[^"\\]|\\.)*)"', re.MULTILINE)
 
 
@@ -77,6 +78,7 @@ def dex_strings(apk: Path) -> bytes:
 
 
 def resource_values(apk: Path, aapt2: str) -> set[str]:
+    """English values as Play Store resolves them for Locale.US, one per string resource."""
     output = subprocess.run(
         [aapt2, "dump", "resources", str(apk)],
         check=True,
@@ -85,14 +87,40 @@ def resource_values(apk: Path, aapt2: str) -> set[str]:
         encoding="utf-8",
         errors="replace",
     ).stdout
-    values = set()
-    for line in output.splitlines():
-        # Default values are listed as `() "text"`; English-qualified ones as `(en) "text"`,
-        # `(en-rUS) "text"` and so on. Both count as the English label.
-        match = ENGLISH_VALUE.match(line.strip())
+    return {normalize(value) for value in us_english_values(output)}
+
+
+def us_english_values(dump: str) -> list[str]:
+    """For each string resource, the value Android selects for Locale.US.
+
+    `aapt2 dump resources` lists a resource line followed by one `(config) "text"` line per
+    configuration. Locale.US prefers `en-rUS`, then `en`, then the default `()` value; other
+    English regions (`en-rGB`, ...) are not selected for it.
+    """
+    selected: list[str] = []
+    configs: dict[str, str] | None = None
+
+    def flush() -> None:
+        if configs is None:
+            return
+        for config in US_ENGLISH_PREFERENCE:
+            if config in configs:
+                selected.append(configs[config])
+                return
+
+    for line in dump.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("resource "):
+            flush()
+            configs = {} if " string/" in stripped else None
+            continue
+        if configs is None:
+            continue
+        match = CONFIG_VALUE.match(stripped)
         if match:
-            values.add(normalize(match.group(1)))
-    return values
+            configs.setdefault(match.group(1), match.group(2))
+    flush()
+    return selected
 
 
 def main(argv: list[str] | None = None) -> int:

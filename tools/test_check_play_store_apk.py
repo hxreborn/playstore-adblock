@@ -90,28 +90,39 @@ class ReportTest(unittest.TestCase):
 
 
 class ResourceValueTest(unittest.TestCase):
-    def test_default_and_english_qualified_values_count_as_english(self) -> None:
-        dump = "\n".join(
-            [
-                '      () "Library"',
-                '      (en) "Ratings and reviews"',
-                '      (en-rGB) "Play Pass"',
-                '      (ru) "Библиотека"',
-                '      (de) "Mediathek"',
-            ]
-        )
-        with mock.patch.object(
-            check.subprocess, "run", return_value=mock.Mock(stdout=dump)
-        ):
-            values = check.resource_values(Path("base.apk"), "aapt2")
+    DUMP = "\n".join(
+        [
+            "  type string id=14 entryCount=5",
+            "    resource 0x7f140001 string/library",
+            '      () "Library"',
+            '      (ru) "Библиотека"',
+            "    resource 0x7f140002 string/ratings",
+            '      () "Ratings"',
+            '      (en) "Ratings and reviews"',
+            "    resource 0x7f140003 string/library_us",
+            '      () "Library"',
+            '      (en) "Library"',
+            '      (en-rUS) "My library"',
+            "    resource 0x7f140004 string/pass",
+            '      () "Pass"',
+            '      (en-rGB) "Play Pass"',
+            "    resource 0x7f150001 plurals/apps",
+            '      () "Apps"',
+        ]
+    )
+
+    def test_the_value_selected_for_locale_us_counts(self) -> None:
         self.assertEqual(
-            values,
-            {
-                check.normalize("Library"),
-                check.normalize("Ratings and reviews"),
-                check.normalize("Play Pass"),
-            },
+            check.us_english_values(self.DUMP),
+            ["Library", "Ratings and reviews", "My library", "Pass"],
         )
+
+    def test_resource_values_normalizes_the_selected_values(self) -> None:
+        with mock.patch.object(check.subprocess, "run", return_value=mock.Mock(stdout=self.DUMP)):
+            values = check.resource_values(Path("base.apk"), "aapt2")
+        self.assertIn(check.normalize("Ratings and reviews"), values)
+        self.assertNotIn(check.normalize("Play Pass"), values)
+        self.assertNotIn(check.normalize("Apps"), values)
 
 
 if __name__ == "__main__":

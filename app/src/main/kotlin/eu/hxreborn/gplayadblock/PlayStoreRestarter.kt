@@ -155,7 +155,9 @@ internal object PlayStoreRestarter {
             "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
                 "-c android.intent.category.LAUNCHER -p $target >/dev/null"
         return listOf(
-            "[ -d /data/app ] || exit 1",
+            // Listing proves the directory can be read; otherwise the glob below could not see
+            // staged sessions and would pass.
+            "ls /data/app >/dev/null || exit 1",
             "for session in /data/app/vmdl*.tmp; do " +
                 "[ -e \"\$session\" ] && exit $ROOT_EXIT_BUSY; done",
             "activities=\$(dumpsys activity activities) || exit 1",

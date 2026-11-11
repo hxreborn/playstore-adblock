@@ -32,6 +32,8 @@ class PlayStoreRestarterTest {
         assertTrue(indexOf("am force-stop") < indexOf("nsenter"))
         assertTrue(lines[indexOf("am force-stop")].endsWith("|| exit 1"))
         assertTrue(lines[indexOf("dumpsys activity")].endsWith("|| exit 1"))
+        assertTrue(lines[indexOf("ls /data/app")].endsWith("|| exit 1"))
+        assertTrue(indexOf("ls /data/app") < indexOf("/data/app/vmdl"))
         assertTrue(lines.last().startsWith("am start") && lines.last().endsWith("|| exit 1"))
     }
 

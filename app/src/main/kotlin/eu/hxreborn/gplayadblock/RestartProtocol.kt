@@ -28,4 +28,20 @@ object RestartProtocol {
 
     /** Crash-loop guard state, relative to Play Store's data directory. */
     const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
+
+    /**
+     * The module's final answer, taken right before it would stop Play Store: only a request whose
+     * caller is still waiting ([now] not past [deadline]) and whose cleanup succeeded restarts it.
+     * Play Store is stopped exactly when this returns [RESULT_OK].
+     */
+    fun finalReply(
+        now: Long,
+        deadline: Long,
+        cleared: Boolean,
+    ): Int =
+        when {
+            now > deadline -> RESULT_FAILED
+            !cleared -> RESULT_FAILED
+            else -> RESULT_OK
+        }
 }

@@ -103,13 +103,19 @@
     <string name="pending_saved_on_device">Saved on this device. Turn the module on in your Xposed manager to apply them</string>
     <string name="pending_change_on">On</string>
     <string name="pending_change_off">Off</string>
+    <string name="pending_feed_cache_clear">Clear cached feeds</string>
     <string name="apply_and_restart">Apply and restart Play Store</string>
     <string name="apply_not_sent_body">Your Xposed manager didn\'t accept them. Try again</string>
     <string name="apply_no_reply_title">Play Store didn\'t respond</string>
-    <string name="apply_no_reply_body">Close it from its app info, or try again</string>
+    <string name="apply_no_reply_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_busy_title">Play Store is busy</string>
     <string name="apply_busy_body">It is installing or updating apps. Try again when it finishes</string>
-    <string name="apply_failed_body">Close it from its app info, or try again</string>
+    <string name="apply_failed_body">Close it from its app info, try again, or restart it with root</string>
+    <string name="apply_restart_with_root">Restart with root</string>
+    <string name="apply_cache_not_cleared_title">Play Store restarted with cached feeds</string>
+    <string name="apply_cache_not_cleared_body">The feed cache could not be cleared. Try again to apply content filters to cached feeds</string>
+    <string name="apply_root_unavailable_title">Root access isn\'t available</string>
+    <string name="apply_root_unavailable_body">Allow GPlay Adblock in your root manager, or close Play Store from its app info</string>
     <string name="apply_app_info">Play Store app info</string>
     <string name="apply_try_again">Try again</string>
 

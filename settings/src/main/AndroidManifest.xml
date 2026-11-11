@@ -5,6 +5,10 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE" />
 
+    <queries>
+        <package android:name="com.android.vending" />
+    </queries>
+
     <application android:name="eu.hxreborn.gplayadblock.settings.GPlayAdblockApp">
         <activity
             android:name="eu.hxreborn.gplayadblock.settings.MainActivity"

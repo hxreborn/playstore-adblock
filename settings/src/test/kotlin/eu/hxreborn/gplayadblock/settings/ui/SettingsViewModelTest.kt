@@ -2,6 +2,7 @@ package eu.hxreborn.gplayadblock.settings.ui
 
 import eu.hxreborn.gplayadblock.settings.prefs.AppearanceRepository
 import eu.hxreborn.gplayadblock.settings.prefs.FakeSharedPreferences
+import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkConnection
@@ -11,14 +12,15 @@ import eu.hxreborn.gplayadblock.settings.prefs.RecordingEditor
 import eu.hxreborn.gplayadblock.settings.prefs.SettingsKeys
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
-import eu.hxreborn.gplayadblock.settings.protocol.NoOpPlayStoreRestarter
 import eu.hxreborn.gplayadblock.settings.protocol.PlayStoreRestarter
 import eu.hxreborn.gplayadblock.settings.protocol.RestartOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -40,11 +42,17 @@ class SettingsViewModelTest {
         var failure: Exception? = null,
     ) : PlayStoreRestarter {
         val clearRequests = ArrayList<Boolean>()
+        var delegate: PlayStoreRestarter? = null
 
-        override suspend fun restart(clearStreamCache: Boolean): RestartOutcome {
+        override suspend fun restart(
+            clearStreamCache: Boolean,
+            onExited: () -> Unit,
+        ): RestartOutcome {
+            delegate?.let { return it.restart(clearStreamCache, onExited) }
             clearRequests += clearStreamCache
             failure?.let { throw it }
             gate?.await()
+            if (outcome == RestartOutcome.Restarted) onExited()
             return outcome
         }
     }
@@ -68,6 +76,7 @@ class SettingsViewModelTest {
     private val remote = Remote()
     private val connection = FrameworkConnection(Dispatchers.Unconfined)
     private val restarter = RecordingRestarter()
+    private val rootRestarter = RecordingRestarter()
     private val preferences = PrefsRepository(FakeSharedPreferences(), FakeSharedPreferences())
     private val appearance = AppearanceRepository(FakeSharedPreferences())
 
@@ -83,8 +92,14 @@ class SettingsViewModelTest {
 
     private fun viewModel(
         ioDispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(scheduler),
-        playStoreRestarter: PlayStoreRestarter = restarter,
-    ) = SettingsViewModel(preferences, appearance, connection, playStoreRestarter, ioDispatcher)
+    ) = SettingsViewModel(
+        preferences,
+        appearance,
+        connection,
+        restarter,
+        rootRestarter,
+        ioDispatcher,
+    )
 
     private fun connectFramework() =
         connection.attach(Any(), FrameworkInfo("Vector", "2.0", 101), remote::editor)
@@ -242,6 +257,7 @@ class SettingsViewModelTest {
                 { restarter.outcome = RestartOutcome.Busy },
                 { restarter.outcome = RestartOutcome.NoReply },
                 { restarter.outcome = RestartOutcome.Failed },
+                { restarter.outcome = RestartOutcome.RootUnavailable },
                 { restarter.failure = IllegalStateException("launcher failed") },
                 {
                     restarter.failure = null
@@ -298,17 +314,6 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `the placeholder restarter reports failure and leaves changes pending`() {
-        connectFramework()
-        val viewModel = viewModel(playStoreRestarter = NoOpPlayStoreRestarter)
-        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
-        viewModel.apply()
-        assertEquals(ApplyPhase.Failed(ApplyFailure.RestartFailed), viewModel.ready().phase)
-        assertEquals(1, viewModel.ready().pendingCount)
-        assertNull(preferences.appliedSettings())
-    }
-
-    @Test
     fun `a throwing restart reports failure and allows a retry`() {
         connectFramework()
         val viewModel = viewModel()
@@ -349,6 +354,200 @@ class SettingsViewModelTest {
         viewModel.setFilter(FilterSwitch.BLOCK_STORE_SELF_UPDATES, true)
         viewModel.apply()
         assertEquals(listOf(false, true, false), restarter.clearRequests)
+    }
+
+    @Test
+    fun `a refused restart keeps the stream cache request for the retry`() {
+        connectFramework()
+        val viewModel = viewModel()
+        restarter.outcome = RestartOutcome.Busy
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        viewModel.apply()
+        restarter.outcome = RestartOutcome.Restarted
+        viewModel.apply()
+        viewModel.apply()
+        assertEquals(listOf(true, true, false), restarter.clearRequests)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+    }
+
+    @Test
+    fun `the phase reads reopening once Play Store has closed`() {
+        connectFramework()
+        val viewModel = viewModel()
+        val exited = CompletableDeferred<Unit>()
+        val reopened = CompletableDeferred<Unit>()
+        restarter.delegate =
+            object : PlayStoreRestarter {
+                override suspend fun restart(
+                    clearStreamCache: Boolean,
+                    onExited: () -> Unit,
+                ): RestartOutcome {
+                    exited.await()
+                    onExited()
+                    reopened.await()
+                    return RestartOutcome.Restarted
+                }
+            }
+        val phases = ArrayList<ApplyPhase>()
+        val collector =
+            CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
+                viewModel.uiState.collect { state ->
+                    (state as? SettingsUiState.Ready)?.phase?.let { phase ->
+                        if (phases.lastOrNull() != phase) phases += phase
+                    }
+                }
+            }
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        exited.complete(Unit)
+        reopened.complete(Unit)
+        collector.cancel()
+        assertEquals(
+            listOf(ApplyPhase.WaitingForExit, ApplyPhase.Reopening, ApplyPhase.Idle),
+            phases.dropWhile { it != ApplyPhase.WaitingForExit },
+        )
+    }
+
+    @Test
+    fun `root is used only after the module route got no reply or failed`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.restartWithRoot()
+        assertTrue(rootRestarter.clearRequests.isEmpty())
+
+        restarter.outcome = RestartOutcome.Busy
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        viewModel.apply()
+        viewModel.restartWithRoot()
+        assertTrue(rootRestarter.clearRequests.isEmpty())
+
+        restarter.outcome = RestartOutcome.NoReply
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.NoReply), viewModel.ready().phase)
+        viewModel.restartWithRoot()
+        assertEquals(listOf(true), rootRestarter.clearRequests)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+
+        viewModel.apply()
+        assertEquals(false, restarter.clearRequests.last())
+    }
+
+    @Test
+    fun `a missing or denied su is reported apart from a failed restart`() {
+        connectFramework()
+        val viewModel = viewModel()
+        restarter.outcome = RestartOutcome.Failed
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        rootRestarter.outcome = RestartOutcome.RootUnavailable
+        viewModel.restartWithRoot()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.RootUnavailable), viewModel.ready().phase)
+        rootRestarter.outcome = RestartOutcome.Busy
+        viewModel.restartWithRoot()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.Busy), viewModel.ready().phase)
+    }
+
+    @Test
+    fun `a restart transport exception keeps settings pending without escaping the UI scope`() {
+        connectFramework()
+        restarter.delegate =
+            object : PlayStoreRestarter {
+                override suspend fun restart(
+                    clearStreamCache: Boolean,
+                    onExited: () -> Unit,
+                ): RestartOutcome = throw SecurityException("broadcast denied")
+            }
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.RestartFailed), viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a refused content restart survives ViewModel recreation`() {
+        connectFramework()
+        restarter.outcome = RestartOutcome.Busy
+        val first = viewModel()
+        first.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        first.apply()
+        assertEquals(1, first.ready().pendingCount)
+        assertEquals(null, preferences.appliedSettings())
+
+        restarter.outcome = RestartOutcome.Restarted
+        val recreated = viewModel()
+        recreated.apply()
+        assertEquals(listOf(true, true), restarter.clearRequests)
+        assertEquals(0, recreated.ready().pendingCount)
+    }
+
+    @Test
+    fun `a restart with an uncleared cache marks the settings applied`() {
+        connectFramework()
+        restarter.outcome = RestartOutcome.RestartedCachePending
+        val first = viewModel()
+        first.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        remote.commits.clear()
+        first.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.CacheNotCleared), first.ready().phase)
+        assertEquals(preferences.desiredSettings(), preferences.appliedSettings())
+        assertEquals(1, remote.commits.size)
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
+        assertTrue(first.ready().streamCacheClearPending)
+        assertTrue(first.ready().feedCacheClearWithoutContentChange)
+        assertEquals(1, first.ready().pendingCount)
+
+        restarter.outcome = RestartOutcome.Restarted
+        viewModel().apply()
+        assertEquals(listOf(true, true), restarter.clearRequests)
+    }
+
+    @Test
+    fun `a rejected publish does not request a stream cache clear`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        remote.accept = false
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.NotSent), viewModel.ready().phase)
+        assertFalse(preferences.streamCacheClearPending())
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, false)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a cache clear survives recreation after reverting the content switch`() {
+        connectFramework()
+        restarter.outcome = RestartOutcome.RestartedCachePending
+        val first = viewModel()
+        first.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        first.apply()
+        first.setFilter(FilterSwitch.HIDE_LIVE_OPS, false)
+
+        val recreated = viewModel()
+        assertEquals(1, recreated.ready().pendingCount)
+        assertTrue(recreated.ready().streamCacheClearPending)
+        restarter.outcome = RestartOutcome.Restarted
+        recreated.apply()
+        assertEquals(listOf(true, true), restarter.clearRequests)
+        assertEquals(0, recreated.ready().pendingCount)
+    }
+
+    @Test
+    fun `root republishes edits made after the module restart failed`() {
+        connectFramework()
+        restarter.outcome = RestartOutcome.NoReply
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        viewModel.restartWithRoot()
+        assertTrue(rootRestarter.clearRequests.isEmpty())
+        viewModel.apply()
+        viewModel.restartWithRoot()
+        assertEquals(listOf(true), rootRestarter.clearRequests)
+        assertEquals(preferences.desiredSettings(), preferences.appliedSettings())
     }
 
     @Test

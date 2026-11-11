@@ -19,17 +19,30 @@ class PrefsRepository(
 
     fun observeApplied(): Flow<FilterSettings?> = applied.observe(::appliedSettings)
 
+    fun streamCacheClearPending(): Boolean = applied.getBoolean(STREAM_CACHE_CLEAR_PENDING, false)
+
+    fun observeStreamCacheClearPending(): Flow<Boolean> = applied.observe(::streamCacheClearPending)
+
+    fun requestStreamCacheClear() {
+        applied.edit().putBoolean(STREAM_CACHE_CLEAR_PENDING, true).apply()
+    }
+
     fun save(settings: FilterSettings) {
         SettingsKeys.write(settings, desired.edit()).apply()
     }
 
-    fun markApplied(settings: FilterSettings) {
-        SettingsKeys.write(settings, applied.edit()).apply()
+    fun markApplied(
+        settings: FilterSettings,
+        streamCacheClearPending: Boolean = false,
+    ) {
+        val editor = SettingsKeys.write(settings, applied.edit())
+        editor.putBoolean(STREAM_CACHE_CLEAR_PENDING, streamCacheClearPending).apply()
     }
 
     companion object {
         const val DESIRED_FILE = SettingsKeys.GROUP
         const val APPLIED_FILE = "gplay_adblock_applied"
+        private const val STREAM_CACHE_CLEAR_PENDING = "stream_cache_clear_pending"
     }
 }
 

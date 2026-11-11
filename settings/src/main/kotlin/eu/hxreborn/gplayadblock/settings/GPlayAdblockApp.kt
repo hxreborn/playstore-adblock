@@ -4,14 +4,17 @@ import android.app.Application
 import eu.hxreborn.gplayadblock.settings.prefs.AppearanceRepository
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkConnection
 import eu.hxreborn.gplayadblock.settings.prefs.PrefsRepository
-import eu.hxreborn.gplayadblock.settings.protocol.NoOpPlayStoreRestarter
+import eu.hxreborn.gplayadblock.settings.protocol.BroadcastPlayStoreRestarter
 import eu.hxreborn.gplayadblock.settings.protocol.PlayStoreRestarter
+import eu.hxreborn.gplayadblock.settings.protocol.RootPlayStoreRestarter
 import io.github.libxposed.service.XposedServiceHelper
 
 class GPlayAdblockApp : Application() {
     val frameworkConnection = FrameworkConnection()
 
-    val playStoreRestarter: PlayStoreRestarter = NoOpPlayStoreRestarter
+    val playStoreRestarter: PlayStoreRestarter by lazy { BroadcastPlayStoreRestarter(this) }
+
+    val rootPlayStoreRestarter: PlayStoreRestarter = RootPlayStoreRestarter()
 
     val prefsRepository: PrefsRepository by lazy {
         PrefsRepository(

@@ -2,15 +2,16 @@ package eu.hxreborn.gplayadblock.settings.protocol
 
 enum class RestartOutcome {
     Restarted,
+    RestartedCachePending,
     Busy,
     NoReply,
     Failed,
+    RootUnavailable,
 }
 
 interface PlayStoreRestarter {
-    suspend fun restart(clearStreamCache: Boolean): RestartOutcome
-}
-
-object NoOpPlayStoreRestarter : PlayStoreRestarter {
-    override suspend fun restart(clearStreamCache: Boolean): RestartOutcome = RestartOutcome.Failed
+    suspend fun restart(
+        clearStreamCache: Boolean,
+        onExited: () -> Unit,
+    ): RestartOutcome
 }

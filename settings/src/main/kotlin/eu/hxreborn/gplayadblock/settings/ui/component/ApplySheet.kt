@@ -79,6 +79,8 @@ sealed interface PendingChange {
     data class StartScreen(
         val tab: StartTab,
     ) : PendingChange
+
+    data object FeedCacheClear : PendingChange
 }
 
 sealed interface ApplySheetContent {
@@ -329,6 +331,12 @@ private fun PendingChangeRow(change: PendingChange) {
                 Text(stringResource(R.string.section_start_screen))
             }
         }
+
+        PendingChange.FeedCacheClear -> {
+            ListItem(colors = colors) {
+                Text(stringResource(R.string.pending_feed_cache_clear))
+            }
+        }
     }
 }
 
@@ -344,7 +352,9 @@ private fun FailureSheet(
     val actions =
         listOfNotNull(
             FailureAction(R.string.apply_app_info, onOpenPlayStoreInfo).takeIf {
-                reason == ApplyFailure.NoReply || reason == ApplyFailure.RestartFailed
+                reason == ApplyFailure.NoReply ||
+                    reason == ApplyFailure.RestartFailed ||
+                    reason == ApplyFailure.RootUnavailable
             },
             extraAction,
             FailureAction(R.string.apply_try_again, onTryAgain),
@@ -376,6 +386,8 @@ private fun failureTitleRes(reason: ApplyFailure): Int =
         ApplyFailure.Busy -> R.string.apply_busy_title
         ApplyFailure.NoReply -> R.string.apply_no_reply_title
         ApplyFailure.RestartFailed -> R.string.status_failed_title
+        ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_title
+        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_title
     }
 
 private fun failureBodyRes(reason: ApplyFailure): Int =
@@ -384,6 +396,8 @@ private fun failureBodyRes(reason: ApplyFailure): Int =
         ApplyFailure.Busy -> R.string.apply_busy_body
         ApplyFailure.NoReply -> R.string.apply_no_reply_body
         ApplyFailure.RestartFailed -> R.string.apply_failed_body
+        ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_body
+        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_body
     }
 
 @Composable
@@ -399,6 +413,9 @@ private fun changedAreasSummary(changes: List<PendingChange>): String {
             listOfNotNull(
                 stringResource(R.string.section_start_screen).takeIf {
                     changes.any { it is PendingChange.StartScreen }
+                },
+                stringResource(R.string.pending_feed_cache_clear).takeIf {
+                    PendingChange.FeedCacheClear in changes
                 },
             )
     if (names.size <= SUMMARY_NAMES_SHOWN) return names.joinToString(", ")

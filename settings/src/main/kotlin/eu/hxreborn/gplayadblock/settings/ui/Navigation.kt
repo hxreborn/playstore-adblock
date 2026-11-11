@@ -41,10 +41,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetContent
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetScaffold
+import eu.hxreborn.gplayadblock.settings.ui.component.FailureAction
 import eu.hxreborn.gplayadblock.settings.ui.component.PendingChange
 import eu.hxreborn.gplayadblock.settings.ui.screen.AboutScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.AppearanceScreen
@@ -181,6 +183,11 @@ private fun SettingsNavigation(
                 ),
             )
         },
+        extraFailureAction =
+            FailureAction(R.string.apply_restart_with_root, viewModel::restartWithRoot).takeIf {
+                (state.phase as? ApplyPhase.Failed)?.reason in
+                    SettingsViewModel.ROOT_RECOVERABLE_FAILURES
+            },
         modifier = Modifier.fillMaxSize(),
     ) {
         NavDisplay(
@@ -282,5 +289,9 @@ private fun pendingChanges(state: SettingsUiState.Ready): List<PendingChange> {
             .map { PendingChange.Switch(it, desired.isOn(it)) }
     val startScreen =
         if (state.startScreenChanged) PendingChange.StartScreen(desired.startTab) else null
-    return switches + listOfNotNull(startScreen)
+    val feedCacheClear =
+        PendingChange.FeedCacheClear.takeIf {
+            state.feedCacheClearWithoutContentChange
+        }
+    return switches + listOfNotNull(startScreen, feedCacheClear)
 }

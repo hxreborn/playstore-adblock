@@ -18,11 +18,15 @@ internal class ExternalRecovery {
     private val overlaySeen = AtomicBoolean(false)
     private val selectedIndex = AtomicInteger(NONE)
 
+    // The main activity is resumed after the overlay closed and no overlay has shown since.
+    private val mainReturned = AtomicBoolean(false)
+
     /** An external link arrived: forget earlier state and allow one recovery request. */
     fun onExternalLink() {
         requested.set(true)
         pendingIndex.set(NONE)
         overlaySeen.set(false)
+        mainReturned.set(false)
     }
 
     /** A launcher launch supersedes any recovery. */
@@ -30,13 +34,20 @@ internal class ExternalRecovery {
         requested.set(false)
         pendingIndex.set(NONE)
         overlaySeen.set(false)
+        mainReturned.set(false)
     }
 
     /** True once per external link: the first navigation model built for it may plan recovery. */
     fun consumeRequest(): Boolean = requested.compareAndSet(true, false)
 
-    fun plan(index: Int) {
+    /**
+     * Records the tab to recover. Returns true when the main activity already came back after the
+     * overlay: the navigation model was built late, so [takeRecovery] has to run now because no
+     * further resume will trigger it.
+     */
+    fun plan(index: Int): Boolean {
         pendingIndex.set(index)
+        return mainReturned.get()
     }
 
     /** Records the tab the latest navigation model reports as selected. */
@@ -51,9 +62,12 @@ internal class ExternalRecovery {
     fun onActivityResumed(isMainActivity: Boolean): Boolean {
         if (!isMainActivity) {
             overlaySeen.set(true)
+            mainReturned.set(false)
             return false
         }
-        return overlaySeen.getAndSet(false)
+        val returned = overlaySeen.getAndSet(false)
+        if (returned) mainReturned.set(true)
+        return returned
     }
 
     /** The tab index to switch to now, or null when nothing is pending or it is already selected. */

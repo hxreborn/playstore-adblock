@@ -89,7 +89,14 @@ object ManageAppsFilter {
                                     UiEntryMatcher.manageRow(
                                         className = item.javaClass.name,
                                         directStrings = directStrings(item),
-                                        reachableStrings = { reachableStrings(item) },
+                                        // Only the device sync row needs the object walk.
+                                        reachableStrings = {
+                                            if (preferences.hideDeviceSync()) {
+                                                reachableStrings(item)
+                                            } else {
+                                                emptyList()
+                                            }
+                                        },
                                         playProtectRowClasses = playProtectRowClasses,
                                         localized = labels::localized,
                                     )

@@ -15,4 +15,10 @@ object RestartProtocol {
      * a restart removes: the rest holds sign-in and install state.
      */
     const val STREAM_DATA_STORE_DIR = "streamdatastore"
+
+    /** Play Store activities of a purchase flow; a restart must not interrupt them. */
+    const val PURCHASE_ACTIVITY_PACKAGE = "com.google.android.finsky.billing."
+
+    /** Crash-loop guard state, relative to Play Store's data directory. */
+    const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
 }

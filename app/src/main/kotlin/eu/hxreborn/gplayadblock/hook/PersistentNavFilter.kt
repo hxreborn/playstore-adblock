@@ -178,8 +178,11 @@ object PersistentNavFilter {
                 // dismisses it, so the switch waits until the sheet is closed and the main
                 // activity is resumed again (see installLaunchTracking).
                 plan.externalRecoveryIndex?.let { index ->
-                    recovery.plan(index)
                     Logger.debug { "external recovery pending index=$index" }
+                    // The sheet may already be closed when a slow model arrives: recover now.
+                    if (recovery.plan(index)) {
+                        Handler(Looper.getMainLooper()).post { runPendingRecovery(callbackMethod) }
+                    }
                 }
                 if (retained.size != original.size) {
                     Logger.debug { "persistent nav tabs=${original.size}->${retained.size}" }

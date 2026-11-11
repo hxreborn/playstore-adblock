@@ -25,6 +25,42 @@ class ExternalRecoveryTest {
     }
 
     @Test
+    fun `a plan that arrives after the sheet closed runs at once`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        assertTrue(recovery.consumeRequest())
+        recovery.onSelected(hiddenApps)
+        recovery.onActivityResumed(false)
+        assertTrue(recovery.onActivityResumed(true))
+        assertNull("nothing planned yet", recovery.takeRecovery())
+
+        assertTrue("late plan must run now", recovery.plan(search))
+        assertEquals(search, recovery.takeRecovery())
+    }
+
+    @Test
+    fun `a plan made while the sheet shows waits for the main activity`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        assertTrue(recovery.consumeRequest())
+        recovery.onActivityResumed(true)
+        recovery.onActivityResumed(false)
+
+        assertFalse(recovery.plan(search))
+    }
+
+    @Test
+    fun `a launcher launch cancels a late plan`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        recovery.onActivityResumed(false)
+        recovery.onActivityResumed(true)
+        recovery.onLauncherLaunch()
+
+        assertFalse(recovery.plan(search))
+    }
+
+    @Test
     fun `one external link plans a single recovery even if delivered repeatedly`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()

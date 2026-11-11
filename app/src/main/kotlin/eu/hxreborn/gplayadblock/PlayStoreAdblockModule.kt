@@ -105,7 +105,7 @@ class PlayStoreAdblockModule : XposedModule() {
                 )
             val crashGuard =
                 CrashLoopGuard(
-                    file = File(context.applicationInfo.dataDir, CRASH_GUARD_PATH),
+                    file = File(context.applicationInfo.dataDir, RestartProtocol.CRASH_GUARD_PATH),
                     fingerprint = cacheKey.toString(),
                 )
             trackPurchaseFlows(application)
@@ -385,7 +385,7 @@ class PlayStoreAdblockModule : XposedModule() {
     }
 
     private fun Activity.isPurchaseFlow(): Boolean =
-        javaClass.name.startsWith(PURCHASE_ACTIVITY_PACKAGE)
+        javaClass.name.startsWith(RestartProtocol.PURCHASE_ACTIVITY_PACKAGE)
 
     private val livePurchaseActivities = AtomicInteger(0)
 
@@ -452,11 +452,9 @@ class PlayStoreAdblockModule : XposedModule() {
     }
 
     private companion object {
-        const val PURCHASE_ACTIVITY_PACKAGE = "com.google.android.finsky.billing."
         val REQUIRED_HOOK_GROUPS = setOf(HookGroup.CACHE.label, HookGroup.RESPONSE.label)
         const val RESTART_KILL_DELAY_MILLIS = 150L
         const val CRASH_EXIT_STATUS = 10
-        const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
         const val OPTIONAL_FILTERS_DISABLED_MESSAGE =
             "GPlay Adblock disabled optional UI filters after repeated Play Store crashes. " +
                 "Ad blocking is still active."

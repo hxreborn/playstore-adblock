@@ -8,7 +8,10 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 object StreamCacheFilter {
     fun install(
@@ -33,13 +36,14 @@ object StreamCacheFilter {
                 preferences::hideSearchPromotions,
             )
         val editor = ProtoEditor.from(classLoader, targets)
+        val presentationAccessor = targets.presentationAccessor.resolve(classLoader)
         val interceptor =
             CacheAssemblyInterceptor(
                 positions = positions,
                 transformer =
                     CacheGraphTransformer(
                         nodeClass = nodeClass,
-                        presentationAccessor = targets.presentationAccessor.resolve(classLoader),
+                        presentationAccessor = presentationAccessor,
                         nodeChildrenField = targets.cacheNodeChildrenField.resolve(classLoader),
                         pageBoundariesField =
                             targets.cachePageBoundariesField.resolve(classLoader),
@@ -146,10 +150,19 @@ object StreamCacheFilter {
                     key to record(node, keyFor)
                 }
             val adCasesByKey = LinkedHashMap<String, Int>()
+            val presentationRewrites = HashMap<String, Pair<Field, Any>>()
             for ((key, record) in records) {
                 val presentation = presentationAccessor.invoke(record.node) ?: continue
                 val case = classifier.classify(presentation)
-                if (classifier.isAd(case)) adCasesByKey[key] = case
+                if (classifier.isAd(case)) {
+                    adCasesByKey[key] = case
+                } else {
+                    strippedLiveOps(presentation)?.let { stripped ->
+                        presentationField(record.node, presentation)?.let { field ->
+                            presentationRewrites[key] = field to stripped
+                        }
+                    }
+                }
             }
             val rootCase = presentationAccessor.invoke(root)?.let(classifier::classify) ?: 0
             if (classifier.isAd(rootCase)) {
@@ -158,7 +171,7 @@ object StreamCacheFilter {
                         "and cannot be removed by rewriting this call",
                 )
             }
-            if (adCasesByKey.isEmpty()) return null
+            if (adCasesByKey.isEmpty() && presentationRewrites.isEmpty()) return null
 
             val rootRecord = record(root, keyFor)
             val removableKeys =
@@ -181,7 +194,21 @@ object StreamCacheFilter {
             var changedNodes = replacementNodes.keys.removeAll(removableKeys)
             for ((key, record) in records) {
                 if (key in removableKeys) continue
-                val replacementNode = filterNode(record, removableKeys) ?: continue
+                val filteredNode = filterNode(record, removableKeys)
+                val rewrite = presentationRewrites[key]
+                val replacementNode =
+                    when {
+                        rewrite != null -> {
+                            val (field, stripped) = rewrite
+                            editor.copy(filteredNode ?: record.node) { mutableNode ->
+                                field.set(mutableNode, stripped)
+                            }
+                        }
+
+                        else -> {
+                            filteredNode
+                        }
+                    } ?: continue
                 replacementNodes[key] = replacementNode
                 changedNodes = true
             }
@@ -194,10 +221,43 @@ object StreamCacheFilter {
 
             Logger.debug {
                 "cache removal removable=${removableKeys.size} " +
+                    "strippedLiveOps=${presentationRewrites.size} " +
                     "children=${rootList.size}->${filteredRootChildren.size} " +
                     "nodes=${nodeMap.size}"
             }
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
+        }
+
+        /** Optional stripping must never abort ad removal for the rest of the cached graph. */
+        private fun strippedLiveOps(presentation: Any): Any? =
+            runCatching { classifier.stripEmbeddedLiveOps(presentation, editor) }
+                .onFailure { error ->
+                    if (liveOpsFailureLogged.compareAndSet(false, true)) {
+                        Logger.warn("embedded LiveOps stripping skipped on cache", error)
+                    }
+                }.getOrNull()
+
+        private val liveOpsFailureLogged = AtomicBoolean(false)
+        private val presentationFields = ConcurrentHashMap<Class<*>, Field>()
+
+        /**
+         * The node field that holds [presentation]. Cached nodes store it in a protobuf oneof
+         * (an Object field next to its case), so the field is found by identity with the value
+         * the accessor returned; the case is left untouched. Null when not unique (fail open).
+         */
+        private fun presentationField(
+            node: Any,
+            presentation: Any,
+        ): Field? {
+            presentationFields[node.javaClass]?.let { cached ->
+                return cached.takeIf { it.get(node) === presentation }
+            }
+            return node.javaClass.declaredFields
+                .filter { field -> !Modifier.isStatic(field.modifiers) && !field.type.isPrimitive }
+                .onEach { field -> field.isAccessible = true }
+                .filter { field -> field.get(node) === presentation }
+                .singleOrNull()
+                ?.also { field -> presentationFields[node.javaClass] = field }
         }
 
         private fun record(

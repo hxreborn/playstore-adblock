@@ -22,6 +22,10 @@ object SelfUpdateFilter {
             .intercept { chain ->
                 if (!preferences.blockStoreSelfUpdates()) return@intercept chain.proceed()
                 logOnce("blocked Play Store self-update scheduler")
+                // Same outcome as Play Store's own "Self-update scheduling is disabled." branch:
+                // return false without running the completion Runnable. Callers treat false as
+                // "nothing scheduled" (log "Skipping self-update" or run their own fallback);
+                // none of them retries (verified on 54.0.09).
                 false
             }
 

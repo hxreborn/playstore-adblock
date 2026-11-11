@@ -65,5 +65,6 @@
     <string name="restart_play_store_summary">Через активный модуль останавливает Play Market, очищает только cache и code_cache, затем открывает его снова. Root используется как резервный вариант. Аккаунты и данные приложений сохраняются.</string>
     <string name="restart_play_store_working">Перезапускаю Play Market…</string>
     <string name="restart_play_store_success">Play Market перезапущен. Новые фильтры применены.</string>
+    <string name="restart_play_store_busy">Play Market сейчас устанавливает приложения. Повторите после завершения установки.</string>
     <string name="restart_play_store_failed">Не удалось перезапустить Play Market. Убедитесь, что модуль активен, или разрешите root-доступ.</string>
 </resources>

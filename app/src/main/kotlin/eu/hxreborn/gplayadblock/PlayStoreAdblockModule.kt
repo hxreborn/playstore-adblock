@@ -276,6 +276,13 @@ class PlayStoreAdblockModule : XposedModule() {
                         intent.getParcelableExtra(RestartProtocol.EXTRA_CALLBACK) as? ResultReceiver
                     val pendingResult = goAsync()
                     Thread {
+                        // Killing the process mid-installation would abort it: refuse instead.
+                        if (hasActiveInstallSession(receiverContext)) {
+                            Logger.info("restart refused: Play Store is installing apps")
+                            callback?.send(RestartProtocol.RESULT_BUSY, Bundle.EMPTY)
+                            pendingResult.finish()
+                            return@Thread
+                        }
                         // An explicit restart after changing settings re-enables optional
                         // filters that a previous crash loop switched off.
                         runCatching(crashGuard::reset)
@@ -308,6 +315,12 @@ class PlayStoreAdblockModule : XposedModule() {
             Context.RECEIVER_EXPORTED,
         )
     }
+
+    private fun hasActiveInstallSession(context: Context): Boolean =
+        runCatching {
+            context.packageManager.packageInstaller.mySessions
+                .any { session -> session.isActive }
+        }.getOrDefault(false)
 
     private fun clearDirectoryContents(directory: java.io.File) {
         directory.listFiles()?.forEach { child ->

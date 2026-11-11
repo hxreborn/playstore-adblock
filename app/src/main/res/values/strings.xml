@@ -65,5 +65,6 @@
     <string name="restart_play_store_summary">Uses the active module to stop Play Store, clears only its cache and code cache, then opens it again. Root is a fallback. Accounts and app data are preserved.</string>
     <string name="restart_play_store_working">Restarting Play Store…</string>
     <string name="restart_play_store_success">Play Store restarted. The new filters are active.</string>
+    <string name="restart_play_store_busy">Play Store is installing apps right now. Try again when the installation has finished.</string>
     <string name="restart_play_store_failed">Could not restart Play Store. Ensure the module is active or grant root access.</string>
 </resources>

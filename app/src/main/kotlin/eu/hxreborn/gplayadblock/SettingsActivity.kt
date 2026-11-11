@@ -18,7 +18,7 @@ import android.widget.Switch
 import android.widget.TextView
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,10 +340,18 @@ class SettingsActivity : Activity() {
                         runOnUiThread {
                             status.text =
                                 getString(
-                                    if (result) {
-                                        R.string.restart_play_store_success
-                                    } else {
-                                        R.string.restart_play_store_failed
+                                    when (result) {
+                                        RestartOutcome.RESTARTED -> {
+                                            R.string.restart_play_store_success
+                                        }
+
+                                        RestartOutcome.BUSY -> {
+                                            R.string.restart_play_store_busy
+                                        }
+
+                                        RestartOutcome.FAILED -> {
+                                            R.string.restart_play_store_failed
+                                        }
                                     },
                                 )
                             button.isEnabled = true
@@ -359,19 +367,27 @@ class SettingsActivity : Activity() {
         addView(status)
     }
 
-    private fun restartPlayStore(): Boolean = restartViaModule() || restartViaRoot()
+    private enum class RestartOutcome { RESTARTED, BUSY, FAILED }
 
-    private fun restartViaModule(): Boolean =
+    private fun restartPlayStore(): RestartOutcome =
+        when (val viaModule = restartViaModule()) {
+            // A busy Play Store must not be force-stopped through root either.
+            RestartOutcome.RESTARTED, RestartOutcome.BUSY -> viaModule
+
+            RestartOutcome.FAILED -> if (restartViaRoot()) RestartOutcome.RESTARTED else viaModule
+        }
+
+    private fun restartViaModule(): RestartOutcome =
         runCatching {
             val completed = CountDownLatch(1)
-            val succeeded = AtomicBoolean(false)
+            val received = AtomicInteger(RestartProtocol.RESULT_FAILED)
             val callback =
                 object : ResultReceiver(Handler(Looper.getMainLooper())) {
                     override fun onReceiveResult(
                         resultCode: Int,
                         resultData: Bundle?,
                     ) {
-                        succeeded.set(resultCode == RestartProtocol.RESULT_OK)
+                        received.set(resultCode)
                         completed.countDown()
                     }
                 }
@@ -381,32 +397,40 @@ class SettingsActivity : Activity() {
                     .setPackage(BuildConfig.TARGET_PACKAGE)
                     .putExtra(RestartProtocol.EXTRA_CALLBACK, callback),
             )
-            if (!completed.await(MODULE_RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS) ||
-                !succeeded.get()
-            ) {
-                return@runCatching false
+            if (!completed.await(MODULE_RESTART_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                return@runCatching RestartOutcome.FAILED
+            }
+            when (received.get()) {
+                RestartProtocol.RESULT_OK -> Unit
+                RestartProtocol.RESULT_BUSY -> return@runCatching RestartOutcome.BUSY
+                else -> return@runCatching RestartOutcome.FAILED
             }
             Thread.sleep(MODULE_RELAUNCH_DELAY_MILLIS)
             val launchIntent =
                 packageManager.getLaunchIntentForPackage(BuildConfig.TARGET_PACKAGE)
-                    ?: return@runCatching false
+                    ?: return@runCatching RestartOutcome.FAILED
             launchIntent.addFlags(
                 android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                     android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK,
             )
             startActivity(launchIntent)
-            true
-        }.getOrDefault(false)
+            RestartOutcome.RESTARTED
+        }.getOrDefault(RestartOutcome.FAILED)
 
     private fun restartViaRoot(): Boolean =
         runCatching {
+            // Target the Android user this settings screen runs in (secondary users and work
+            // profiles have their own data directory and their own Play Store process).
+            val userId = android.os.Process.myUid() / PER_USER_UID_RANGE
+            val target = BuildConfig.TARGET_PACKAGE
+            val dataDir = "/data/user/$userId/$target"
             val command =
                 listOf(
-                    "am force-stop com.android.vending",
-                    "rm -rf /data/user/0/com.android.vending/cache/*",
-                    "rm -rf /data/user/0/com.android.vending/code_cache/*",
-                    "am start --activity-clear-task -a android.intent.action.MAIN " +
-                        "-c android.intent.category.LAUNCHER -p com.android.vending",
+                    "am force-stop --user $userId $target",
+                    "rm -rf $dataDir/cache/*",
+                    "rm -rf $dataDir/code_cache/*",
+                    "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
+                        "-c android.intent.category.LAUNCHER -p $target",
                 ).joinToString("; ")
             ProcessBuilder("su", "-c", command)
                 .redirectErrorStream(true)
@@ -424,5 +448,6 @@ class SettingsActivity : Activity() {
         const val MODULE_RESTART_TIMEOUT_SECONDS = 3L
         const val MODULE_RELAUNCH_DELAY_MILLIS = 500L
         const val RESTART_TIMEOUT_SECONDS = 60L
+        const val PER_USER_UID_RANGE = 100_000
     }
 }

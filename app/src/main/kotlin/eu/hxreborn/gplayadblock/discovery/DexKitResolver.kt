@@ -72,6 +72,7 @@ object DexKitResolver {
         "UChk: document %s is not qualified for auto update v2"
     private val navTypeAnchors = listOf("APPS", "GAMES", "BOOKS", "YOU")
     private const val NAV_CONSTRUCTOR_PARAM_COUNT = 6
+    private val NULL_CHECK_BRANCHES = setOf("if-nez", "if-eqz")
     private val primitiveTypes =
         setOf(
             "boolean",
@@ -752,6 +753,7 @@ object DexKitResolver {
                     ?.methods
                     ?.filter { method -> method.isConstructor && method.paramCount == 2 }
                     ?.singleOrNull()
+                    ?.takeIf(::acceptsNullBadge)
             val immutableCandidates =
                 featureClass.methods
                     .asSequence()
@@ -785,6 +787,29 @@ object DexKitResolver {
         } catch (failure: AccountResolutionFailure) {
             fail(failure.message.orEmpty())
         }
+    }
+
+    /**
+     * The badge filter passes null as the constructor's first argument. That is only safe while
+     * the field is nullable: Kotlin then emits a null check for it at the start of the data
+     * class's hashCode (`iget-object` + `if-nez`). A non-null field has no such branch, so the
+     * hook is not installed instead of crashing every time the top bar is drawn.
+     */
+    private fun acceptsNullBadge(constructor: MethodData): Boolean {
+        val badgeType = constructor.paramTypeNames.firstOrNull() ?: return false
+        val hashCode =
+            constructor.declaredClass
+                ?.methods
+                ?.singleOrNull { method ->
+                    method.methodName == "hashCode" && method.paramCount == 0
+                }
+                ?: return false
+        val operations = hashCode.opNames
+        val firstRead = hashCode.usingFields.firstOrNull()?.field
+        return operations.size >= 2 &&
+            operations[0].startsWith("iget-object") &&
+            operations[1] in NULL_CHECK_BRANCHES &&
+            firstRead?.typeName == badgeType
     }
 
     private fun resolveSelfUpdate(bridge: DexKitBridge): Resolution<ResolvedTargets.SelfUpdate> {

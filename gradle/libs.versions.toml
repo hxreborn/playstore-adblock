@@ -2,6 +2,7 @@
 agp = "9.5.1"
 dexkit = "2.3.0"
 json = "20260814"
+kotlinxCoroutines = "1.11.0"
 junit = "4.13.2"
 ktlint = "1.8.0"
 libxposedApi = "101.0.1"
@@ -11,6 +12,8 @@ snakeyaml = "2.7"
 [libraries]
 dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
 json = { module = "org.json:json", version.ref = "json" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 junit = { module = "junit:junit", version.ref = "junit" }
 ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }

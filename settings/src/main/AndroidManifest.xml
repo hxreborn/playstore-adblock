@@ -1,2 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission
+        android:name="eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE" />
+
+    <application android:name="eu.hxreborn.gplayadblock.settings.GPlayAdblockApp" />
+</manifest>

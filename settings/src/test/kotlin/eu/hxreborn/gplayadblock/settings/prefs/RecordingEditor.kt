@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 
 class RecordingEditor(
     private val values: MutableMap<String, Any?>,
+    private val onCommit: () -> Boolean = { true },
 ) : SharedPreferences.Editor {
     var commits = 0
 
@@ -43,10 +44,11 @@ class RecordingEditor(
 
     override fun commit(): Boolean {
         commits++
-        return true
+        return onCommit()
     }
 
     override fun apply() {
         commits++
+        onCommit()
     }
 }

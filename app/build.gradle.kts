@@ -127,7 +127,6 @@ dependencies {
     add(ktlint.name, libs.ktlint.cli)
     compileOnly(libs.libxposed.api)
     "fullImplementation"(project(":settings"))
-    "fullImplementation"(libs.libxposed.service)
     implementation(libs.dexkit)
     testCompileOnly(libs.libxposed.api)
     testImplementation(libs.junit)

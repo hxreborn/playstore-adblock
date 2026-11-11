@@ -33,7 +33,10 @@ val ktlint = configurations.create("ktlint")
 
 dependencies {
     add(ktlint.name, libs.ktlint.cli)
+    implementation(libs.libxposed.service)
+    implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 val ktlintCheck =

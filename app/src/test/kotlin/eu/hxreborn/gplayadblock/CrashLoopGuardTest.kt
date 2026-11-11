@@ -51,6 +51,19 @@ class CrashLoopGuardTest {
     }
 
     @Test
+    fun `reset reports whether the guard is gone`() {
+        val guard = guard()
+        assertTrue("nothing recorded", guard.reset())
+        guard.recordCrash()
+        assertTrue("state removed", guard.reset())
+
+        // A directory in place of the state file cannot be deleted while it has content.
+        val stuck = File(temporary.root, "stuck").apply { mkdirs() }
+        File(stuck, "child").writeText("x")
+        assertFalse(guard(file = stuck).reset())
+    }
+
+    @Test
     fun `a new Play Store or module build gets another chance`() {
         repeat(CrashLoopGuard.THRESHOLD) { guard("build-a").recordCrash() }
         assertTrue(guard("build-a").isTripped())

@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.ResultReceiver
+import android.os.SystemClock
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -67,10 +68,16 @@ internal object PlayStoreRestarter {
                         completed.countDown()
                     }
                 }
+            // The module must decide well before this caller gives up waiting.
+            val deadline =
+                SystemClock.elapsedRealtime() +
+                    TimeUnit.SECONDS.toMillis(MODULE_REPLY_TIMEOUT_SECONDS) -
+                    MODULE_DECISION_MARGIN_MILLIS
             context.sendBroadcast(
                 Intent(RestartProtocol.ACTION)
                     .setPackage(BuildConfig.TARGET_PACKAGE)
-                    .putExtra(RestartProtocol.EXTRA_CALLBACK, callback),
+                    .putExtra(RestartProtocol.EXTRA_CALLBACK, callback)
+                    .putExtra(RestartProtocol.EXTRA_DEADLINE, deadline),
             )
             if (!completed.await(MODULE_REPLY_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 return@runCatching Reply.NONE
@@ -160,6 +167,7 @@ internal object PlayStoreRestarter {
     }
 
     private const val MODULE_REPLY_TIMEOUT_SECONDS = 3L
+    private const val MODULE_DECISION_MARGIN_MILLIS = 1_000L
     private const val MODULE_STARTUP_WAIT_MILLIS = 2_000L
     private const val MODULE_RELAUNCH_DELAY_MILLIS = 500L
     private const val ROOT_TIMEOUT_SECONDS = 60L

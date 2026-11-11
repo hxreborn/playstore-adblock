@@ -25,9 +25,8 @@ internal class CrashLoopGuard(
         write(State(fingerprint, tripped, crashes))
     }
 
-    fun reset() {
-        file.delete()
-    }
+    /** Forgets recorded crashes. Returns false when the state file exists and was not removed. */
+    fun reset(): Boolean = file.delete() || !file.exists()
 
     private data class State(
         val fingerprint: String,

@@ -4,6 +4,13 @@ object RestartProtocol {
     const val ACTION = "eu.hxreborn.gplayadblock.action.RESTART_PLAY_STORE"
     const val PERMISSION = "eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE"
     const val EXTRA_CALLBACK = "restart_callback"
+
+    /**
+     * [android.os.SystemClock.elapsedRealtime] after which the module must ignore the request:
+     * by then the caller has stopped waiting and may have moved on, so a late request must not
+     * restart Play Store behind its back.
+     */
+    const val EXTRA_DEADLINE = "restart_deadline"
     const val RESULT_OK = 1
     const val RESULT_FAILED = 0
 

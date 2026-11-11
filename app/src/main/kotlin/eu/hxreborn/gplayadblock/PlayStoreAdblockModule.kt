@@ -292,7 +292,15 @@ class PlayStoreAdblockModule : XposedModule() {
                     val callback =
                         intent.getParcelableExtra(RestartProtocol.EXTRA_CALLBACK) as? ResultReceiver
                     val pendingResult = goAsync()
+                    val deadline = intent.getLongExtra(RestartProtocol.EXTRA_DEADLINE, 0L)
                     Thread {
+                        // A late request: the caller has moved on, so it must not restart now.
+                        if (SystemClock.elapsedRealtime() > deadline) {
+                            Logger.info("restart refused: request expired")
+                            callback?.send(RestartProtocol.RESULT_FAILED, Bundle.EMPTY)
+                            pendingResult.finish()
+                            return@Thread
+                        }
                         // Killing the process mid-installation would abort it: refuse instead.
                         val busy =
                             when {
@@ -308,9 +316,9 @@ class PlayStoreAdblockModule : XposedModule() {
                         }
                         // An explicit restart after changing settings re-enables optional
                         // filters that a previous crash loop switched off.
-                        runCatching(crashGuard::reset)
                         val cleared =
                             runCatching {
+                                check(crashGuard.reset()) { "crash guard kept" }
                                 java.io
                                     .File(
                                         receiverContext.cacheDir,

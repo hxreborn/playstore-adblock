@@ -64,6 +64,22 @@ class ExternalRecoveryTest {
     }
 
     @Test
+    fun `a recovery waits while an overlay came back in front`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        assertTrue(recovery.consumeRequest())
+        recovery.onSelected(hiddenApps)
+        recovery.plan(search)
+        recovery.onActivityResumed(false)
+        assertTrue(recovery.onActivityResumed(true))
+        recovery.onActivityResumed(false)
+
+        assertNull("overlay in front", recovery.takeRecovery())
+        assertTrue(recovery.onActivityResumed(true))
+        assertEquals(search, recovery.takeRecovery())
+    }
+
+    @Test
     fun `navigation stays protected while the sheet shows`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()

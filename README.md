@@ -73,7 +73,10 @@ Before trusting a new Play Store release, `python tools/check_play_store_apk.py 
 checks that every DexKit anchor and every English UI label the filters rely on is still present. A
 label the module cannot find at runtime is also reported in the Xposed log. For a full DexKit
 resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`
-and run the unit tests with `-Dgplayadblock.playStoreApk=/path/to/base.apk`.
+and run the unit tests with `-Dgplayadblock.playStoreApk=/path/to/base.apk`. That check is strict: it
+requires every optional target, so older releases that lack some of them (for example 43.9.18 without
+persistent navigation) are expected to fail it. Recorded releases are checked against their own
+fingerprints instead.
 
 The start tab is applied once when Play Store is opened from the launcher; tabs chosen afterwards are
 kept. If Play Store crashes repeatedly (three times within two minutes), the optional interface filters

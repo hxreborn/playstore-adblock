@@ -91,8 +91,12 @@ internal class ExternalRecovery {
         return returned
     }
 
-    /** The tab index to switch to now, or null when nothing is pending or it is already selected. */
+    /**
+     * The tab index to switch to now, or null when nothing is pending, it is already selected, or
+     * an overlay came back in front meanwhile (the plan then waits for the next main resume).
+     */
     fun takeRecovery(): Int? {
+        if (overlayShowing.get()) return null
         val index = pendingIndex.getAndSet(NONE)
         if (index == NONE || selectedIndex.get() == index) return null
         return index

@@ -27,17 +27,22 @@ class PrefsRepository(
         SettingsKeys.write(settings, applied.edit()).apply()
     }
 
-    private fun <T> SharedPreferences.observe(read: () -> T): Flow<T> =
-        callbackFlow {
-            val listener =
-                SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(read()) }
-            registerOnSharedPreferenceChangeListener(listener)
-            trySend(read())
-            awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
-        }.distinctUntilChanged()
-
     companion object {
         const val DESIRED_FILE = SettingsKeys.GROUP
         const val APPLIED_FILE = "gplay_adblock_applied"
     }
 }
+
+internal fun <T> SharedPreferences.observe(read: () -> T): Flow<T> =
+    callbackFlow {
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener {
+                _,
+                _,
+                ->
+                trySend(read())
+            }
+        registerOnSharedPreferenceChangeListener(listener)
+        trySend(read())
+        awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()

@@ -5,5 +5,16 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE" />
 
-    <application android:name="eu.hxreborn.gplayadblock.settings.GPlayAdblockApp" />
+    <application android:name="eu.hxreborn.gplayadblock.settings.GPlayAdblockApp">
+        <activity
+            android:name="eu.hxreborn.gplayadblock.settings.MainActivity"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="true"
+            android:theme="@style/Theme.GPlayAdblock.Starting">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>

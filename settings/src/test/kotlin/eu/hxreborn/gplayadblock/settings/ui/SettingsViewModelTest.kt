@@ -1,0 +1,438 @@
+package eu.hxreborn.gplayadblock.settings.ui
+
+import eu.hxreborn.gplayadblock.settings.prefs.AppearanceRepository
+import eu.hxreborn.gplayadblock.settings.prefs.FakeSharedPreferences
+import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
+import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
+import eu.hxreborn.gplayadblock.settings.prefs.FrameworkConnection
+import eu.hxreborn.gplayadblock.settings.prefs.FrameworkInfo
+import eu.hxreborn.gplayadblock.settings.prefs.PrefsRepository
+import eu.hxreborn.gplayadblock.settings.prefs.RecordingEditor
+import eu.hxreborn.gplayadblock.settings.prefs.SettingsKeys
+import eu.hxreborn.gplayadblock.settings.prefs.StartTab
+import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
+import eu.hxreborn.gplayadblock.settings.protocol.NoOpPlayStoreRestarter
+import eu.hxreborn.gplayadblock.settings.protocol.PlayStoreRestarter
+import eu.hxreborn.gplayadblock.settings.protocol.RestartOutcome
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsViewModelTest {
+    private class RecordingRestarter(
+        var outcome: RestartOutcome = RestartOutcome.Restarted,
+        var gate: CompletableDeferred<Unit>? = null,
+        var failure: Exception? = null,
+    ) : PlayStoreRestarter {
+        val clearRequests = ArrayList<Boolean>()
+
+        override suspend fun restart(clearStreamCache: Boolean): RestartOutcome {
+            clearRequests += clearStreamCache
+            failure?.let { throw it }
+            gate?.await()
+            return outcome
+        }
+    }
+
+    private class Remote {
+        val commits = ArrayList<Map<String, Any?>>()
+        var accept = true
+        var duringCommit: () -> Unit = {}
+
+        fun editor(): RecordingEditor {
+            val written = LinkedHashMap<String, Any?>()
+            return RecordingEditor(written) {
+                commits += LinkedHashMap(written)
+                duringCommit()
+                accept
+            }
+        }
+    }
+
+    private val scheduler = TestCoroutineScheduler()
+    private val remote = Remote()
+    private val connection = FrameworkConnection(Dispatchers.Unconfined)
+    private val restarter = RecordingRestarter()
+    private val preferences = PrefsRepository(FakeSharedPreferences(), FakeSharedPreferences())
+    private val appearance = AppearanceRepository(FakeSharedPreferences())
+
+    @Before
+    fun setMain() {
+        Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
+    }
+
+    @After
+    fun resetMain() {
+        Dispatchers.resetMain()
+    }
+
+    private fun viewModel(
+        ioDispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(scheduler),
+        playStoreRestarter: PlayStoreRestarter = restarter,
+    ) = SettingsViewModel(preferences, appearance, connection, playStoreRestarter, ioDispatcher)
+
+    private fun connectFramework() =
+        connection.attach(Any(), FrameworkInfo("Vector", "2.0", 101), remote::editor)
+
+    private fun SettingsViewModel.ready() = uiState.value as SettingsUiState.Ready
+
+    @Test
+    fun `state is loading until the stored settings are read`() {
+        val viewModel = viewModel(StandardTestDispatcher(scheduler))
+        assertEquals(SettingsUiState.Loading, viewModel.uiState.value)
+        scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is SettingsUiState.Ready)
+    }
+
+    @Test
+    fun `a fresh install has nothing pending and no framework`() {
+        val state = viewModel().ready()
+        assertEquals(FilterSettings(), state.desired)
+        assertEquals(0, state.pendingCount)
+        assertNull(state.framework)
+        assertEquals(ApplyPhase.Idle, state.phase)
+    }
+
+    @Test
+    fun `switching a filter on makes one change pending and switching it back clears it`() {
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        assertEquals(1, viewModel.ready().pendingCount)
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, false)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a changed start screen counts as one pending change`() {
+        val viewModel = viewModel()
+        viewModel.setStartTab(StartTab.BOOKS)
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `apply publishes the whole snapshot and marks it applied`() {
+        val viewModel = viewModel()
+        connectFramework()
+        remote.commits.clear()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        val state = viewModel.ready()
+        assertEquals(ApplyPhase.Idle, state.phase)
+        assertEquals(0, state.pendingCount)
+        assertEquals(1, remote.commits.size)
+        assertEquals(SettingsKeys.allKeys.toSet(), remote.commits.single().keys)
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_HELP.key])
+    }
+
+    @Test
+    fun `a failed publish keeps the changes pending and a retry succeeds`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        remote.accept = false
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.NotSent), viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+        assertTrue(restarter.clearRequests.isEmpty())
+        remote.accept = true
+        viewModel.apply()
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `apply without a framework connection fails and keeps the changes pending`() {
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.NotSent), viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `edits made while publishing stay pending`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        remote.duringCommit = {
+            remote.duringCommit = {}
+            viewModel.setFilter(FilterSwitch.HIDE_DEVICE_SYNC, true)
+        }
+        viewModel.apply()
+        val state = viewModel.ready()
+        assertEquals(setOf(FilterSwitch.HIDE_HELP), state.applied?.enabled)
+        assertEquals(
+            setOf(FilterSwitch.HIDE_HELP, FilterSwitch.HIDE_DEVICE_SYNC),
+            state.desired.enabled,
+        )
+        assertEquals(1, state.pendingCount)
+    }
+
+    @Test
+    fun `edits made while waiting for the restart stay pending`() {
+        connectFramework()
+        restarter.gate = CompletableDeferred()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        assertEquals(ApplyPhase.WaitingForExit, viewModel.ready().phase)
+        viewModel.setFilter(FilterSwitch.HIDE_DEVICE_SYNC, true)
+        restarter.gate?.complete(Unit)
+        val state = viewModel.ready()
+        assertEquals(ApplyPhase.Idle, state.phase)
+        assertEquals(1, state.pendingCount)
+    }
+
+    @Test
+    fun `a second apply while one is running is ignored`() {
+        connectFramework()
+        restarter.gate = CompletableDeferred()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        viewModel.apply()
+        restarter.gate?.complete(Unit)
+        assertEquals(1, restarter.clearRequests.size)
+    }
+
+    @Test
+    fun `restart outcomes map to failure reasons and keep changes pending`() {
+        connectFramework()
+        val viewModel = viewModel()
+        val expected =
+            mapOf(
+                RestartOutcome.Busy to ApplyFailure.Busy,
+                RestartOutcome.NoReply to ApplyFailure.NoReply,
+                RestartOutcome.Failed to ApplyFailure.RestartFailed,
+            )
+        expected.forEach { (outcome, failure) ->
+            restarter.outcome = outcome
+            viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+            viewModel.apply()
+            assertEquals(ApplyPhase.Failed(failure), viewModel.ready().phase)
+            assertEquals(1, viewModel.ready().pendingCount)
+            assertNull(preferences.appliedSettings())
+        }
+    }
+
+    @Test
+    fun `an apply that does not restart publishes the applied snapshot again`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        val attempts =
+            listOf<() -> Unit>(
+                { restarter.outcome = RestartOutcome.Busy },
+                { restarter.outcome = RestartOutcome.NoReply },
+                { restarter.outcome = RestartOutcome.Failed },
+                { restarter.failure = IllegalStateException("launcher failed") },
+                {
+                    restarter.failure = null
+                    remote.accept = false
+                },
+            )
+        attempts.forEach { setUp ->
+            setUp()
+            remote.commits.clear()
+            viewModel.apply()
+            assertTrue(viewModel.ready().phase is ApplyPhase.Failed)
+            assertEquals(2, remote.commits.size)
+            assertEquals(true, remote.commits.first()[FilterSwitch.HIDE_LIVE_OPS.key])
+            assertEquals(true, remote.commits.last()[FilterSwitch.HIDE_HELP.key])
+            assertEquals(false, remote.commits.last()[FilterSwitch.HIDE_LIVE_OPS.key])
+        }
+    }
+
+    @Test
+    fun `a failed restart stays pending when the screen is reopened`() {
+        connectFramework()
+        val original = viewModel()
+        original.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        restarter.outcome = RestartOutcome.NoReply
+        original.apply()
+        assertEquals(1, viewModel().ready().pendingCount)
+    }
+
+    @Test
+    fun `a content filter retry still clears the stream cache`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        restarter.outcome = RestartOutcome.Busy
+        viewModel.apply()
+        restarter.outcome = RestartOutcome.Restarted
+        viewModel.apply()
+        assertEquals(listOf(true, true), restarter.clearRequests)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a failed restart preserves the previously applied snapshot`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        val applied = preferences.appliedSettings()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        restarter.outcome = RestartOutcome.Failed
+        viewModel.apply()
+        assertEquals(applied, preferences.appliedSettings())
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `the placeholder restarter reports failure and leaves changes pending`() {
+        connectFramework()
+        val viewModel = viewModel(playStoreRestarter = NoOpPlayStoreRestarter)
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.RestartFailed), viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+        assertNull(preferences.appliedSettings())
+    }
+
+    @Test
+    fun `a throwing restart reports failure and allows a retry`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        restarter.failure = IllegalStateException("launcher failed")
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.RestartFailed), viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+        restarter.failure = null
+        viewModel.apply()
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a cancelled restart leaves changes pending and allows a retry`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        restarter.failure = CancellationException("restart cancelled")
+        viewModel.apply()
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        assertEquals(1, viewModel.ready().pendingCount)
+        assertNull(preferences.appliedSettings())
+        restarter.failure = null
+        viewModel.apply()
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `the stream cache is cleared only when a content filter changed`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_GAMES_TAB, true)
+        viewModel.apply()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        viewModel.apply()
+        viewModel.setFilter(FilterSwitch.BLOCK_STORE_SELF_UPDATES, true)
+        viewModel.apply()
+        assertEquals(listOf(false, true, false), restarter.clearRequests)
+    }
+
+    @Test
+    fun `hiding the selected start tab resets the start screen and records why`() {
+        val viewModel = viewModel()
+        viewModel.setStartTab(StartTab.GAMES)
+        viewModel.setFilter(FilterSwitch.HIDE_GAMES_TAB, true)
+        val state = viewModel.ready()
+        assertEquals(StartTab.UNCHANGED, state.desired.startTab)
+        assertEquals(StartTab.GAMES, state.startTabReset)
+        viewModel.setStartTab(StartTab.SEARCH)
+        assertNull(viewModel.ready().startTabReset)
+    }
+
+    @Test
+    fun `a hidden tab cannot be chosen as the start screen`() {
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_APPS_TAB, true)
+        viewModel.setStartTab(StartTab.APPS)
+        assertEquals(StartTab.UNCHANGED, viewModel.ready().desired.startTab)
+        viewModel.setStartTab(StartTab.SEARCH)
+        assertEquals(StartTab.SEARCH, viewModel.ready().desired.startTab)
+    }
+
+    @Test
+    fun `every framework bind publishes the applied snapshot once`() {
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        assertTrue(remote.commits.isEmpty())
+        connectFramework()
+        assertEquals(1, remote.commits.size)
+        assertEquals(false, remote.commits.last()[FilterSwitch.HIDE_HELP.key])
+        assertEquals(false, remote.commits.last()[FilterSwitch.HIDE_LIVE_OPS.key])
+        viewModel.apply()
+        assertEquals(true, remote.commits.last()[FilterSwitch.HIDE_HELP.key])
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        val commitsBeforeBind = remote.commits.size
+        connectFramework()
+        assertEquals(commitsBeforeBind + 1, remote.commits.size)
+        assertEquals(true, remote.commits.last()[FilterSwitch.HIDE_HELP.key])
+        assertEquals(false, remote.commits.last()[FilterSwitch.HIDE_LIVE_OPS.key])
+    }
+
+    @Test
+    fun `an edit back to the applied settings clears a failed apply`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        remote.accept = false
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.NotSent), viewModel.ready().phase)
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, false)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a start tab edit clears a failed apply`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        restarter.outcome = RestartOutcome.Busy
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.Busy), viewModel.ready().phase)
+        viewModel.setStartTab(StartTab.SEARCH)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+    }
+
+    @Test
+    fun `publishing on bind does not mark the settings applied`() {
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        connectFramework()
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `appearance changes are stored separately from the filter settings`() {
+        val viewModel = viewModel()
+        viewModel.setThemeMode(ThemeMode.DARK)
+        viewModel.setDynamicColor(false)
+        val state = viewModel.ready()
+        assertEquals(ThemeMode.DARK, state.appearance.themeMode)
+        assertFalse(state.appearance.dynamicColor)
+        assertEquals(0, state.pendingCount)
+    }
+}

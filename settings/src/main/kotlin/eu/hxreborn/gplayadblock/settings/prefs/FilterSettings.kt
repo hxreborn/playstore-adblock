@@ -66,7 +66,9 @@ data class FilterSettings(
     fun withStartTab(tab: StartTab): FilterSettings =
         if (tab in hiddenTabs()) this else copy(startTab = tab)
 
+    fun differingSwitches(other: FilterSettings): Set<FilterSwitch> =
+        (enabled - other.enabled) + (other.enabled - enabled)
+
     fun countDifferences(other: FilterSettings): Int =
-        (enabled - other.enabled).size + (other.enabled - enabled).size +
-            if (startTab == other.startTab) 0 else 1
+        differingSwitches(other).size + if (startTab == other.startTab) 0 else 1
 }

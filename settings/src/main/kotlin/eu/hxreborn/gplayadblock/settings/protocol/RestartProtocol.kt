@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock.settings.protocol
 
 object RestartProtocol {
+    const val PLAY_STORE_PACKAGE = "com.android.vending"
     const val ACTION = "eu.hxreborn.gplayadblock.action.RESTART_PLAY_STORE"
     const val PERMISSION = "eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE"
     const val EXTRA_CALLBACK = "restart_callback"

@@ -57,6 +57,17 @@ class FrameworkConnectionTest {
         }
 
     @Test
+    fun `the version name drops the version code and build hash`() {
+        val info = FrameworkInfo("Vector", "2.2 (3080) 88f8e1fa-JingMatrix-Vector", 102)
+        assertEquals("2.2", info.versionName)
+    }
+
+    @Test
+    fun `a version that is only a version name stays whole`() {
+        assertEquals("2.0", FrameworkInfo("Vector", "2.0", 101).versionName)
+    }
+
+    @Test
     fun `a death callback for an older service keeps the current connection`() {
         val older = Any()
         val current = Any()

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="app_name">Google Play Store Adblock</string>
+    <string name="app_description">Removes ads, sponsored apps, and promoted recommendations from the Google Play Store</string>
+    <string name="home_title">GPlay Adblock</string>
+    <string name="back">Back</string>
+
+    <string name="status_active_title">Framework connected</string>
+    <string name="status_framework">%1$s %2$s (API %3$d)</string>
+    <string name="status_inactive_title">Framework not connected</string>
+    <string name="status_inactive_body">Turn it on in your Xposed manager</string>
+    <string name="status_applying_title">Applying filters</string>
+    <string name="status_step_saving">Saving settings</string>
+    <string name="status_step_waiting">Waiting for Play Store to close</string>
+    <string name="status_step_reopening">Reopening Play Store</string>
+    <string name="status_failed_title">Play Store didn\'t restart</string>
+    <string name="status_failed_body">Your changes are saved but not applied</string>
+    <string name="status_not_sent_title">Settings weren\'t sent</string>
+    <string name="status_not_sent_body">Your changes are saved on this device but not applied</string>
+
+    <string name="section_optional_filters">Optional filters</string>
+    <string name="optional_filters_footnote">These take effect after Play Store restarts.</string>
+    <string name="section_app">App</string>
+    <string name="appearance_title">Appearance and icon</string>
+    <string name="about_title">About</string>
+    <string name="about_summary">Version, contributors and links</string>
+
+    <string name="category_content">Content</string>
+    <string name="category_account_menu">Account menu</string>
+    <string name="category_manage_apps">Manage apps &amp; device</string>
+    <string name="category_navigation">Navigation</string>
+    <string name="category_play_store_updates">Play Store updates</string>
+    <string name="category_summary_off">Off</string>
+    <string name="category_summary_on_single">On</string>
+    <string name="category_summary_on">%1$d of %2$d on</string>
+    <string name="category_summary_with_start_screen">%1$s, starts on %2$s</string>
+    <string name="category_summary_start_screen_only">Starts on %1$s</string>
+
+    <string name="hide_live_ops">Hide editorial promotions</string>
+    <string name="hide_live_ops_summary">Removes large cards promoting apps, games and events</string>
+    <string name="hide_pre_registration_games">Hide pre-registration games</string>
+    <string name="hide_pre_registration_games_summary">Removes the pre-registration shelf from the Games tab</string>
+    <string name="hide_search_promotions">Hide promoted search shelves</string>
+    <string name="hide_search_promotions_summary">Removes the promoted shelf shown among search results</string>
+    <string name="suppress_notification_badge">Hide notification badge</string>
+    <string name="suppress_notification_badge_summary">Removes the unread dot on your profile picture</string>
+    <string name="hide_help">Hide Help &amp; feedback</string>
+    <string name="hide_help_summary">Removes the Help &amp; feedback row</string>
+    <string name="hide_personalization">Hide personalization</string>
+    <string name="hide_personalization_summary">Removes the Personalization in Google Play row</string>
+    <string name="hide_play_points_reminder">Hide Play Points reminder</string>
+    <string name="hide_play_points_reminder_summary">Removes the Looking for Play Points? card</string>
+    <string name="hide_notifications">Hide Notifications &amp; offers</string>
+    <string name="hide_notifications_summary">Removes the Notifications &amp; offers row</string>
+    <string name="hide_payments_and_subscriptions">Hide Payments &amp; subscriptions</string>
+    <string name="hide_payments_and_subscriptions_summary">Removes the Payments &amp; subscriptions row</string>
+    <string name="hide_experimental_features">Hide experimental features</string>
+    <string name="hide_experimental_features_summary">Removes the Try experimental features row</string>
+    <string name="hide_library">Hide Library</string>
+    <string name="hide_library_summary">Removes the Library row</string>
+    <string name="hide_play_pass">Hide Play Pass</string>
+    <string name="hide_play_pass_summary">Removes the Play Pass row</string>
+    <string name="hide_play_protect">Hide Play Protect</string>
+    <string name="hide_play_protect_summary">Removes the Play Protect row and its card in Manage apps &amp; device</string>
+    <string name="hide_device_sync">Hide device sync</string>
+    <string name="hide_device_sync_summary">Removes the card that syncs apps to your other devices</string>
+    <string name="hide_ratings_and_reviews">Hide Ratings &amp; reviews</string>
+    <string name="hide_ratings_and_reviews_summary">Removes the section asking you to rate apps</string>
+    <string name="hide_contributions">Hide Contributions</string>
+    <string name="hide_contributions_summary">Removes the Contributions section</string>
+    <string name="hide_games_tab">Hide Games tab</string>
+    <string name="hide_games_tab_summary">Removes Games from the bottom bar</string>
+    <string name="hide_apps_tab">Hide Apps tab</string>
+    <string name="hide_apps_tab_summary">Removes Apps from the bottom bar</string>
+    <string name="hide_books_tab">Hide Books tab</string>
+    <string name="hide_books_tab_summary">Removes Books from the bottom bar</string>
+    <string name="hide_you_tab">Hide You tab</string>
+    <string name="hide_you_tab_summary">Removes You from the bottom bar</string>
+    <string name="minimal_search_home">Minimal Search home</string>
+    <string name="minimal_search_home_summary">Removes the Search suggestions, and the bottom bar when only Search is left</string>
+    <string name="block_store_self_updates">Block Play Store self-updates</string>
+    <string name="block_store_self_updates_summary">Keeps the installed Play Store version. Other apps still update</string>
+
+    <string name="section_start_screen">Start screen</string>
+    <string name="start_screen_title">Open Play Store on</string>
+    <string name="start_tab_unchanged">Keep Play Store\'s choice</string>
+    <string name="start_tab_games">Games</string>
+    <string name="start_tab_apps">Apps</string>
+    <string name="start_tab_search">Search</string>
+    <string name="start_tab_books">Books</string>
+    <string name="start_tab_you">You</string>
+    <string name="start_tab_hidden">%1$s (hidden)</string>
+    <string name="start_screen_reset">The start screen went back to Play Store\'s choice because %1$s is hidden.</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Cancel</string>
+
+    <plurals name="pending_changes">
+        <item quantity="one">%d change not applied yet</item>
+        <item quantity="other">%d changes not applied yet</item>
+    </plurals>
+    <string name="pending_areas_more">%1$s and %2$d more</string>
+    <string name="pending_saved_on_device">Saved on this device. Turn the module on in your Xposed manager to apply them</string>
+    <string name="apply_and_restart">Apply and restart Play Store</string>
+    <string name="apply_not_sent_body">Your Xposed manager didn\'t accept them. Try again</string>
+    <string name="apply_no_reply_title">Play Store didn\'t respond</string>
+    <string name="apply_no_reply_body">Close it from its app info, or try again</string>
+    <string name="apply_busy_title">Play Store is busy</string>
+    <string name="apply_busy_body">It is installing or updating apps. Try again when it finishes</string>
+    <string name="apply_failed_body">Close it from its app info, or try again</string>
+    <string name="apply_app_info">Play Store app info</string>
+    <string name="apply_try_again">Try again</string>
+
+    <string name="appearance_theme">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="appearance_summary_system">System theme</string>
+    <string name="appearance_summary_light">Light theme</string>
+    <string name="appearance_summary_dark">Dark theme</string>
+    <string name="appearance_summary_dynamic_color">Dynamic color</string>
+    <string name="dynamic_color_title">Dynamic color</string>
+    <string name="dynamic_color_summary">Colors from your wallpaper</string>
+</resources>

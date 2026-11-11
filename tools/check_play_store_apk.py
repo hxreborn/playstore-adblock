@@ -28,6 +28,7 @@ LABELS = ROOT / "app/src/main/kotlin/eu/hxreborn/gplayadblock/hook/LocalizedLabe
 
 LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
 DECLARATION = re.compile(r"^\s*(?:private\s+)?(?:const\s+)?val\s+(\w+)\s*=", re.MULTILINE)
+ENGLISH_VALUE = re.compile(r'^\((?:en(?:-[^)]*)?)?\) "(.*)"$')
 LABEL = re.compile(r'^\s*const val (\w+) = "((?:[^"\\]|\\.)*)"', re.MULTILINE)
 
 
@@ -86,9 +87,11 @@ def resource_values(apk: Path, aapt2: str) -> set[str]:
     ).stdout
     values = set()
     for line in output.splitlines():
-        stripped = line.strip()
-        if stripped.startswith('() "') and stripped.endswith('"'):
-            values.add(normalize(stripped[4:-1]))
+        # Default values are listed as `() "text"`; English-qualified ones as `(en) "text"`,
+        # `(en-rUS) "text"` and so on. Both count as the English label.
+        match = ENGLISH_VALUE.match(line.strip())
+        if match:
+            values.add(normalize(match.group(1)))
     return values
 
 

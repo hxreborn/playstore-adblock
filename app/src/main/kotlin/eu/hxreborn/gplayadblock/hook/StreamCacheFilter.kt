@@ -200,9 +200,15 @@ object StreamCacheFilter {
                     when {
                         rewrite != null -> {
                             val (field, stripped) = rewrite
-                            editor.copy(filteredNode ?: record.node) { mutableNode ->
-                                field.set(mutableNode, stripped)
-                            }
+                            // The LiveOps rewrite is optional: if it fails, keep the node
+                            // without it and carry on with the ad removal.
+                            runCatching {
+                                editor.copy(filteredNode ?: record.node) { mutableNode ->
+                                    field.set(mutableNode, stripped)
+                                }
+                            }.onFailure { error ->
+                                Logger.warn("cache LiveOps rewrite skipped", error)
+                            }.getOrElse { filteredNode }
                         }
 
                         else -> {

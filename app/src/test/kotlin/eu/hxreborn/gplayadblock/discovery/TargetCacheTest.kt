@@ -55,6 +55,29 @@ class TargetCacheTest {
     }
 
     @Test
+    fun `an optional lookup that threw is not cached so the next launch scans again`() {
+        val transient =
+            RESOLVED.copy(
+                manageApps = null,
+                manageAppsFailure =
+                    "manage apps ${ResolvedTargets.TRANSIENT_FAILURE_MARKER} IllegalStateException",
+            )
+
+        TargetCache.store(root(), key, transient)
+
+        assertNull(TargetCache.load(root(), key))
+    }
+
+    @Test
+    fun `an optional target that is simply absent is cached`() {
+        val absent = RESOLVED.copy(manageApps = null, manageAppsFailure = "anchor candidates=0")
+
+        TargetCache.store(root(), key, absent)
+
+        assertEquals(absent, TargetCache.load(root(), key))
+    }
+
+    @Test
     fun `a target set stored for another Play Store build is not reused`() {
         TargetCache.store(root(), key, RESOLVED)
 

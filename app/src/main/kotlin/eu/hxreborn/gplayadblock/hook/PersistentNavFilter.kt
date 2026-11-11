@@ -91,7 +91,10 @@ object PersistentNavFilter {
                 val retainedTypes =
                     retained.map { item -> enumName(itemTypeField.get(item.value)) }
                 val now = SystemClock.elapsedRealtime()
-                val isExternalNavigation = now < externalNavigationDeadline.get()
+                // The grace period covers the model built before the sheet is resumed; after
+                // that the sheet's lifecycle decides, however late the model arrives.
+                val isExternalNavigation =
+                    now < externalNavigationDeadline.get() || recovery.protectsNavigation()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
                 val externalRecoveryRequested =
                     isExternalNavigation && recovery.consumeRequest()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 from pathlib import Path
 
@@ -85,6 +86,32 @@ class ReportTest(unittest.TestCase):
                 status = check.main([str(apk), "--skip-labels"])
         self.assertEqual(status, 1)
         self.assertIn("MISSING", output.getvalue())
+
+
+
+class ResourceValueTest(unittest.TestCase):
+    def test_default_and_english_qualified_values_count_as_english(self) -> None:
+        dump = "\n".join(
+            [
+                '      () "Library"',
+                '      (en) "Ratings and reviews"',
+                '      (en-rGB) "Play Pass"',
+                '      (ru) "Библиотека"',
+                '      (de) "Mediathek"',
+            ]
+        )
+        with mock.patch.object(
+            check.subprocess, "run", return_value=mock.Mock(stdout=dump)
+        ):
+            values = check.resource_values(Path("base.apk"), "aapt2")
+        self.assertEqual(
+            values,
+            {
+                check.normalize("Library"),
+                check.normalize("Ratings and reviews"),
+                check.normalize("Play Pass"),
+            },
+        )
 
 
 if __name__ == "__main__":

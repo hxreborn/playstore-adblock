@@ -248,15 +248,26 @@ object StreamResponseFilter {
             val filteredChildren = filterChildren(nodeChildrenField.get(decoded), removableIds)
             val rewrittenPresentation = presentationRewrites[wrapper]
             if (filteredChildren == null && rewrittenPresentation == null) return wrapper
-            val rebuiltNode =
+
+            fun rebuild(presentation: Any?): Any =
                 editor.copy(decoded) { mutableNode ->
                     if (filteredChildren != null) {
                         nodeChildrenField.set(mutableNode, filteredChildren)
                     }
-                    if (rewrittenPresentation != null) {
-                        nodePresentationField.set(mutableNode, rewrittenPresentation)
+                    if (presentation != null) {
+                        nodePresentationField.set(mutableNode, presentation)
                     }
                 }
+            // The LiveOps rewrite is optional: if it fails, rebuild the node without it so the
+            // ad filtering of its children still applies.
+            val rebuiltNode =
+                runCatching { rebuild(rewrittenPresentation) }
+                    .recoverCatching { error ->
+                        if (rewrittenPresentation == null) throw error
+                        Logger.warn("response LiveOps rewrite skipped", error)
+                        if (filteredChildren == null) return wrapper
+                        rebuild(null)
+                    }.getOrThrow()
             return editor.copy(wrapper) { mutableWrapper ->
                 nodeWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)
                 nodeWrapperPayloadField.set(mutableWrapper, rebuiltNode)

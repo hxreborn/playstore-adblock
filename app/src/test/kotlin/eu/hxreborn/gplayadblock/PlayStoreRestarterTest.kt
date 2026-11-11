@@ -30,9 +30,16 @@ class PlayStoreRestarterTest {
     @Test
     fun `every root step stops the script when it fails`() {
         assertTrue(indexOf("am force-stop") < indexOf("nsenter"))
-        assertTrue(indexOf("nsenter") < indexOf("am start"))
-        listOf("am force-stop", "nsenter", "am start").forEach { step ->
-            assertTrue("$step must abort on failure", lines[indexOf(step)].endsWith("|| exit 1"))
-        }
+        assertTrue(lines[indexOf("am force-stop")].endsWith("|| exit 1"))
+        assertTrue(lines[indexOf("dumpsys activity")].endsWith("|| exit 1"))
+        assertTrue(lines.last().startsWith("am start") && lines.last().endsWith("|| exit 1"))
+    }
+
+    @Test
+    fun `a failed cleanup starts Play Store again and still reports failure`() {
+        val cleanup = lines[indexOf("nsenter")]
+        assertTrue(cleanup.startsWith("if ! nsenter"))
+        assertTrue(cleanup.contains("then am start"))
+        assertTrue(cleanup.endsWith("exit 1; fi"))
     }
 }

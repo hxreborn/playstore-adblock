@@ -177,15 +177,8 @@ class PlayStoreAdblockModule : XposedModule() {
                                 targets,
                             )
                         // Scan UI labels in the background before the first menu needs them.
-                        // A module thread must never take Play Store down: failures are logged.
-                        Thread(
-                            {
-                                runCatching { LocalizedLabels.of(application).warmUp() }
-                                    .onFailure { Logger.warn("label warm-up failed", it) }
-                            },
-                            "gpab-labels",
-                        ).apply { isDaemon = true }
-                            .start()
+                        runCatching { LocalizedLabels.of(application).warmUp() }
+                            .onFailure { Logger.warn("label warm-up failed", it) }
                     }
                     targets.manageAppsFailure?.let { reason ->
                         Logger.warn("optional manage apps targets unresolved reason=$reason")
@@ -336,6 +329,8 @@ class PlayStoreAdblockModule : XposedModule() {
                             Bundle.EMPTY,
                         )
                         pendingResult.finish()
+                        // A failed cleanup is reported and Play Store keeps running.
+                        if (!cleared) return@Thread
                         Handler(Looper.getMainLooper()).postDelayed(
                             { Process.killProcess(Process.myPid()) },
                             RESTART_KILL_DELAY_MILLIS,
@@ -389,11 +384,13 @@ class PlayStoreAdblockModule : XposedModule() {
 
     private val livePurchaseActivities = AtomicInteger(0)
 
+    // A failed check counts as busy: an unknown state must not let a restart abort an install.
     private fun hasActiveInstallSession(context: Context): Boolean =
         runCatching {
             context.packageManager.packageInstaller.mySessions
                 .any { session -> session.isActive }
-        }.getOrDefault(false)
+        }.onFailure { error -> Logger.warn("install session check failed", error) }
+            .getOrDefault(true)
 
     private fun installHookGroups(
         classLoader: ClassLoader,

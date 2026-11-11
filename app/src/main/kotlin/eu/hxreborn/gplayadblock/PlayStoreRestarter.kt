@@ -29,9 +29,10 @@ internal object PlayStoreRestarter {
         val appContext = context.applicationContext
         val reply =
             when (val first = askModule(appContext)) {
-                // A stopped Play Store has no receiver: start it and ask again.
+                // A stopped Play Store has no receiver: start it and ask again. The existing task
+                // is kept, so an open purchase stays for the module's safety check.
                 Reply.NONE -> {
-                    launch(appContext)
+                    launch(appContext, clearTask = false)
                     Thread.sleep(MODULE_STARTUP_WAIT_MILLIS)
                     askModule(appContext)
                 }
@@ -84,15 +85,19 @@ internal object PlayStoreRestarter {
     private fun relaunchAfterModuleRestart(context: Context): Outcome =
         runCatching {
             Thread.sleep(MODULE_RELAUNCH_DELAY_MILLIS)
-            if (launch(context)) Outcome.RESTARTED else Outcome.FAILED
+            if (launch(context, clearTask = true)) Outcome.RESTARTED else Outcome.FAILED
         }.getOrDefault(Outcome.FAILED)
 
-    private fun launch(context: Context): Boolean =
+    private fun launch(
+        context: Context,
+        clearTask: Boolean,
+    ): Boolean =
         runCatching {
             val launchIntent =
                 context.packageManager.getLaunchIntentForPackage(BuildConfig.TARGET_PACKAGE)
                     ?: return@runCatching false
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (clearTask) launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK)
             context.startActivity(launchIntent)
             true
         }.getOrDefault(false)
@@ -101,11 +106,12 @@ internal object PlayStoreRestarter {
     @SuppressLint("SdCardPath")
     private fun restartViaRoot(): Outcome =
         runCatching {
+            // Output is discarded, so a su that keeps its streams open cannot block the timed wait.
             ProcessBuilder("su", "-c", rootScript())
                 .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.to(java.io.File("/dev/null")))
                 .start()
                 .let { process ->
-                    process.inputStream.bufferedReader().use { it.readText() }
                     if (!process.waitFor(ROOT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                         process.destroyForcibly()
                         return@runCatching Outcome.FAILED
@@ -121,10 +127,12 @@ internal object PlayStoreRestarter {
     /**
      * The root fallback, run by su's shell. Each step must succeed before the next one runs:
      * - refuse (exit [ROOT_EXIT_BUSY]) while any package installer session is staged or a Play
-     *   Store purchase activity exists, the same checks the module makes;
+     *   Store purchase activity exists, the same checks the module makes; a check that cannot
+     *   run fails the restart instead of passing;
      * - stop Play Store, then remove the cached feed responses and the crash-loop guard in init's
      *   mount namespace (su may keep this app's namespace, where app data isolation hides other
-     *   packages' data directories) and confirm the cache directory is gone;
+     *   packages' data directories) and confirm the cache directory is gone. If that fails,
+     *   Play Store is started again and the restart is reported as failed;
      * - start Play Store again.
      */
     @SuppressLint("SdCardPath")
@@ -136,14 +144,18 @@ internal object PlayStoreRestarter {
         val crashGuard = "$dataDir/${RestartProtocol.CRASH_GUARD_PATH}"
         val purchaseActivity = "$target/${RestartProtocol.PURCHASE_ACTIVITY_PACKAGE}"
         val cleanup = "rm -rf $feedCache && rm -f $crashGuard && [ ! -e $feedCache ]"
-        return listOf(
-            "if ls -d /data/app/vmdl*.tmp >/dev/null 2>&1; then exit $ROOT_EXIT_BUSY; fi",
-            "if dumpsys activity activities | grep -qF '$purchaseActivity'; " +
-                "then exit $ROOT_EXIT_BUSY; fi",
-            "am force-stop --user $userId $target || exit 1",
-            "nsenter -t 1 -m -- sh -c '$cleanup' || exit 1",
+        val start =
             "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
-                "-c android.intent.category.LAUNCHER -p $target >/dev/null || exit 1",
+                "-c android.intent.category.LAUNCHER -p $target >/dev/null"
+        return listOf(
+            "[ -d /data/app ] || exit 1",
+            "for session in /data/app/vmdl*.tmp; do " +
+                "[ -e \"\$session\" ] && exit $ROOT_EXIT_BUSY; done",
+            "activities=\$(dumpsys activity activities) || exit 1",
+            "case \"\$activities\" in *'$purchaseActivity'*) exit $ROOT_EXIT_BUSY ;; esac",
+            "am force-stop --user $userId $target || exit 1",
+            "if ! nsenter -t 1 -m -- sh -c '$cleanup'; then $start; exit 1; fi",
+            "$start || exit 1",
         ).joinToString("\n")
     }
 

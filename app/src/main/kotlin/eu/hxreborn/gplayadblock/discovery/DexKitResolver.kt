@@ -100,6 +100,8 @@ object DexKitResolver {
 
     internal fun hasNativeLoadFailure(): Boolean = nativeLoadFailure != null
 
+    // One resolution at a time: the prefetched optional anchors belong to the APK being scanned.
+    @Synchronized
     fun resolve(apkPaths: List<String>): ResolvedTargets {
         nativeLoadFailure?.let { return ResolvedTargets.Missing(it, retryable = true) }
         val failures = ArrayList<String>()
@@ -1653,7 +1655,10 @@ object DexKitResolver {
         try {
             block()
         } catch (exception: Exception) {
-            fail("$name resolution threw ${exception.javaClass.simpleName}: ${exception.message}")
+            fail(
+                "$name ${ResolvedTargets.TRANSIENT_FAILURE_MARKER} " +
+                    "${exception.javaClass.simpleName}: ${exception.message}",
+            )
         }
 
     private sealed interface Resolution<out T> {

@@ -50,6 +50,41 @@ class ExternalRecoveryTest {
     }
 
     @Test
+    fun `a plan from a link canceled by a launcher launch never runs`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        assertTrue(recovery.consumeRequest())
+        recovery.onSelected(hiddenApps)
+        recovery.onLauncherLaunch()
+
+        assertFalse(recovery.plan(search))
+        recovery.onActivityResumed(false)
+        assertTrue(recovery.onActivityResumed(true))
+        assertNull(recovery.takeRecovery())
+    }
+
+    @Test
+    fun `navigation stays protected while the sheet shows`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        assertFalse("sheet not shown yet", recovery.protectsNavigation())
+        recovery.onActivityResumed(false)
+        assertTrue("sheet in front", recovery.protectsNavigation())
+        recovery.onActivityResumed(true)
+        assertFalse("sheet closed", recovery.protectsNavigation())
+    }
+
+    @Test
+    fun `a launcher launch ends the protection`() {
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        recovery.onActivityResumed(false)
+        recovery.onLauncherLaunch()
+
+        assertFalse(recovery.protectsNavigation())
+    }
+
+    @Test
     fun `a launcher launch cancels a late plan`() {
         val recovery = ExternalRecovery()
         recovery.onExternalLink()

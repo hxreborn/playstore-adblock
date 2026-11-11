@@ -47,6 +47,7 @@ object TargetCache {
             }
 
             is ResolvedTargets.Resolved -> {
+                if (targets.hasTransientFailure) return
                 root.put("status", "resolved")
                 root.put("targets", encodeResolved(targets))
             }

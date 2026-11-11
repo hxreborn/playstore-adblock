@@ -8,6 +8,7 @@ import android.os.LocaleList
 import android.os.SystemClock
 import eu.hxreborn.gplayadblock.Logger
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Resolves Play Store UI labels by their English default text.
@@ -24,43 +25,81 @@ internal class LocalizedLabels private constructor(
     @Volatile
     private var cache: Pair<LocaleList, Map<String, Set<String>>>? = null
 
-    fun localized(englishDefault: String): Set<String> = current()[englishDefault].orEmpty()
+    private val scanRunning = AtomicBoolean(false)
 
-    /** Runs the resource scan ahead of time (off the main thread) so menus never wait for it. */
-    fun warmUp() {
-        current()
+    @Volatile
+    private var lastFailedScanAt = 0L
+
+    /**
+     * Translations of [englishDefault] in the current locale. Never scans on the caller's thread:
+     * until the background scan for this locale has finished, the result is empty, which keeps
+     * the entry visible.
+     */
+    fun localized(englishDefault: String): Set<String> {
+        val labels = cached()
+        if (labels == null) startBackgroundScan()
+        return labels?.get(englishDefault).orEmpty()
     }
 
-    private fun current(): Map<String, Set<String>> {
+    /** Starts the resource scan ahead of time so menus never wait for it. */
+    fun warmUp() {
+        if (cached() == null) startBackgroundScan()
+    }
+
+    private fun cached(): Map<String, Set<String>>? {
         val locales = context.resources.configuration.locales
-        cache?.takeIf { (cachedLocales, _) -> cachedLocales == locales }?.let { return it.second }
-        synchronized(this) {
-            cache
-                ?.takeIf { (cachedLocales, _) ->
-                    cachedLocales == locales
-                }?.let { return it.second }
-            val started = SystemClock.elapsedRealtime()
-            val labels =
-                runCatching { scan(context.resources) }
-                    .onFailure { error -> Logger.warn("label scan failed", error) }
-                    .getOrDefault(emptyMap())
-            Logger.debug {
-                val elapsed = SystemClock.elapsedRealtime() - started
-                "label scan locales=$locales found=${labels.keys.size}/" +
-                    "${PlayStoreLabels.ALL.size} in ${elapsed}ms"
-            }
-            // A missing label means Play Store changed that text: the matching filter keeps the
-            // entry visible. Say which one so the change is noticed instead of failing silently.
-            val missing = PlayStoreLabels.ALL - labels.keys
-            if (missing.isNotEmpty()) {
-                Logger.warn(
-                    "optional UI labels not found, their filters keep entries visible: " +
-                        missing.joinToString(", ") { "\"$it\"" },
-                )
-            }
-            cache = locales to labels
-            return labels
+        return cache?.takeIf { (cachedLocales, _) -> cachedLocales == locales }?.second
+    }
+
+    private fun startBackgroundScan() {
+        if (SystemClock.elapsedRealtime() - lastFailedScanAt < RETRY_AFTER_FAILURE_MILLIS &&
+            lastFailedScanAt != 0L
+        ) {
+            return
         }
+        if (!scanRunning.compareAndSet(false, true)) return
+        // A module thread must never take Play Store down: every failure is logged.
+        Thread(
+            {
+                try {
+                    scanCurrentLocale()
+                } catch (error: Throwable) {
+                    Logger.warn("label scan failed", error)
+                } finally {
+                    scanRunning.set(false)
+                }
+            },
+            "gpab-labels",
+        ).apply { isDaemon = true }
+            .start()
+    }
+
+    private fun scanCurrentLocale() {
+        val locales = context.resources.configuration.locales
+        val started = SystemClock.elapsedRealtime()
+        // A failed scan is not cached: a later lookup scans again instead of keeping every
+        // label-based filter off for the rest of the process.
+        val labels =
+            runCatching { scan(context.resources) }
+                .onFailure { error ->
+                    lastFailedScanAt = SystemClock.elapsedRealtime()
+                    Logger.warn("label scan failed", error)
+                }.getOrNull() ?: return
+        Logger.debug {
+            val elapsed = SystemClock.elapsedRealtime() - started
+            "label scan locales=$locales found=${labels.keys.size}/" +
+                "${PlayStoreLabels.ALL.size} in ${elapsed}ms"
+        }
+        // A missing label means Play Store changed that text: the matching filter keeps the
+        // entry visible. Say which one so the change is noticed instead of failing silently.
+        val missing = PlayStoreLabels.ALL - labels.keys
+        if (missing.isNotEmpty()) {
+            Logger.warn(
+                "optional UI labels not found, their filters keep entries visible: " +
+                    missing.joinToString(", ") { "\"$it\"" },
+            )
+        }
+        cache = locales to labels
     }
 
     private fun scan(resources: Resources): Map<String, Set<String>> {
@@ -104,6 +143,7 @@ internal class LocalizedLabels private constructor(
         private const val TYPE_MASK = 0xFFFF0000.toInt()
         private const val MAX_ENTRY = 0xFFFF
         private const val MAX_CONSECUTIVE_MISSES = 256
+        private const val RETRY_AFTER_FAILURE_MILLIS = 30_000L
 
         // Holds only the application context (see of()), which lives as long as the process.
         @SuppressLint("StaticFieldLeak")

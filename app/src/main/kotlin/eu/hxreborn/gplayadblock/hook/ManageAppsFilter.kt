@@ -130,8 +130,8 @@ object ManageAppsFilter {
 
     /**
      * Collects text reachable from a row model, including the value held by its UI state
-     * wrapper. Bounded in depth and size; platform classes other than text and collections are
-     * not entered.
+     * wrapper. Bounded in depth, strings found and objects visited, so a row with little text
+     * cannot stall the list; platform classes other than text and collections are not entered.
      */
     private fun reachableStrings(root: Any): List<String> {
         val found = ArrayList<String>()
@@ -142,7 +142,7 @@ object ManageAppsFilter {
             depth: Int,
         ) {
             if (value == null || depth > MAX_DEPTH || found.size >= MAX_STRINGS) return
-            if (seen.put(value, Unit) != null) return
+            if (seen.size >= MAX_VISITED || seen.put(value, Unit) != null) return
             when (value) {
                 is CharSequence -> {
                     found += value.toString()
@@ -184,4 +184,5 @@ object ManageAppsFilter {
     private const val MAX_DEPTH = 6
     private const val MAX_STRINGS = 64
     private const val MAX_ELEMENTS = 8
+    private const val MAX_VISITED = 512
 }

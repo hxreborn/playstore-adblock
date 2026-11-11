@@ -57,12 +57,13 @@ notification indicators. A replacement start tab can be selected when its origin
 The **Minimal Search home** option keeps the top search field and results routing intact while removing
 the Search landing suggestions and the remaining bottom-navigation item.
 
-These filters are disabled by default. Unlike the main ad filter, they depend on internal Play Store UI
+These filters are disabled by default, except **Hide promoted search shelves** (see below). Unlike the main ad filter, they depend on internal Play Store UI
 models that Google can change without notice. Targets are resolved from code structure and stable string
 fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
 filter fails open and the original interface remains available rather than risking a Play Store crash.
-UI entries are matched by model shape, semantic roles, and product identifiers rather than translated
-labels, so the filters are not limited to English or Russian Play Store installations.
+UI entries are matched by model shape, semantic roles, product identifiers, and Play Store's own
+translations of their English labels, so the filters are not limited to English or Russian Play Store
+installations.
 
 **Hide promoted search shelves** removes the collapsed promotional shelf shown among search results
 (for example limited-time events). It is promotional placement, so it is hidden by default together with

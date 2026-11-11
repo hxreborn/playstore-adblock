@@ -21,12 +21,19 @@ internal class ExternalRecovery {
     // The main activity is resumed after the overlay closed and no overlay has shown since.
     private val mainReturned = AtomicBoolean(false)
 
+    // The latest external link is still current (no launcher launch replaced it).
+    private val linkActive = AtomicBoolean(false)
+
+    // An activity other than the main one (the details sheet) is resumed in front of it.
+    private val overlayShowing = AtomicBoolean(false)
+
     /** An external link arrived: forget earlier state and allow one recovery request. */
     fun onExternalLink() {
         requested.set(true)
         pendingIndex.set(NONE)
         overlaySeen.set(false)
         mainReturned.set(false)
+        linkActive.set(true)
     }
 
     /** A launcher launch supersedes any recovery. */
@@ -35,6 +42,7 @@ internal class ExternalRecovery {
         pendingIndex.set(NONE)
         overlaySeen.set(false)
         mainReturned.set(false)
+        linkActive.set(false)
     }
 
     /** True once per external link: the first navigation model built for it may plan recovery. */
@@ -43,12 +51,24 @@ internal class ExternalRecovery {
     /**
      * Records the tab to recover. Returns true when the main activity already came back after the
      * overlay: the navigation model was built late, so [takeRecovery] has to run now because no
-     * further resume will trigger it.
+     * further resume will trigger it. A plan made for a link that a launcher launch has since
+     * replaced is dropped.
      */
     fun plan(index: Int): Boolean {
+        if (!linkActive.get()) return false
         pendingIndex.set(index)
+        if (!linkActive.get()) {
+            pendingIndex.set(NONE)
+            return false
+        }
         return mainReturned.get()
     }
+
+    /**
+     * True while the details sheet opened by the current link is in front of the main activity.
+     * Switching tabs then would dismiss the sheet, however long the navigation model took.
+     */
+    fun protectsNavigation(): Boolean = linkActive.get() && overlayShowing.get()
 
     /** Records the tab the latest navigation model reports as selected. */
     fun onSelected(index: Int) {
@@ -60,6 +80,7 @@ internal class ExternalRecovery {
      * overlay (the details sheet), which is the moment to run [takeRecovery].
      */
     fun onActivityResumed(isMainActivity: Boolean): Boolean {
+        overlayShowing.set(!isMainActivity)
         if (!isMainActivity) {
             overlaySeen.set(true)
             mainReturned.set(false)

@@ -14,15 +14,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,7 +28,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
@@ -47,9 +43,9 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
-import eu.hxreborn.gplayadblock.settings.ui.component.ApplyBar
-import eu.hxreborn.gplayadblock.settings.ui.component.ApplyBarContent
-import eu.hxreborn.gplayadblock.settings.ui.component.LocalApplyBarInset
+import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetContent
+import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetScaffold
+import eu.hxreborn.gplayadblock.settings.ui.component.PendingChange
 import eu.hxreborn.gplayadblock.settings.ui.screen.AboutScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.AppearanceScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.CategoryScreen
@@ -165,98 +161,95 @@ private fun SettingsNavigation(
         rememberSaveable(
             saver = BackStackSaver,
         ) { mutableStateListOf<Destination>(Destination.Home) }
+
+    fun popIfTop(destination: Destination) {
+        if (backStack.size > 1 && backStack.last() == destination) {
+            backStack.removeAt(backStack.lastIndex)
+        }
+    }
     ApplyHaptics(state.phase)
     val activity = LocalActivity.current
-    var barHeightPx by remember { mutableIntStateOf(0) }
-    val barInset = with(LocalDensity.current) { barHeightPx.toDp() }
-    val barContent = applyBarContent(state)
     val transitions = rememberScreenTransitions()
-    Box(modifier = Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalApplyBarInset provides barInset) {
-            NavDisplay(
-                backStack = backStack,
-                onBack = { backStack.removeLastOrNull() },
-                entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
-                transitionSpec = { transitions.forward },
-                popTransitionSpec = { transitions.back },
-                predictivePopTransitionSpec = { transitions.back },
-                entryProvider =
-                    entryProvider {
-                        entry<Destination.Home> {
-                            HomeScreen(
-                                state = state,
-                                onOpenCategory = { backStack.add(Destination.Category(it)) },
-                                onOpenAppearance = { backStack.add(Destination.Appearance) },
-                                onOpenAbout = { backStack.add(Destination.About) },
-                            )
-                        }
-                        entry<Destination.Category> { key ->
-                            CategoryScreen(
-                                category = key.category,
-                                settings = state.desired,
-                                startTabReset = state.startTabReset,
-                                onFilterChange = viewModel::setFilter,
-                                onStartTabChange = viewModel::setStartTab,
-                                onBack = { backStack.removeLastOrNull() },
-                            )
-                        }
-                        entry<Destination.About> {
-                            val aboutViewModel: AboutViewModel =
-                                viewModel(factory = AboutViewModel.Factory)
-                            val about by aboutViewModel.about.collectAsStateWithLifecycle()
-                            AboutScreen(
-                                about = about,
-                                onOpenLicenses = { backStack.add(Destination.Licenses) },
-                                onBack = { backStack.removeLastOrNull() },
-                            )
-                        }
-                        entry<Destination.Licenses> {
-                            LicensesScreen(onBack = { backStack.removeLastOrNull() })
-                        }
-                        entry<Destination.Appearance> {
-                            AppearanceScreen(
-                                appearance = state.appearance,
-                                onThemeModeChange = viewModel::setThemeMode,
-                                onDynamicColorChange = viewModel::setDynamicColor,
-                                onBack = { backStack.removeLastOrNull() },
-                            )
-                        }
-                    },
+    ApplySheetScaffold(
+        content = applySheetContent(state),
+        onApply = viewModel::apply,
+        onOpenPlayStoreInfo = {
+            activity?.startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", RestartProtocol.PLAY_STORE_PACKAGE, null),
+                ),
             )
-        }
-        ApplyBar(
-            content = barContent,
-            onApply = viewModel::apply,
-            onOpenPlayStoreInfo = {
-                activity?.startActivity(
-                    Intent(
-                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.fromParts("package", RestartProtocol.PLAY_STORE_PACKAGE, null),
-                    ),
-                )
-            },
-            onHeightChange = { if (it > 0) barHeightPx = it },
-            modifier = Modifier.align(Alignment.BottomCenter),
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = { backStack.removeLastOrNull() },
+            entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator()),
+            transitionSpec = { transitions.forward },
+            popTransitionSpec = { transitions.back },
+            predictivePopTransitionSpec = { transitions.back },
+            entryProvider =
+                entryProvider {
+                    entry<Destination.Home> {
+                        HomeScreen(
+                            state = state,
+                            onOpenCategory = { backStack.add(Destination.Category(it)) },
+                            onOpenAppearance = { backStack.add(Destination.Appearance) },
+                            onOpenAbout = { backStack.add(Destination.About) },
+                        )
+                    }
+                    entry<Destination.Category> { key ->
+                        CategoryScreen(
+                            category = key.category,
+                            settings = state.desired,
+                            startTabReset = state.startTabReset,
+                            onFilterChange = viewModel::setFilter,
+                            onStartTabChange = viewModel::setStartTab,
+                            onBack = { popIfTop(key) },
+                        )
+                    }
+                    entry<Destination.About> {
+                        val aboutViewModel: AboutViewModel =
+                            viewModel(factory = AboutViewModel.Factory)
+                        val about by aboutViewModel.about.collectAsStateWithLifecycle()
+                        AboutScreen(
+                            about = about,
+                            onOpenLicenses = { backStack.add(Destination.Licenses) },
+                            onBack = { popIfTop(Destination.About) },
+                        )
+                    }
+                    entry<Destination.Licenses> {
+                        LicensesScreen(onBack = { popIfTop(Destination.Licenses) })
+                    }
+                    entry<Destination.Appearance> {
+                        AppearanceScreen(
+                            appearance = state.appearance,
+                            onThemeModeChange = viewModel::setThemeMode,
+                            onDynamicColorChange = viewModel::setDynamicColor,
+                            onBack = { popIfTop(Destination.Appearance) },
+                        )
+                    }
+                },
         )
     }
 }
 
-private fun applyBarContent(state: SettingsUiState.Ready): ApplyBarContent? =
+private fun applySheetContent(state: SettingsUiState.Ready): ApplySheetContent? =
     when {
         state.phase.isRunning -> {
             null
         }
 
         state.phase is ApplyPhase.Failed -> {
-            ApplyBarContent.Failure(state.phase.reason)
+            ApplySheetContent.Failure(state.phase.reason)
         }
 
         state.pendingCount > 0 -> {
-            ApplyBarContent.Pending(
-                count = state.pendingCount,
-                categories = state.changedCategories,
-                startScreenChanged = state.startScreenChanged,
+            ApplySheetContent.Pending(
                 canApply = state.framework != null,
+                changes = pendingChanges(state),
             )
         }
 
@@ -278,4 +271,16 @@ private fun ApplyHaptics(phase: ApplyPhase) {
         }
         previous = phase
     }
+}
+
+private fun pendingChanges(state: SettingsUiState.Ready): List<PendingChange> {
+    val desired = state.desired
+    val switches =
+        desired
+            .differingSwitches(state.appliedOrDefault)
+            .sorted()
+            .map { PendingChange.Switch(it, desired.isOn(it)) }
+    val startScreen =
+        if (state.startScreenChanged) PendingChange.StartScreen(desired.startTab) else null
+    return switches + listOfNotNull(startScreen)
 }

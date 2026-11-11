@@ -14,9 +14,7 @@
     <string name="status_step_waiting">Waiting for Play Store to close</string>
     <string name="status_step_reopening">Reopening Play Store</string>
     <string name="status_failed_title">Play Store didn\'t restart</string>
-    <string name="status_failed_body">Your changes are saved but not applied</string>
     <string name="status_not_sent_title">Settings weren\'t sent</string>
-    <string name="status_not_sent_body">Your changes are saved on this device but not applied</string>
 
     <string name="section_always_on">Always on</string>
     <string name="sponsored_listings">Sponsored listings</string>
@@ -103,6 +101,8 @@
     </plurals>
     <string name="pending_areas_more">%1$s and %2$d more</string>
     <string name="pending_saved_on_device">Saved on this device. Turn the module on in your Xposed manager to apply them</string>
+    <string name="pending_change_on">On</string>
+    <string name="pending_change_off">Off</string>
     <string name="apply_and_restart">Apply and restart Play Store</string>
     <string name="apply_not_sent_body">Your Xposed manager didn\'t accept them. Try again</string>
     <string name="apply_no_reply_title">Play Store didn\'t respond</string>

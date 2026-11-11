@@ -40,7 +40,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
-import eu.hxreborn.gplayadblock.settings.ui.ApplyFailure
 import eu.hxreborn.gplayadblock.settings.ui.ApplyPhase
 import eu.hxreborn.gplayadblock.settings.ui.SettingsUiState
 import eu.hxreborn.gplayadblock.settings.ui.theme.Tokens
@@ -76,22 +75,6 @@ private fun statusContent(state: SettingsUiState.Ready): StatusContent {
 
         phase == ApplyPhase.Reopening -> {
             applyingContent(R.string.status_step_reopening)
-        }
-
-        phase is ApplyPhase.Failed && phase.reason == ApplyFailure.NotSent -> {
-            StatusContent(
-                stringResource(R.string.status_not_sent_title),
-                stringResource(R.string.status_not_sent_body),
-                BadgeKind.Problem,
-            )
-        }
-
-        phase is ApplyPhase.Failed -> {
-            StatusContent(
-                stringResource(R.string.status_failed_title),
-                stringResource(R.string.status_failed_body),
-                BadgeKind.Problem,
-            )
         }
 
         framework == null -> {

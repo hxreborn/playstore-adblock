@@ -41,8 +41,8 @@ fun Modifier.centeredContentWidth(): Modifier =
 
 @Composable
 fun listBottomPadding(): Dp {
-    val applyBarInset = LocalApplyBarInset.current
-    if (applyBarInset > 0.dp) return applyBarInset + Tokens.ScreenMargin
+    val applySheetInset = LocalApplySheetInset.current
+    if (applySheetInset > 0.dp) return applySheetInset + Tokens.ScreenMargin
     return WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 }
 

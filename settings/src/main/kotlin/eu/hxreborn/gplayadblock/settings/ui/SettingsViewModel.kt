@@ -70,14 +70,6 @@ sealed interface SettingsUiState {
     ) : SettingsUiState {
         val appliedOrDefault: FilterSettings get() = applied ?: FilterSettings()
         val pendingCount: Int get() = desired.countDifferences(appliedOrDefault)
-        val changedCategories: List<FilterCategory>
-            get() =
-                desired
-                    .differingSwitches(
-                        appliedOrDefault,
-                    ).map { it.category }
-                    .distinct()
-                    .sorted()
         val startScreenChanged: Boolean get() = desired.startTab != appliedOrDefault.startTab
     }
 }

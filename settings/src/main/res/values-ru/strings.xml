@@ -52,4 +52,6 @@
     <string name="sponsored_listings">Спонсорские объявления</string>
     <string name="sponsored_listings_summary">Удаляются в любой сборке</string>
     <string name="about_telegram">Новости в Telegram</string>
+    <string name="pending_change_on">Вкл.</string>
+    <string name="pending_change_off">Выкл.</string>
 </resources>

@@ -15,22 +15,31 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AppShortcut
 import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.Colorize
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -40,10 +49,15 @@ import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.Appearance
 import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
+import eu.hxreborn.gplayadblock.settings.ui.component.AdaptiveButtonRow
 import eu.hxreborn.gplayadblock.settings.ui.component.DetailScaffold
 import eu.hxreborn.gplayadblock.settings.ui.component.RowGroup
+import eu.hxreborn.gplayadblock.settings.ui.component.SectionHeader
 import eu.hxreborn.gplayadblock.settings.ui.component.SwitchRow
 import eu.hxreborn.gplayadblock.settings.ui.component.centeredContentWidth
+import eu.hxreborn.gplayadblock.settings.ui.component.isLauncherIconVisible
+import eu.hxreborn.gplayadblock.settings.ui.component.rememberLauncherIconVisible
+import eu.hxreborn.gplayadblock.settings.ui.component.setLauncherIconVisible
 import eu.hxreborn.gplayadblock.settings.ui.component.shapeForPosition
 import eu.hxreborn.gplayadblock.settings.ui.theme.Tokens
 
@@ -88,7 +102,57 @@ fun AppearanceScreen(
                     }
                 }
             RowGroup(rows = rows, modifier = Modifier.padding(top = Tokens.ScreenMargin))
+            LauncherIconGroup()
         }
+    }
+}
+
+@Composable
+private fun LauncherIconGroup() {
+    val context = LocalContext.current
+    var visible by rememberLauncherIconVisible()
+    var confirmHide by rememberSaveable { mutableStateOf(false) }
+    SectionHeader(stringResource(R.string.section_launcher))
+    RowGroup(
+        rows =
+            listOf { shape ->
+                SwitchRow(
+                    shape = shape,
+                    icon = Icons.Outlined.AppShortcut,
+                    title = stringResource(R.string.launcher_icon_title),
+                    summary = stringResource(R.string.launcher_icon_summary),
+                    checked = visible,
+                    onCheckedChange = { show ->
+                        if (show) {
+                            setLauncherIconVisible(context, true)
+                            visible = isLauncherIconVisible(context)
+                        } else {
+                            confirmHide = true
+                        }
+                    },
+                )
+            },
+    )
+    if (confirmHide) {
+        AlertDialog(
+            onDismissRequest = { confirmHide = false },
+            title = { Text(stringResource(R.string.launcher_icon_hide_title)) },
+            text = { Text(stringResource(R.string.launcher_icon_hide_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmHide = false
+                        setLauncherIconVisible(context, false)
+                        visible = isLauncherIconVisible(context)
+                    },
+                ) { Text(stringResource(R.string.launcher_icon_hide_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmHide = false }) {
+                    Text(stringResource(R.string.dialog_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -120,47 +184,46 @@ private fun ThemeModeRow(
                 text = stringResource(R.string.appearance_theme),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().selectableGroup(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        ButtonGroupDefaults.ConnectedSpaceBetween,
-                    ),
-            ) {
-                ThemeModes.forEachIndexed { index, (mode, icon, label) ->
-                    ToggleButton(
-                        checked = mode == selected,
-                        onCheckedChange = {
-                            if (mode != selected) {
-                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                                onSelect(mode)
+            AdaptiveButtonRow(
+                items = ThemeModes,
+                modifier = Modifier.selectableGroup(),
+            ) { index, (mode, icon, label), stacked, itemModifier ->
+                ToggleButton(
+                    checked = mode == selected,
+                    onCheckedChange = {
+                        if (mode != selected) {
+                            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            onSelect(mode)
+                        }
+                    },
+                    modifier = itemModifier.semantics { role = Role.RadioButton },
+                    shapes =
+                        when {
+                            stacked -> {
+                                ToggleButtonDefaults.shapesFor(ButtonDefaults.MinHeight)
+                            }
+
+                            index == 0 -> {
+                                ButtonGroupDefaults.connectedLeadingButtonShapes()
+                            }
+
+                            index == ThemeModes.lastIndex -> {
+                                ButtonGroupDefaults
+                                    .connectedTrailingButtonShapes()
+                            }
+
+                            else -> {
+                                ButtonGroupDefaults.connectedMiddleButtonShapes()
                             }
                         },
-                        modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
-                        shapes =
-                            when (index) {
-                                0 -> {
-                                    ButtonGroupDefaults.connectedLeadingButtonShapes()
-                                }
-
-                                ThemeModes.lastIndex -> {
-                                    ButtonGroupDefaults
-                                        .connectedTrailingButtonShapes()
-                                }
-
-                                else -> {
-                                    ButtonGroupDefaults.connectedMiddleButtonShapes()
-                                }
-                            },
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(ToggleButtonDefaults.IconSize),
-                        )
-                        Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
-                        Text(text = stringResource(label), maxLines = 1)
-                    }
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(ToggleButtonDefaults.IconSize),
+                    )
+                    Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
+                    Text(text = stringResource(label), maxLines = 1)
                 }
             }
         }

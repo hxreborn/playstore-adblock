@@ -117,7 +117,8 @@
     <string name="appearance_summary_system">System theme</string>
     <string name="appearance_summary_light">Light theme</string>
     <string name="appearance_summary_dark">Dark theme</string>
-    <string name="appearance_summary_dynamic_color">Dynamic color</string>
+    <string name="appearance_summary_dynamic_color">dynamic color</string>
+    <string name="appearance_summary_icon_hidden">icon hidden</string>
     <string name="dynamic_color_title">Dynamic color</string>
     <string name="dynamic_color_summary">Colors from your wallpaper</string>
     <string name="about_whats_new">What\'s new</string>
@@ -142,4 +143,10 @@
         <item quantity="one">%d line removed</item>
         <item quantity="other">%d lines removed</item>
     </plurals>
+    <string name="section_launcher">Launcher</string>
+    <string name="launcher_icon_title">Show launcher icon</string>
+    <string name="launcher_icon_summary">Settings also open from your Xposed manager</string>
+    <string name="launcher_icon_hide_title">Hide launcher icon?</string>
+    <string name="launcher_icon_hide_body">GPlay Adblock leaves your app drawer. Open these settings from your Xposed manager instead.</string>
+    <string name="launcher_icon_hide_confirm">Hide icon</string>
 </resources>

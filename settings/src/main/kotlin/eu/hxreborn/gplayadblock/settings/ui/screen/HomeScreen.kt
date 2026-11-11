@@ -42,6 +42,7 @@ import eu.hxreborn.gplayadblock.settings.ui.component.SectionHeader
 import eu.hxreborn.gplayadblock.settings.ui.component.StatusCard
 import eu.hxreborn.gplayadblock.settings.ui.component.centeredContentWidth
 import eu.hxreborn.gplayadblock.settings.ui.component.listBottomPadding
+import eu.hxreborn.gplayadblock.settings.ui.component.rememberLauncherIconVisible
 import eu.hxreborn.gplayadblock.settings.ui.component.shapeForPosition
 import eu.hxreborn.gplayadblock.settings.ui.icon
 import eu.hxreborn.gplayadblock.settings.ui.labelRes
@@ -59,6 +60,7 @@ fun HomeScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val bottomPadding = listBottomPadding()
     val direction = LocalLayoutDirection.current
+    val launcherIconVisible by rememberLauncherIconVisible()
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
@@ -127,7 +129,7 @@ fun HomeScreen(
                     shape = shapeForPosition(2, 0),
                     icon = Icons.Outlined.Palette,
                     title = stringResource(R.string.appearance_title),
-                    summary = appearanceSummary(state.appearance),
+                    summary = appearanceSummary(state.appearance, launcherIconVisible),
                     onClick = onOpenAppearance,
                     modifier = Modifier.padding(horizontal = Tokens.ScreenMargin),
                 )
@@ -176,7 +178,10 @@ private fun categorySummary(
 }
 
 @Composable
-private fun appearanceSummary(appearance: Appearance): String {
+private fun appearanceSummary(
+    appearance: Appearance,
+    launcherIconVisible: Boolean,
+): String {
     val theme =
         stringResource(
             when (appearance.themeMode) {
@@ -188,5 +193,7 @@ private fun appearanceSummary(appearance: Appearance): String {
     val dynamic =
         stringResource(R.string.appearance_summary_dynamic_color)
             .takeIf { appearance.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
-    return listOfNotNull(theme, dynamic).joinToString(", ")
+    val iconHidden =
+        stringResource(R.string.appearance_summary_icon_hidden).takeUnless { launcherIconVisible }
+    return listOfNotNull(theme, dynamic, iconHidden).joinToString(", ")
 }

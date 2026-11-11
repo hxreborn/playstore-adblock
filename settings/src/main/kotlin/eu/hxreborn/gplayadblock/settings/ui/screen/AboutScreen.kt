@@ -66,7 +66,6 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.pluralStringResource
@@ -86,6 +85,7 @@ import eu.hxreborn.gplayadblock.settings.contributors.DIFF_BLOCK_COUNT
 import eu.hxreborn.gplayadblock.settings.contributors.diffBlocks
 import eu.hxreborn.gplayadblock.settings.ui.AboutInfo
 import eu.hxreborn.gplayadblock.settings.ui.Contributor
+import eu.hxreborn.gplayadblock.settings.ui.component.AdaptiveButtonRow
 import eu.hxreborn.gplayadblock.settings.ui.component.DetailScaffold
 import eu.hxreborn.gplayadblock.settings.ui.component.MorphingLogo
 import eu.hxreborn.gplayadblock.settings.ui.component.NavigationRow
@@ -341,7 +341,7 @@ private fun SupportButtons(
             stringResource(R.string.about_star_on_github),
             stringResource(R.string.about_buy_coffee),
         )
-    AdaptiveButtonRow(count = labels.size, modifier = modifier) { index, stacked, itemModifier ->
+    AdaptiveButtonRow(items = labels, modifier = modifier) { index, label, stacked, itemModifier ->
         val buttonModifier = itemModifier.heightIn(min = 52.dp)
         if (index == 0) {
             Button(
@@ -359,7 +359,7 @@ private fun SupportButtons(
             ) {
                 Icon(Icons.Outlined.StarOutline, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text(labels[index], maxLines = 1)
+                Text(label, maxLines = 1)
             }
         } else {
             FilledTonalButton(
@@ -377,43 +377,9 @@ private fun SupportButtons(
             ) {
                 Icon(Icons.Outlined.Coffee, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text(labels[index], maxLines = 1)
+                Text(label, maxLines = 1)
             }
         }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun AdaptiveButtonRow(
-    count: Int,
-    modifier: Modifier = Modifier,
-    button: @Composable (index: Int, stacked: Boolean, modifier: Modifier) -> Unit,
-) {
-    SubcomposeLayout(modifier.fillMaxWidth()) { constraints ->
-        val gap = ButtonGroupDefaults.ConnectedSpaceBetween
-        val slot = (constraints.maxWidth - gap.roundToPx() * (count - 1)) / count
-        val probes = subcompose("probe") { repeat(count) { button(it, false, Modifier) } }
-        val stacked = probes.any { it.maxIntrinsicWidth(constraints.maxHeight) > slot }
-        val content =
-            subcompose(stacked) {
-                if (stacked) {
-                    Column(
-                        Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        repeat(count) { button(it, true, Modifier.fillMaxWidth()) }
-                    }
-                } else {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(gap),
-                    ) {
-                        repeat(count) { button(it, false, Modifier.weight(1f)) }
-                    }
-                }
-            }.first().measure(constraints)
-        layout(content.width, content.height) { content.place(0, 0) }
     }
 }
 
@@ -521,7 +487,7 @@ private fun ContributorAvatar(
 @Composable
 private fun OwnerLabel() {
     Surface(
-        modifier = Modifier.height(OwnerLabelHeight),
+        modifier = Modifier.heightIn(min = OwnerLabelHeight),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {

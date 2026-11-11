@@ -80,32 +80,37 @@ class PresentationClassifier(
         ) {
             return null
         }
-        val instanceFields =
-            payload.javaClass.declaredFields.filterNot { field ->
-                field.isSynthetic || Modifier.isStatic(field.modifiers)
-            }
-        val liveOpsField =
-            instanceFields
+        val detailsField = protobufChildContaining(payload, LIVE_OP_DETAILS_MARKER) ?: return null
+        val details = detailsField.get(payload) ?: return null
+        val mediaField = protobufChildContaining(details, LIVE_OP_DETAILS_MARKER) ?: return null
+        val media = mediaField.get(details) ?: return null
+        val mediaItemsField =
+            instanceFields(media)
                 .filter { field ->
                     field.isAccessible = true
-                    val value = field.get(payload) ?: return@filter false
-                    protobufToByteArrayMethod.declaringClass.isInstance(value) &&
-                        (protobufToByteArrayMethod.invoke(value) as? ByteArray)
-                            ?.containsSubsequence(LIVE_OP_DETAILS_MARKER) == true
+                    field.get(media) is List<*>
                 }.singleOrNull()
                 ?: return null
-        val presenceField =
-            instanceFields.singleOrNull { field -> field.type == Int::class.javaPrimitiveType }
-                ?: return null
-        liveOpsField.isAccessible = true
-        presenceField.isAccessible = true
+        val mediaItems = mediaItemsField.get(media) as? List<*> ?: return null
+        val filteredMediaItems =
+            mediaItems.filterNot { item ->
+                item != null &&
+                    protobufToByteArrayMethod.declaringClass.isInstance(item) &&
+                    (protobufToByteArrayMethod.invoke(item) as? ByteArray)
+                        ?.containsSubsequence(LIVE_OP_DETAILS_MARKER) == true
+            }
+        if (filteredMediaItems.size == mediaItems.size) return null
+        val strippedMedia =
+            editor.copy(media) { mutableMedia ->
+                editor.replaceList(mutableMedia, mediaItemsField, filteredMediaItems)
+            }
+        val strippedDetails =
+            editor.copy(details) { mutableDetails ->
+                mediaField.set(mutableDetails, strippedMedia)
+            }
         val strippedPayload =
             editor.copy(payload) { mutablePayload ->
-                liveOpsField.set(mutablePayload, null)
-                presenceField.setInt(
-                    mutablePayload,
-                    presenceField.getInt(mutablePayload) and EMBEDDED_LIVE_OPS_PRESENCE.inv(),
-                )
+                detailsField.set(mutablePayload, strippedDetails)
             }
         val strippedCard =
             editor.copy(card) { mutableCard ->
@@ -115,6 +120,24 @@ class PresentationClassifier(
             presentationPayloadField.set(mutablePresentation, strippedCard)
         }
     }
+
+    private fun protobufChildContaining(
+        owner: Any,
+        marker: ByteArray,
+    ): Field? =
+        instanceFields(owner)
+            .filter { field ->
+                field.isAccessible = true
+                val value = field.get(owner) ?: return@filter false
+                protobufToByteArrayMethod.declaringClass.isInstance(value) &&
+                    (protobufToByteArrayMethod.invoke(value) as? ByteArray)
+                        ?.containsSubsequence(marker) == true
+            }.singleOrNull()
+
+    private fun instanceFields(owner: Any): List<Field> =
+        owner.javaClass.declaredFields.filterNot { field ->
+            field.isSynthetic || Modifier.isStatic(field.modifiers)
+        }
 
     private fun clusterCase(presentation: Any): Int {
         val payload = presentationPayloadField.get(presentation)
@@ -295,7 +318,6 @@ class PresentationClassifier(
         const val AD_OVERFLOW_ENUM = 3
         const val LIVE_OPS_CARD = 32
         const val EMBEDDED_LIVE_OPS_FIELD = 2
-        const val EMBEDDED_LIVE_OPS_PRESENCE = 2
         val AD_SLOT_MARKER = "ads_slot_".toByteArray(Charsets.US_ASCII)
         val SPONSORED_CLUSTER_MARKER = "sponsored_cluster".toByteArray(Charsets.US_ASCII)
         val PRE_REGISTRATION_GAMES_MARKER =

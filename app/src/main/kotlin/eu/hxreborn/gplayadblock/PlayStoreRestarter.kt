@@ -155,10 +155,14 @@ internal object PlayStoreRestarter {
             "am start --user $userId --activity-clear-task -a android.intent.action.MAIN " +
                 "-c android.intent.category.LAUNCHER -p $target >/dev/null"
         return listOf(
-            // Listing proves the directory can be read; otherwise the glob below could not see
-            // staged sessions and would pass.
+            // Package installer sessions in progress, wherever PackageInstallerService keeps
+            // them: app installs on internal storage (/data/app/vmdl*.tmp), on adopted storage
+            // (/mnt/expand/<volume>/app/vmdl*.tmp) and staged system updates
+            // (/data/app-staging/session_*). Listing proves /data/app can be read; otherwise the
+            // glob could not see a session and would pass.
             "ls /data/app >/dev/null || exit 1",
-            "for session in /data/app/vmdl*.tmp; do " +
+            "for session in /data/app/vmdl*.tmp /mnt/expand/*/app/vmdl*.tmp " +
+                "/data/app-staging/session_*; do " +
                 "[ -e \"\$session\" ] && exit $ROOT_EXIT_BUSY; done",
             "activities=\$(dumpsys activity activities) || exit 1",
             "case \"\$activities\" in *'$purchaseActivity'*) exit $ROOT_EXIT_BUSY ;; esac",

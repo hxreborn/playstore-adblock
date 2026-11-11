@@ -15,6 +15,8 @@ class PlayStoreRestarterTest {
     fun `root restart checks installs and purchases before stopping Play Store`() {
         val stop = indexOf("am force-stop --user 10 ")
         assertTrue(indexOf("/data/app/vmdl") < stop)
+        assertTrue(indexOf("/mnt/expand/*/app/vmdl") < stop)
+        assertTrue(indexOf("/data/app-staging/session_") < stop)
         assertTrue(indexOf(RestartProtocol.PURCHASE_ACTIVITY_PACKAGE) < stop)
     }
 

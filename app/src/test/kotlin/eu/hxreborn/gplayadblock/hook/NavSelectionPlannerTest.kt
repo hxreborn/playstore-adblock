@@ -119,4 +119,28 @@ class NavSelectionPlannerTest {
         assertNull(plan.navigateToIndex)
         assertTrue(plan.consumesStartTab)
     }
+
+    @Test
+    fun `a late model after the sheet closed switches away from a hidden tab directly`() {
+        // Opened by a link, the first navigation model arrives after the sheet was closed and
+        // the grace period ended: the request is taken, but nothing waits for a recovery.
+        val recovery = ExternalRecovery()
+        recovery.onExternalLink()
+        recovery.onActivityResumed(false)
+        recovery.onActivityResumed(true)
+
+        val token = recovery.consumeRequest()
+        val external = recovery.protectsNavigation()
+        val plan =
+            plan(
+                selected = 3,
+                external = external,
+                externalRecovery = external && token != null,
+            )
+
+        assertFalse(external)
+        assertEquals(1, plan.navigateToIndex)
+        assertNull(plan.externalRecoveryIndex)
+        assertNull("a later model cannot reuse the request", recovery.consumeRequest())
+    }
 }

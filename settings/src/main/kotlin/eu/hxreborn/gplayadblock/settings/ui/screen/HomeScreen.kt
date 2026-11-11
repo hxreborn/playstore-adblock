@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +40,7 @@ import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
 import eu.hxreborn.gplayadblock.settings.ui.SettingsUiState
 import eu.hxreborn.gplayadblock.settings.ui.component.NavigationRow
+import eu.hxreborn.gplayadblock.settings.ui.component.ReadOnlyRow
 import eu.hxreborn.gplayadblock.settings.ui.component.SectionHeader
 import eu.hxreborn.gplayadblock.settings.ui.component.StatusCard
 import eu.hxreborn.gplayadblock.settings.ui.component.centeredContentWidth
@@ -85,6 +88,19 @@ fun HomeScreen(
                 StatusCard(
                     state = state,
                     modifier = Modifier.padding(vertical = Tokens.ScreenMargin),
+                )
+            }
+            item(key = "always_on_header", contentType = "header") {
+                SectionHeader(stringResource(R.string.section_always_on))
+            }
+            item(key = "sponsored_listings", contentType = "read_only") {
+                ReadOnlyRow(
+                    shape = shapeForPosition(1, 0),
+                    icon = Icons.Outlined.Block,
+                    title = stringResource(R.string.sponsored_listings),
+                    summary = stringResource(R.string.sponsored_listings_summary),
+                    trailingIcon = Icons.Outlined.CheckCircle,
+                    modifier = Modifier.padding(horizontal = Tokens.ScreenMargin),
                 )
             }
             item(key = "optional_filters_header", contentType = "header") {

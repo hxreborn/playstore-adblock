@@ -18,6 +18,9 @@
     <string name="status_not_sent_title">Settings weren\'t sent</string>
     <string name="status_not_sent_body">Your changes are saved on this device but not applied</string>
 
+    <string name="section_always_on">Always on</string>
+    <string name="sponsored_listings">Sponsored listings</string>
+    <string name="sponsored_listings_summary">Removed in every build</string>
     <string name="section_optional_filters">Optional filters</string>
     <string name="optional_filters_footnote">These take effect after Play Store restarts.</string>
     <string name="section_app">App</string>

@@ -48,5 +48,8 @@
     <string name="start_tab_search">Поиск</string>
     <string name="start_tab_books">Книги</string>
     <string name="start_tab_you">Вы</string>
+    <string name="section_always_on">Всегда включено</string>
+    <string name="sponsored_listings">Спонсорские объявления</string>
+    <string name="sponsored_listings_summary">Удаляются в любой сборке</string>
     <string name="about_telegram">Новости в Telegram</string>
 </resources>

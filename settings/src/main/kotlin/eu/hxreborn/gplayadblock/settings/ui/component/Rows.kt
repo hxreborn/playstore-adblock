@@ -153,6 +153,31 @@ fun SwitchRow(
 }
 
 @Composable
+fun ReadOnlyRow(
+    shape: Shape,
+    icon: ImageVector,
+    title: String,
+    summary: String,
+    trailingIcon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    Preference(
+        title = { Text(title) },
+        modifier = modifier.rowSurface(shape).semantics(mergeDescendants = true) {},
+        icon = { Icon(icon, contentDescription = null) },
+        summary = { Text(summary) },
+        widgetContainer = {
+            Icon(
+                imageVector = trailingIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = Tokens.RowPadding),
+            )
+        },
+    )
+}
+
+@Composable
 fun NavigationRow(
     shape: Shape,
     icon: ImageVector,

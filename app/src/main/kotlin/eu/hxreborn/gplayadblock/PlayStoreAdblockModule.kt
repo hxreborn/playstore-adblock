@@ -318,8 +318,12 @@ class PlayStoreAdblockModule : XposedModule() {
                         runCatching(crashGuard::reset)
                         val cleared =
                             runCatching {
-                                clearDirectoryContents(receiverContext.cacheDir)
-                                clearDirectoryContents(receiverContext.codeCacheDir)
+                                java.io
+                                    .File(
+                                        receiverContext.cacheDir,
+                                        RestartProtocol.STREAM_DATA_STORE_DIR,
+                                    ).deleteRecursively()
+                                    .also { removed -> check(removed) { "streamdatastore kept" } }
                             }.onFailure { error ->
                                 Logger.warn("Play Store cache cleanup failed", error)
                             }.isSuccess
@@ -390,12 +394,6 @@ class PlayStoreAdblockModule : XposedModule() {
             context.packageManager.packageInstaller.mySessions
                 .any { session -> session.isActive }
         }.getOrDefault(false)
-
-    private fun clearDirectoryContents(directory: java.io.File) {
-        directory.listFiles()?.forEach { child ->
-            check(child.deleteRecursively()) { "could not remove ${child.name}" }
-        }
-    }
 
     private fun installHookGroups(
         classLoader: ClassLoader,

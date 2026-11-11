@@ -165,6 +165,14 @@ class PresentationClassifierTest {
     }
 
     @Test
+    fun `a sponsored LiveOps card is an ad even with LiveOps allowed`() {
+        val presentation =
+            card(AppCard(AdMetadata(bitField = ITEM_AD_INFO_BIT)), kind = LIVE_OPS_CARD_CASE)
+        assertEquals(PresentationClassifier.GENERIC_AD_CARD, classifier.classify(presentation))
+        assertTrue(classifier.isAd(classifier.classify(presentation)))
+    }
+
+    @Test
     fun `case 109 on its own is organic`() {
         val presentation = cluster(case = 109)
         assertEquals(109, classifier.classify(presentation))

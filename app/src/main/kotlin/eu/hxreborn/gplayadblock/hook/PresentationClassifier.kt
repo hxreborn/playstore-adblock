@@ -271,19 +271,20 @@ class PresentationClassifier(
     private fun cardCase(presentation: Any): Int {
         val card = presentationPayloadField.get(presentation)
         if (card == null || !cardKindField.declaringClass.isInstance(card)) return 0
-        if (cardKindField.getInt(card) == LIVE_OPS_CARD) return GENERIC_PROMOTIONAL_CARD
-        val payload = cardPayloadField.get(card) ?: return 0
-        val metadataFields = cardAdMetadataFields[payload.javaClass] ?: return 0
-        return if (metadataFields.any { field ->
-                val metadata = field.get(payload)
-                metadata != null &&
-                    adPresenceField.declaringClass.isInstance(metadata) &&
-                    adPresenceField.getInt(metadata) and AD_INFO_PRESENT != 0
-            }
-        ) {
-            GENERIC_AD_CARD
-        } else {
-            0
+        // The ad check runs first: a sponsored LiveOps card is an ad and stays hidden even when
+        // LiveOps content is allowed.
+        if (hasAdInfo(card)) return GENERIC_AD_CARD
+        return if (cardKindField.getInt(card) == LIVE_OPS_CARD) GENERIC_PROMOTIONAL_CARD else 0
+    }
+
+    private fun hasAdInfo(card: Any): Boolean {
+        val payload = cardPayloadField.get(card) ?: return false
+        val metadataFields = cardAdMetadataFields[payload.javaClass] ?: return false
+        return metadataFields.any { field ->
+            val metadata = field.get(payload)
+            metadata != null &&
+                adPresenceField.declaringClass.isInstance(metadata) &&
+                adPresenceField.getInt(metadata) and AD_INFO_PRESENT != 0
         }
     }
 

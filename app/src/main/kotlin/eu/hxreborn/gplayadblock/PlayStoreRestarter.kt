@@ -76,7 +76,8 @@ internal object PlayStoreRestarter {
             val userId = Process.myUid() / PER_USER_UID_RANGE
             val target = BuildConfig.TARGET_PACKAGE
             val dataDir = "/data/user/$userId/$target"
-            val clearCaches = "rm -rf $dataDir/cache/* $dataDir/code_cache/*"
+            // Only the cached feed responses; the rest of the cache holds sign-in and install state.
+            val clearCaches = "rm -rf $dataDir/cache/${RestartProtocol.STREAM_DATA_STORE_DIR}"
             val command =
                 listOf(
                     "am force-stop --user $userId $target",

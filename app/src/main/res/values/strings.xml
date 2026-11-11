@@ -62,7 +62,7 @@
     <string name="block_store_self_updates">Block Play Store self-updates</string>
     <string name="block_store_self_updates_summary">Keeps the tested Play Store version installed. Normal updates for other apps are not affected.</string>
     <string name="restart_play_store">Apply filters and restart Play Store</string>
-    <string name="restart_play_store_summary">Uses the active module to stop Play Store, clears only its cache and code cache, then opens it again. Root is a fallback. Accounts and app data are preserved.</string>
+    <string name="restart_play_store_summary">Uses the active module to stop Play Store, clears only its cached feed responses, then opens it again. Root is a fallback. Accounts and app data are preserved.</string>
     <string name="restart_play_store_working">Restarting Play Store…</string>
     <string name="restart_play_store_success">Play Store restarted. The new filters are active.</string>
     <string name="restart_play_store_busy">Play Store is busy installing apps or completing a purchase. Try again when it has finished.</string>

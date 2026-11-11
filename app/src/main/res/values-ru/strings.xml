@@ -62,7 +62,7 @@
     <string name="block_store_self_updates">Блокировать самообновление Play Market</string>
     <string name="block_store_self_updates_summary">Сохраняет проверенную версию Play Market. Обычные обновления остальных приложений продолжат работать.</string>
     <string name="restart_play_store">Применить и перезапустить Play Market</string>
-    <string name="restart_play_store_summary">Через активный модуль останавливает Play Market, очищает только cache и code_cache, затем открывает его снова. Root используется как резервный вариант. Аккаунты и данные приложений сохраняются.</string>
+    <string name="restart_play_store_summary">Через активный модуль останавливает Play Market, удаляет только закэшированные ответы ленты, затем открывает его снова. Root используется как резервный вариант. Аккаунты и данные приложений сохраняются.</string>
     <string name="restart_play_store_working">Перезапускаю Play Market…</string>
     <string name="restart_play_store_success">Play Market перезапущен. Новые фильтры применены.</string>
     <string name="restart_play_store_busy">Play Market сейчас устанавливает приложения или проводит покупку. Повторите, когда он закончит.</string>

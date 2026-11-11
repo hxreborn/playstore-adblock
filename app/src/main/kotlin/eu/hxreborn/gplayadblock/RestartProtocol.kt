@@ -9,4 +9,10 @@ object RestartProtocol {
 
     /** Play Store is installing apps; restarting now would interrupt the installation. */
     const val RESULT_BUSY = 2
+
+    /**
+     * Play Store's cached feed responses, relative to its cache directory. The only cache content
+     * a restart removes: the rest holds sign-in and install state.
+     */
+    const val STREAM_DATA_STORE_DIR = "streamdatastore"
 }

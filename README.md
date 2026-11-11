@@ -83,9 +83,10 @@ The compatibility section contains two additional controls:
 
 - **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does
   not block updates of other apps and is disabled by default.
-- **Apply and restart Play Store** asks the active module inside Play Store to remove only its `cache` and
-  `code_cache` contents, terminate the process, discard its old task snapshot, and relaunch. Root is used
-  only as a fallback. Accounts, installed-app records, preferences, and Play Store app data are not cleared.
+- **Apply and restart Play Store** asks the active module inside Play Store to remove only its cached feed
+  responses (`cache/streamdatastore`), terminate the process, discard its old task snapshot, and relaunch. Root is used
+  only as a fallback. Accounts, installed-app records, preferences, the rest of the cache, and Play Store app data
+  are not cleared.
 
 Some filters require a restart before an already-created screen changes. Hiding a currently selected
 persistent tab may still briefly expose cached content on unusual Play Store builds; the module switches to
@@ -121,7 +122,7 @@ is rejected.
 | 53.0.27-XX | 853027XX | supported |
 | 53.3.21-XX | 853321XX | supported |
 | 53.4.23-XX | 853423XX | supported |
-| 54.0.09-XX | 854009XX | supported |
+| 54.0.09-XX | 854009XX | untested |
 
 Find your build either in Play Store → Settings → About or with:
 

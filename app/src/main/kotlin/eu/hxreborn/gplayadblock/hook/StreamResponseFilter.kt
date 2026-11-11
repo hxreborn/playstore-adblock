@@ -121,17 +121,21 @@ object StreamResponseFilter {
             if (nodeWrappers.isEmpty()) return null
 
             val decodedNodes = IdentityHashMap<Any, Any>()
+            val presentationRewrites = IdentityHashMap<Any, Any>()
             val adCasesById = LinkedHashMap<Any, Int>()
             for (wrapper in nodeWrappers) {
                 val decoded = decodeNode(wrapper) ?: continue
                 decodedNodes[wrapper] = decoded
                 val presentation = nodePresentationField.get(decoded) ?: continue
+                classifier.stripEmbeddedLiveOps(presentation, editor)?.let { stripped ->
+                    presentationRewrites[wrapper] = stripped
+                }
                 val case = classifier.classify(presentation)
                 if (!classifier.isAd(case)) continue
                 val id = nodeIdField.get(wrapper) ?: continue
                 adCasesById[id] = case
             }
-            if (adCasesById.isEmpty()) return null
+            if (adCasesById.isEmpty() && presentationRewrites.isEmpty()) return null
 
             val decodedRoots = IdentityHashMap<Any, Any>()
             lists.values
@@ -152,7 +156,12 @@ object StreamResponseFilter {
                             originalList.mapNotNull { item ->
                                 when {
                                     nodeWrapperClass.isInstance(item) -> {
-                                        transformNode(item!!, decodedNodes, removableIds)
+                                        transformNode(
+                                            item!!,
+                                            decodedNodes,
+                                            presentationRewrites,
+                                            removableIds,
+                                        )
                                     }
 
                                     rootWrapperClass.isInstance(item) -> {
@@ -175,6 +184,7 @@ object StreamResponseFilter {
             }
             Logger.debug {
                 "response rewrite removed=${removableIds.size} " +
+                    "strippedLiveOps=${presentationRewrites.size} " +
                     "sponsored=${adCasesById.size} " +
                     "collapsed=${(removableIds - adCasesById.keys).size} " +
                     "nodes=${nodeWrappers.size} roots=${decodedRoots.size} " +
@@ -193,7 +203,9 @@ object StreamResponseFilter {
                 .mapNotNull { field -> field.get(response) as? List<*> }
                 .flatMap(List<*>::asSequence)
                 .filter(nodeWrapperClass::isInstance)
-                .count { wrapper -> nodeIdField.get(wrapper) in removableIds }
+                .count { wrapper ->
+                    nodeIdField.get(wrapper)?.let { id -> id in removableIds } == true
+                }
 
         private fun parents(
             decodedNodes: IdentityHashMap<Any, Any>,
@@ -220,15 +232,22 @@ object StreamResponseFilter {
         private fun transformNode(
             wrapper: Any,
             decodedNodes: IdentityHashMap<Any, Any>,
+            presentationRewrites: IdentityHashMap<Any, Any>,
             removableIds: Set<Any>,
         ): Any? {
-            if (nodeIdField.get(wrapper) in removableIds) return null
+            if (nodeIdField.get(wrapper)?.let { id -> id in removableIds } == true) return null
             val decoded = decodedNodes[wrapper] ?: decodeNode(wrapper) ?: return wrapper
-            val filteredChildren =
-                filterChildren(nodeChildrenField.get(decoded), removableIds) ?: return wrapper
+            val filteredChildren = filterChildren(nodeChildrenField.get(decoded), removableIds)
+            val rewrittenPresentation = presentationRewrites[wrapper]
+            if (filteredChildren == null && rewrittenPresentation == null) return wrapper
             val rebuiltNode =
                 editor.copy(decoded) { mutableNode ->
-                    nodeChildrenField.set(mutableNode, filteredChildren)
+                    if (filteredChildren != null) {
+                        nodeChildrenField.set(mutableNode, filteredChildren)
+                    }
+                    if (rewrittenPresentation != null) {
+                        nodePresentationField.set(mutableNode, rewrittenPresentation)
+                    }
                 }
             return editor.copy(wrapper) { mutableWrapper ->
                 nodeWrapperKindField.setInt(mutableWrapper, DIRECT_PAYLOAD)

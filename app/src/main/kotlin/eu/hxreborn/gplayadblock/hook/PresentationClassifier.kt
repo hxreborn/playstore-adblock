@@ -9,6 +9,7 @@ import eu.hxreborn.gplayadblock.hook.ProtoWire.readVarint
 import eu.hxreborn.gplayadblock.hook.ProtoWire.wireType
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
 import java.util.Collections
 import java.util.WeakHashMap
 
@@ -46,6 +47,7 @@ class PresentationClassifier(
             case == GENERIC_AD_CARD ||
             case == GENERIC_AD_CLUSTER ||
             case == GENERIC_AD_DISCLOSURE_CLUSTER ||
+            case == GENERIC_SEARCH_QUALITY_PROMOTION ||
             (case == GENERIC_PROMOTIONAL_CARD && hideLiveOps()) ||
             (case == GENERIC_PRE_REGISTRATION_CLUSTER && hidePreRegistrationGames())
 
@@ -56,8 +58,63 @@ class PresentationClassifier(
             GENERIC_AD_DISCLOSURE_CLUSTER -> "cluster:adDisclosure"
             GENERIC_PROMOTIONAL_CARD -> "card:liveOps"
             GENERIC_PRE_REGISTRATION_CLUSTER -> "cluster:preRegistrationGames"
+            GENERIC_SEARCH_QUALITY_PROMOTION -> "cluster:searchQualityPromotion"
             else -> case.toString()
         }
+
+    fun stripEmbeddedLiveOps(
+        presentation: Any,
+        editor: ProtoEditor,
+    ): Any? {
+        if (!hideLiveOps() || presentationKindField.getInt(presentation) != CARD_PRESENTATION) {
+            return null
+        }
+        val card = presentationPayloadField.get(presentation) ?: return null
+        if (!cardKindField.declaringClass.isInstance(card)) return null
+        val payload = cardPayloadField.get(card) ?: return null
+        if (!protobufToByteArrayMethod.declaringClass.isInstance(payload)) return null
+        val bytes = protobufToByteArrayMethod.invoke(payload) as? ByteArray ?: return null
+        if (
+            lengthDelimitedField(bytes, EMBEDDED_LIVE_OPS_FIELD)
+                ?.containsSubsequence(LIVE_OP_DETAILS_MARKER) != true
+        ) {
+            return null
+        }
+        val instanceFields =
+            payload.javaClass.declaredFields.filterNot { field ->
+                field.isSynthetic || Modifier.isStatic(field.modifiers)
+            }
+        val liveOpsField =
+            instanceFields
+                .filter { field ->
+                    field.isAccessible = true
+                    val value = field.get(payload) ?: return@filter false
+                    protobufToByteArrayMethod.declaringClass.isInstance(value) &&
+                        (protobufToByteArrayMethod.invoke(value) as? ByteArray)
+                            ?.containsSubsequence(LIVE_OP_DETAILS_MARKER) == true
+                }.singleOrNull()
+                ?: return null
+        val presenceField =
+            instanceFields.singleOrNull { field -> field.type == Int::class.javaPrimitiveType }
+                ?: return null
+        liveOpsField.isAccessible = true
+        presenceField.isAccessible = true
+        val strippedPayload =
+            editor.copy(payload) { mutablePayload ->
+                liveOpsField.set(mutablePayload, null)
+                presenceField.setInt(
+                    mutablePayload,
+                    presenceField.getInt(mutablePayload) and EMBEDDED_LIVE_OPS_PRESENCE.inv(),
+                )
+            }
+        val strippedCard =
+            editor.copy(card) { mutableCard ->
+                cardPayloadField.set(mutableCard, strippedPayload)
+            }
+        return editor.copy(presentation) { mutablePresentation ->
+            presentationPayloadField.set(mutablePresentation, strippedCard)
+        }
+    }
 
     private fun clusterCase(presentation: Any): Int {
         val payload = presentationPayloadField.get(presentation)
@@ -66,6 +123,10 @@ class PresentationClassifier(
         return when {
             case in AD_CLUSTER_CASES -> {
                 case
+            }
+
+            hasMarker(payload, SEARCH_QUALITY_PROMOTION_MARKER) -> {
+                GENERIC_SEARCH_QUALITY_PROMOTION
             }
 
             hidePreRegistrationGames() && hasPreRegistrationMarker(payload) -> {
@@ -90,21 +151,25 @@ class PresentationClassifier(
         }
     }
 
-    private fun hasPreRegistrationMarker(cluster: Any): Boolean {
+    private fun hasPreRegistrationMarker(cluster: Any): Boolean =
+        hasMarker(cluster, PRE_REGISTRATION_GAMES_MARKER)
+
+    private fun hasMarker(
+        cluster: Any,
+        marker: ByteArray,
+    ): Boolean {
         val serverLogs = clusterServerLogsField.get(cluster)
         val serverLogBytes =
             serverLogs?.let { value ->
                 byteStringToByteArrayMethod.invoke(value) as? ByteArray
             }
-        if (serverLogBytes?.containsSubsequence(PRE_REGISTRATION_GAMES_MARKER) == true) {
-            return true
-        }
+        if (serverLogBytes?.containsSubsequence(marker) == true) return true
 
         val candidates = listOfNotNull(clusterPayloadField.get(cluster), cluster)
         return candidates.any { candidate ->
             protobufToByteArrayMethod.declaringClass.isInstance(candidate) &&
                 (protobufToByteArrayMethod.invoke(candidate) as? ByteArray)
-                    ?.containsSubsequence(PRE_REGISTRATION_GAMES_MARKER) == true
+                    ?.containsSubsequence(marker) == true
         }
     }
 
@@ -226,11 +291,17 @@ class PresentationClassifier(
         const val GENERIC_AD_DISCLOSURE_CLUSTER = -3
         const val GENERIC_PROMOTIONAL_CARD = -4
         const val GENERIC_PRE_REGISTRATION_CLUSTER = -5
+        const val GENERIC_SEARCH_QUALITY_PROMOTION = -6
         const val AD_OVERFLOW_ENUM = 3
         const val LIVE_OPS_CARD = 32
+        const val EMBEDDED_LIVE_OPS_FIELD = 2
+        const val EMBEDDED_LIVE_OPS_PRESENCE = 2
         val AD_SLOT_MARKER = "ads_slot_".toByteArray(Charsets.US_ASCII)
         val SPONSORED_CLUSTER_MARKER = "sponsored_cluster".toByteArray(Charsets.US_ASCII)
         val PRE_REGISTRATION_GAMES_MARKER =
             "pre_registration_games".toByteArray(Charsets.US_ASCII)
+        val LIVE_OP_DETAILS_MARKER = "apps/liveOpDetails".toByteArray(Charsets.US_ASCII)
+        val SEARCH_QUALITY_PROMOTION_MARKER =
+            "search_quality_cluster_COLLAPSED_DEV_SUCCESS_CLUSTER".toByteArray(Charsets.US_ASCII)
     }
 }

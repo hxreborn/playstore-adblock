@@ -180,6 +180,33 @@ class PresentationClassifierTest {
     }
 
     @Test
+    fun `a collapsed search quality promotion is always removed`() {
+        val presentation =
+            cluster(
+                case = 67,
+                serverLogs = "search_quality_cluster_COLLAPSED_DEV_SUCCESS_CLUSTER_0",
+            )
+
+        assertEquals(
+            PresentationClassifier.GENERIC_SEARCH_QUALITY_PROMOTION,
+            classifier.classify(presentation),
+        )
+        assertTrue(classifier.isAd(classifier.classify(presentation)))
+    }
+
+    @Test
+    fun `ordinary search result ranges stay organic`() {
+        val presentation =
+            cluster(
+                case = 67,
+                serverLogs = "search_results_cluster_apps_range_1_2",
+            )
+
+        assertEquals(67, classifier.classify(presentation))
+        assertFalse(classifier.isAd(classifier.classify(presentation)))
+    }
+
+    @Test
     fun `an ordinary cluster with unrelated server logs is organic`() {
         val presentation = cluster(case = 2, serverLogs = "homepage_editorial_shelf")
         assertFalse(classifier.isAd(classifier.classify(presentation)))

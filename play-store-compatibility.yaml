@@ -186,7 +186,7 @@ releases:
     notes: cache filtering tested from an ad-bearing cache
   - version_name: "54.0.09-34 [0] [PR] 1014031620"
     version_code: 85400940
-    status: supported
+    status: untested
     tested_on: 2026-11-11
     module_version_code: 10601
-    notes: cache filtering tested from an ad-bearing cache; optional UI filters checked
+    notes: run on a device without a paired control; awaiting maintainer verification

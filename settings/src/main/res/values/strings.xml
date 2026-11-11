@@ -126,6 +126,8 @@
     <string name="about_changelog">Changelog</string>
     <string name="about_changelog_summary">Notes for every release</string>
     <string name="about_source_code">Source code</string>
+    <string name="about_telegram">Updates on Telegram</string>
+    <string name="about_telegram_summary" translatable="false">@PlayStoreAdblock</string>
     <string name="about_issues">Suggest a feature or report a bug</string>
     <string name="about_issues_summary">Opens the issue form on GitHub</string>
     <string name="about_licenses">Open source licenses</string>

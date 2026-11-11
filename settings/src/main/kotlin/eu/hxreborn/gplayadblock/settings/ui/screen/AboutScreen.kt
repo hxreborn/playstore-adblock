@@ -28,7 +28,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Balance
 import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Coffee
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.History
@@ -64,12 +63,14 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.PlatformTextStyle
@@ -103,6 +104,7 @@ private const val REPO_URL = "https://github.com/$REPO"
 private const val RELEASES_URL = "$REPO_URL/releases"
 private const val CHANGELOG_URL = "$REPO_URL/blob/master/CHANGELOG.md"
 private const val ISSUES_URL = "$REPO_URL/issues/new/choose"
+private const val TELEGRAM_URL = "https://t.me/PlayStoreAdblock"
 private const val LICENSE_URL = "$REPO_URL/blob/master/LICENSE"
 private const val KOFI_URL = "https://ko-fi.com/hxreborn"
 private const val LICENSE = "GPL-3.0"
@@ -223,10 +225,20 @@ private fun LinkRows(
                 { shape ->
                     NavigationRow(
                         shape = shape,
-                        icon = Icons.Outlined.Code,
+                        icon = ImageVector.vectorResource(R.drawable.ic_github),
                         title = stringResource(R.string.about_source_code),
                         summary = REPO,
                         onClick = { onOpenUrl(REPO_URL) },
+                        trailing = RowTrailing.External,
+                    )
+                },
+                { shape ->
+                    NavigationRow(
+                        shape = shape,
+                        icon = ImageVector.vectorResource(R.drawable.ic_telegram),
+                        title = stringResource(R.string.about_telegram),
+                        summary = stringResource(R.string.about_telegram_summary),
+                        onClick = { onOpenUrl(TELEGRAM_URL) },
                         trailing = RowTrailing.External,
                     )
                 },

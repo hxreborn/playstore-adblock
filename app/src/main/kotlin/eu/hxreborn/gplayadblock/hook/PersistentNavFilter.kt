@@ -16,7 +16,6 @@ import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -73,7 +72,7 @@ object PersistentNavFilter {
                 val original =
                     chain.getArg(ITEMS_ARG) as? List<*> ?: return@intercept chain.proceed()
                 val selected = chain.getArg(SELECTED_ARG) as Int
-                lastSelectedIndex.set(selected)
+                recovery.onSelected(selected)
                 val indexed: List<IndexedValue<Any>> =
                     original.mapIndexedNotNull { index, item ->
                         val value = item ?: return@mapIndexedNotNull null
@@ -97,7 +96,7 @@ object PersistentNavFilter {
                 val isExternalNavigation = now < externalNavigationDeadline.get()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
                 val externalRecoveryRequested =
-                    isExternalNavigation && externalRecoveryPending.compareAndSet(true, false)
+                    isExternalNavigation && recovery.consumeRequest()
                 val plan =
                     NavSelectionPlanner.plan(
                         retainedTypes = retainedTypes,
@@ -187,7 +186,7 @@ object PersistentNavFilter {
                 // dismisses it, so the switch waits until the sheet is closed and the main
                 // activity is resumed again (see installLaunchTracking).
                 plan.externalRecoveryIndex?.let { index ->
-                    pendingRecoveryIndex.set(index)
+                    recovery.plan(index)
                     Logger.debug { "external recovery pending index=$index" }
                 }
                 if (retained.size != original.size) {
@@ -198,13 +197,7 @@ object PersistentNavFilter {
     }
 
     private fun runPendingRecovery(callbackMethod: java.lang.reflect.Method) {
-        val index = pendingRecoveryIndex.getAndSet(NO_RECOVERY)
-        if (index == NO_RECOVERY) return
-        // Re-selecting the tab that is already current pops it to its root, so skip it.
-        if (lastSelectedIndex.get() == index) {
-            Logger.debug { "external recovery skipped, tab already selected" }
-            return
-        }
+        val index = recovery.takeRecovery() ?: return
         val callback = latestCallback.get() ?: return
         runCatching {
             Logger.debug { "external recovery index=$index" }
@@ -239,12 +232,7 @@ object PersistentNavFilter {
                 override fun onActivityStarted(activity: Activity) = Unit
 
                 override fun onActivityResumed(activity: Activity) {
-                    if (!mainActivityClass.isInstance(activity)) {
-                        // An overlay such as the details sheet opened by an external link.
-                        overlaySeenSinceExternal.set(true)
-                        return
-                    }
-                    if (overlaySeenSinceExternal.getAndSet(false)) {
+                    if (recovery.onActivityResumed(mainActivityClass.isInstance(activity))) {
                         mainHandler.postAtFrontOfQueue(onMainResumedAfterOverlay)
                     }
                 }
@@ -288,18 +276,14 @@ object PersistentNavFilter {
         when {
             intent?.action == Intent.ACTION_VIEW || intent?.data != null -> {
                 externalNavigationDeadline.set(now + EXTERNAL_NAVIGATION_GRACE_MILLIS)
-                externalRecoveryPending.set(true)
-                pendingRecoveryIndex.set(NO_RECOVERY)
-                overlaySeenSinceExternal.set(false)
+                recovery.onExternalLink()
                 startTabDeadline.set(0L)
                 Logger.debug { "external navigation detected" }
             }
 
             intent?.action == Intent.ACTION_MAIN -> {
                 externalNavigationDeadline.set(0L)
-                externalRecoveryPending.set(false)
-                pendingRecoveryIndex.set(NO_RECOVERY)
-                overlaySeenSinceExternal.set(false)
+                recovery.onLauncherLaunch()
                 // The start tab is a launch preference: apply it once for a fresh launcher
                 // launch, never again while the user moves between tabs.
                 if (newTask) startTabDeadline.set(now + START_TAB_WINDOW_MILLIS)
@@ -340,17 +324,13 @@ object PersistentNavFilter {
 
     private val navigationInFlight = AtomicBoolean(false)
     private val externalNavigationDeadline = AtomicLong(0L)
-    private val externalRecoveryPending = AtomicBoolean(false)
-    private val pendingRecoveryIndex = AtomicInteger(NO_RECOVERY)
-    private val overlaySeenSinceExternal = AtomicBoolean(false)
+    private val recovery = ExternalRecovery()
     private val latestCallback = AtomicReference<Any?>(null)
-    private val lastSelectedIndex = AtomicInteger(-1)
     private val startTabDeadline = AtomicLong(0L)
 
     @Volatile
     internal var minimalSearchRootVisible = false
         private set
-    private const val NO_RECOVERY = Int.MIN_VALUE
     private const val CONSTRUCTOR_PARAMETER_COUNT = 6
     private const val ITEMS_ARG = 0
     private const val SELECTED_ARG = 1

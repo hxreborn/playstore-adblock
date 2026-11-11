@@ -241,7 +241,7 @@ object TargetCache {
             .putOpt(
                 "notificationTopBarConstructor",
                 value.notificationTopBarConstructor?.let(::encodeConstructor),
-            )
+            ).putOpt("playPointsRetrieverClassName", value.playPointsRetrieverClassName)
 
     private fun decodeAccountMenu(value: JSONObject): ResolvedTargets.AccountMenu =
         ResolvedTargets.AccountMenu(
@@ -251,6 +251,8 @@ object TargetCache {
             immutableListClassName = value.getString("immutableListClassName"),
             notificationTopBarConstructor =
                 value.optJSONObject("notificationTopBarConstructor")?.let(::decodeConstructor),
+            playPointsRetrieverClassName =
+                value.optString("playPointsRetrieverClassName").ifEmpty { null },
         )
 
     private fun encodeSelfUpdate(value: ResolvedTargets.SelfUpdate): JSONObject =

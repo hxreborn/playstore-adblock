@@ -122,6 +122,7 @@ internal object SampleTargets {
                             className = "notificationTopBar",
                             paramTypeNames = listOf("notificationBadge", "notificationAction"),
                         ),
+                    playPointsRetrieverClassName = "playPointsRetriever",
                 ),
             accountMenuFailure = null,
             selfUpdate =

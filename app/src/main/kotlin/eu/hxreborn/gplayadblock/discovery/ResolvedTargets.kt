@@ -7,6 +7,7 @@ sealed interface ResolvedTargets {
         val featuresClassName: String,
         val immutableListClassName: String,
         val notificationTopBarConstructor: ConstructorRef?,
+        val playPointsRetrieverClassName: String? = null,
     )
 
     data class SelfUpdate(

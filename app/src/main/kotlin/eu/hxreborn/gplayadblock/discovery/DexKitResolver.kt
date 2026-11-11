@@ -54,6 +54,9 @@ object DexKitResolver {
     private const val MANAGE_LIST_ANCHOR = "VerticalScrollerUiModelContent(itemList="
     private const val PROTECT_SECTION_ANCHOR = "ProtectSectionStateFlowProvider"
     private const val VE_METADATA_ANCHOR = "VeMetadata(uiElementType="
+    private const val PURCHASE_READY_ANCHOR = "PurchaseReadyPersistentReminder"
+    private const val NAV_HIDDEN_ANCHOR = "NavHidden"
+    private const val GROUP_SEPARATOR = "|"
     private const val NAV_CONTENT_ANCHOR = "PersistentNavDataUiContent(items="
     private const val NAV_ITEM_ANCHOR = "PersistentNavItem(title="
     private const val NAV_ACTION_ANCHOR = "PersistentNavUiAction(onPersistentNavItemClicked="
@@ -643,6 +646,7 @@ object DexKitResolver {
                 is Resolution.Success -> protobufResult.value
                 is Resolution.Failure -> return missing(protobufResult.reason)
             }
+        prefetchOptionalAnchors(bridge)
         val suggestionResult =
             optional("search suggestions") {
                 resolveSuggestions(bridge, adMetadataClass, adPresenceField)
@@ -672,6 +676,7 @@ object DexKitResolver {
         val persistentNavResult = optional("persistent nav") { resolvePersistentNav(bridge) }
         val accountMenuResult = optional("account menu") { resolveAccountMenu(bridge) }
         val selfUpdateResult = optional("self-update") { resolveSelfUpdate(bridge) }
+        prefetchedAnchors = emptyMap()
 
         return ResolvedTargets.Resolved(
             streamDataMethod = streamMethod.toRef(),
@@ -746,10 +751,8 @@ object DexKitResolver {
             val actionClass = anchored(ACCOUNT_ACTION_ANCHOR)
             val featuresClass = anchored(ACCOUNT_FEATURES_ANCHOR)
             val notificationTopBarConstructor =
-                bridge
-                    .findClass {
-                        matcher { usingStrings = listOf(NOTIFICATION_TOP_BAR_ANCHOR) }
-                    }.singleOrNull()
+                classesUsing(bridge, listOf(NOTIFICATION_TOP_BAR_ANCHOR))
+                    .singleOrNull()
                     ?.methods
                     ?.filter { method -> method.isConstructor && method.paramCount == 2 }
                     ?.singleOrNull()
@@ -782,12 +785,30 @@ object DexKitResolver {
                     notificationTopBarConstructor =
                         notificationTopBarConstructor
                             ?.toConstructorRef(),
+                    playPointsRetrieverClassName = resolvePlayPointsRetriever(bridge),
                 ),
             )
         } catch (failure: AccountResolutionFailure) {
             fail(failure.message.orEmpty())
         }
     }
+
+    /**
+     * The lazy card supplier of the account menu header: a synthetic lambda (one int case, one
+     * captured object) whose cases build the Play Points card and, by default, the
+     * "PurchaseReadyPersistentReminder" card. Null when not unique, which disables the filter.
+     */
+    private fun resolvePlayPointsRetriever(bridge: DexKitBridge): String? =
+        runCatching {
+            classesUsing(bridge, listOf(PURCHASE_READY_ANCHOR))
+                .filter { candidate ->
+                    val fields = candidate.fields.filter { field -> !field.isStatic }
+                    fields.size == 2 &&
+                        fields.count { field -> field.typeName == "int" } == 1 &&
+                        fields.count { field -> field.typeName == "java.lang.Object" } == 1
+                }.singleOrNull()
+                ?.name
+        }.getOrNull()
 
     /**
      * The badge filter passes null as the constructor's first argument. That is only safe while
@@ -885,8 +906,7 @@ object DexKitResolver {
     private fun resolvePlayProtectRows(bridge: DexKitBridge): List<String> =
         runCatching {
             val provider =
-                bridge
-                    .findClass { matcher { usingStrings = listOf(PROTECT_SECTION_ANCHOR) } }
+                classesUsing(bridge, listOf(PROTECT_SECTION_ANCHOR))
                     .singleOrNull() ?: return@runCatching emptyList()
             provider.methods
                 .asSequence()
@@ -943,10 +963,7 @@ object DexKitResolver {
                 is Resolution.Success -> result.value
                 is Resolution.Failure -> return result
             }
-        val navTypeClasses =
-            bridge.findClass {
-                matcher { usingStrings = navTypeAnchors }
-            }
+        val navTypeClasses = classesUsing(bridge, navTypeAnchors)
         val navTypeNames = navTypeClasses.mapTo(mutableSetOf(), ClassData::name)
         val navItemTypeFields =
             navItemClass.fields.filter { field ->
@@ -1007,7 +1024,7 @@ object DexKitResolver {
             navConstructors.singleOrNull()
                 ?: return fail("nav constructors=${navConstructors.size}")
         val navHiddenClass =
-            when (val result = findAnchoredClass(bridge, "NavHidden")) {
+            when (val result = findAnchoredClass(bridge, NAV_HIDDEN_ANCHOR)) {
                 is Resolution.Success -> result.value
                 is Resolution.Failure -> null
             }
@@ -1029,14 +1046,66 @@ object DexKitResolver {
         )
     }
 
+    /**
+     * Classes using all [strings]. Optional targets are looked up from one batched DexKit pass
+     * (see [prefetchOptionalAnchors]); anything else falls back to an individual search.
+     */
+    private fun classesUsing(
+        bridge: DexKitBridge,
+        strings: List<String>,
+    ): List<ClassData> =
+        prefetchedAnchors[strings]
+            ?: bridge.findClass { matcher { usingStrings = strings } }
+
+    @Volatile
+    private var prefetchedAnchors: Map<List<String>, List<ClassData>> = emptyMap()
+
+    private val optionalAnchorGroups: List<List<String>> by lazy {
+        listOf(
+            listOf(MANAGE_LIST_ANCHOR),
+            listOf(PROTECT_SECTION_ANCHOR),
+            listOf(VE_METADATA_ANCHOR),
+            listOf(NAV_CONTENT_ANCHOR),
+            listOf(NAV_ITEM_ANCHOR),
+            listOf(NAV_ACTION_ANCHOR),
+            listOf(NAV_HIDDEN_ANCHOR),
+            navTypeAnchors,
+            listOf(ACCOUNT_FEATURE_ANCHOR),
+            listOf(ACCOUNT_ACTION_ANCHOR),
+            listOf(ACCOUNT_FEATURES_ANCHOR),
+            listOf(NOTIFICATION_TOP_BAR_ANCHOR),
+            listOf(PURCHASE_READY_ANCHOR),
+            remoteSuggestionAnchors,
+            appSuggestionAnchors,
+            appsHomeAnchors,
+        )
+    }
+
+    /**
+     * Resolves every optional anchor in a single scan instead of one full string search each,
+     * which keeps the first launch after a Play Store update short. On any batch failure the
+     * individual searches are used, so results never depend on the batch succeeding.
+     */
+    private fun prefetchOptionalAnchors(bridge: DexKitBridge) {
+        val groups =
+            optionalAnchorGroups.associateBy { strings -> strings.joinToString(GROUP_SEPARATOR) }
+        prefetchedAnchors =
+            runCatching {
+                val found =
+                    bridge.batchFindClassUsingStrings {
+                        groups(groups, StringMatchType.Contains, false)
+                    }
+                groups.entries.associate { (key, strings) ->
+                    strings to found[key].orEmpty().toList()
+                }
+            }.getOrDefault(emptyMap())
+    }
+
     private fun findAnchoredClass(
         bridge: DexKitBridge,
         anchor: String,
     ): Resolution<ClassData> {
-        val candidates =
-            bridge.findClass {
-                matcher { usingStrings = listOf(anchor) }
-            }
+        val candidates = classesUsing(bridge, listOf(anchor))
         return candidates.singleOrNull()?.let(Resolution<ClassData>::Success)
             ?: fail("anchor '$anchor' candidates=${candidates.size}")
     }
@@ -1440,11 +1509,7 @@ object DexKitResolver {
         adPresenceField: FieldData,
     ): Resolution<SuggestionTargets> {
         val remoteSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = remoteSuggestionAnchors
-                }
-            }
+            classesUsing(bridge, remoteSuggestionAnchors)
         val remoteSuggestionClass =
             remoteSuggestionClasses.singleOrNull()
                 ?: return fail("remote suggestion candidates=${remoteSuggestionClasses.size}")
@@ -1474,11 +1539,7 @@ object DexKitResolver {
         }
 
         val appSuggestionClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = appSuggestionAnchors
-                }
-            }
+            classesUsing(bridge, appSuggestionAnchors)
         val appSuggestionClass =
             appSuggestionClasses.singleOrNull()
                 ?: return fail("app suggestion candidates=${appSuggestionClasses.size}")
@@ -1549,11 +1610,7 @@ object DexKitResolver {
         protobufMessageClassName: String,
     ): Resolution<ResolvedTargets.Spotlight> {
         val pageClasses =
-            bridge.findClass {
-                matcher {
-                    usingStrings = appsHomeAnchors
-                }
-            }
+            classesUsing(bridge, appsHomeAnchors)
         val pageClass =
             pageClasses.singleOrNull()
                 ?: return fail("apps home page candidates=${pageClasses.size}")

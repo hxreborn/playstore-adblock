@@ -210,6 +210,10 @@ object AccountMenuFilter {
         preferences: FilterPreferences,
         targets: ResolvedTargets.AccountMenu,
     ) {
+        val retrieverClassName =
+            requireNotNull(targets.playPointsRetrieverClassName) {
+                "Play Points card supplier not resolved"
+            }
         val featureClass = classLoader.loadClass(targets.featureClassName)
         val immutableListClass = classLoader.loadClass(targets.immutableListClassName)
         val constructor =
@@ -283,24 +287,21 @@ object AccountMenuFilter {
                             }.getOrNull()
                         }.firstOrNull()
                         ?: return@intercept chain.proceed()
-                val models =
+                // Only cards from the supplier class resolved by its PurchaseReadyPersistentReminder
+                // anchor qualify; both of its cards must be present to tell them apart.
+                val cards =
                     original.mapNotNull { wrapper ->
-                        wrapper?.let(::retrieverOf)?.let { retriever ->
-                            discriminatorOf(retriever)?.let { discriminator ->
-                                Triple(wrapper, retriever.javaClass, discriminator)
-                            }
+                        val retriever = wrapper?.let(::retrieverOf) ?: return@mapNotNull null
+                        if (retriever.javaClass.name != retrieverClassName) return@mapNotNull null
+                        discriminatorOf(retriever)?.let { discriminator ->
+                            wrapper to discriminator
                         }
                     }
-                val matchingGroup =
-                    models
-                        .groupBy { (_, retrieverClass, _) -> retrieverClass }
-                        .values
-                        .singleOrNull { group ->
-                            group.size == 2 &&
-                                group.map { it.third }.toSet() ==
-                                setOf(PLAY_POINTS_CARD, PURCHASE_READY_CARD)
-                        } ?: return@intercept chain.proceed()
-                val target = matchingGroup.single { it.third == PLAY_POINTS_CARD }.first
+                val discriminators = cards.map { it.second }.sorted()
+                if (discriminators != listOf(PLAY_POINTS_CARD, PURCHASE_READY_CARD)) {
+                    return@intercept chain.proceed()
+                }
+                val target = cards.single { it.second == PLAY_POINTS_CARD }.first
                 val retained = original.filterNot { it === target }
                 val replacementList = immutableCopy.invoke(null, retained)
                 val replacementOptional =
@@ -341,8 +342,9 @@ object AccountMenuFilter {
 
     private val COMMON_ACTION_ROLES = setOf("PRIVACY_ADVISOR", "HELP_AND_FEEDBACK")
 
-    // These sibling synthetic retrievers are verified against the current Play Store artifact.
-    // Requiring the complete pair makes a changed layout fail open instead of hiding another card.
+    // Cases of the supplier lambda (Play Store 54.0.09): case 1 builds the Play Points card
+    // ("Looking for Play Points?" or the tier status), the default case 3 the purchase-ready card.
+    // Requiring that exact pair from the anchored class makes a changed layout fail open.
     private const val PLAY_POINTS_CARD = 1
     private const val PURCHASE_READY_CARD = 3
 }

@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.ResultReceiver
+import android.os.SystemClock
 import android.widget.Toast
 import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.HookGroup
@@ -113,19 +114,26 @@ class PlayStoreAdblockModule : XposedModule() {
             val applicationInfo = context.applicationInfo
             val cached = TargetCache.load(dataDir = applicationInfo.dataDir, key = cacheKey)
             val targets =
-                cached ?: DexKitResolver
-                    .resolve(
-                        buildList {
-                            add(applicationInfo.sourceDir)
-                            applicationInfo.splitSourceDirs?.let(::addAll)
-                        },
-                    ).also { resolved ->
-                        TargetCache.store(
-                            dataDir = applicationInfo.dataDir,
-                            key = cacheKey,
-                            targets = resolved,
-                        )
-                    }
+                cached ?: run {
+                    val started = SystemClock.elapsedRealtime()
+                    DexKitResolver
+                        .resolve(
+                            buildList {
+                                add(applicationInfo.sourceDir)
+                                applicationInfo.splitSourceDirs?.let(::addAll)
+                            },
+                        ).also {
+                            Logger.info(
+                                "target scan took ${SystemClock.elapsedRealtime() - started} ms",
+                            )
+                        }
+                }.also { resolved ->
+                    TargetCache.store(
+                        dataDir = applicationInfo.dataDir,
+                        key = cacheKey,
+                        targets = resolved,
+                    )
+                }
             val source =
                 when {
                     cached != null -> "from-cache"

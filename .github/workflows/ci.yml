@@ -27,7 +27,13 @@ jobs:
           cache: gradle
 
       - name: Check and build
-        run: ./gradlew :app:ktlintCheck :app:testDebugUnitTest :app:assembleDebug :app:lintRelease
+        run: >-
+          ./gradlew :app:ktlintCheck :settings:ktlintCheck
+          :app:testCoreDebugUnitTest :app:testFullDebugUnitTest
+          :settings:testDebugUnitTest
+          :app:assembleCoreDebug :app:assembleFullDebug
+          :app:lintCoreRelease :app:lintFullRelease
+          :app:assembleCoreRelease :app:assembleFullRelease
 
       - uses: actions/setup-python@v7
         with:

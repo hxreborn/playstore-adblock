@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "playstore-adblock"
 include(":app")
+include(":settings")

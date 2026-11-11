@@ -48,6 +48,12 @@ android {
         buildConfig = true
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("core") { dimension = "distribution" }
+        create("full") { dimension = "distribution" }
+    }
+
     signingConfigs {
         create("release") {
             fun secret(name: String): String? =
@@ -117,7 +123,8 @@ val ktlint = configurations.create("ktlint")
 dependencies {
     add(ktlint.name, libs.ktlint.cli)
     compileOnly(libs.libxposed.api)
-    implementation(libs.libxposed.service)
+    "fullImplementation"(project(":settings"))
+    "fullImplementation"(libs.libxposed.service)
     implementation(libs.dexkit)
     testCompileOnly(libs.libxposed.api)
     testImplementation(libs.junit)
@@ -144,8 +151,8 @@ tasks.withType<Test>().configureEach {
 tasks.register<JavaExec>("recordFingerprints") {
     group = "verification"
     description = "Rewrite the recorded target set of every release fixture"
-    dependsOn("compileDebugUnitTestSources")
-    classpath = files(provider { tasks.named<Test>("testDebugUnitTest").get().classpath })
+    dependsOn("compileCoreDebugUnitTestSources")
+    classpath = files(provider { tasks.named<Test>("testCoreDebugUnitTest").get().classpath })
     mainClass.set("eu.hxreborn.gplayadblock.discovery.RecordFingerprintsKt")
     systemProperty("java.library.path", rootDir.resolve("analysis/tools/dexkit-host").absolutePath)
     systemProperty(

@@ -42,54 +42,45 @@
 
 ## Install
 
-1. Install APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases)
+1. Download one APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases):
+   - **Core** (`playstore-adblock-v<version>-core-arm64-v8a.apk`): ad blocking only, with no app icon or settings screen. This is the same module earlier releases shipped
+   - **Full** (`playstore-adblock-v<version>-full-arm64-v8a.apk`): the same ad blocking plus optional Play Store filters and a settings app
 2. Enable the module in your Xposed manager, scoped to Google Play Store (`com.android.vending`)
 3. Force-stop the Play Store so it restarts with the module active
+
+Core and Full are one package signed with the same key, so installing one replaces the other and the
+module is still enabled afterwards. Core ignores the Full settings but keeps them, and installing Full again brings them
+back. Force-stop the Play Store after switching.
 
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
-## Optional interface filters
+## Optional filters (Full)
 
-The module settings also expose opt-in filters for Play Store interface elements. They can hide selected
-home shelves, account-menu entries, management-page rows, persistent navigation tabs, Play Points and
-notification indicators. A replacement start tab can be selected when its original tab is hidden.
-The **Minimal Search home** option keeps the top search field and results routing intact while removing
-the Search landing suggestions and the remaining bottom-navigation item.
+Every filter is off by default, and ad blocking never depends on them:
 
-These filters are disabled by default. Unlike the main ad filter, they depend on internal Play Store UI
-models that Google can change without notice. Targets are resolved from code structure and stable string
-fingerprints instead of release-specific obfuscated class names. If a fingerprint no longer matches, that
-filter fails open and the original interface remains available rather than risking a Play Store crash.
-UI entries are matched by model shape, semantic roles, product identifiers, and the resource IDs Play
-Store pairs with their English labels, so the filters work in every Play Store language.
+- **Content**: editorial promotion cards, the pre-registration games shelf, promoted search shelves
+- **Account menu**: the notification badge, Help & feedback, Personalization in Google Play
+- **Manage apps & device**: Play Protect, device sync, Ratings & reviews, Contributions
+- **Navigation**: the Games, Apps, Books and You tabs, a minimal Search home, and a start screen
+- **Play Store updates**: block Play Store self-updates (other apps keep updating)
 
-**Hide promoted search shelves** removes the collapsed promotional shelf shown among search results
-(for example limited-time events). Play Store does not label it as an ad, so it has its own switch.
+The settings app saves changes on the device. **Apply and restart Play Store** sends them to your Xposed
+manager, closes Play Store, and opens it again with the new filters. When a content filter changed it also
+clears Play Store's cached feeds (`cache/streamdatastore`). If that clear fails, Play Store still restarts and
+Apply keeps the changes pending for another attempt. Play Store refuses the restart while
+it is installing apps or in a purchase. If Play Store doesn't respond, **Restart with root** makes the same
+checks and clears the same folder through `su`, then opens Play Store again. A filter whose target is not found on a Play Store release is skipped,
+and that screen looks as it does without the module.
 
-An English UI label the module cannot find at runtime is reported in the Xposed log. For a full DexKit
-resolution on a Linux or WSL host, build the native library once with `tools/build_dexkit_host.sh`,
-put release APKs at `analysis/release-fixtures/com.android.vending-<version>/base.apk` and run the
-unit tests: every archived release is checked against its recorded fingerprints.
+If Play Store crashes three times within two minutes, the filters are skipped on the following launches while
+ad blocking keeps working. Updating Play Store or the module, or **Apply and restart Play Store**, turns them back on.
 
-The start tab is applied once when Play Store is opened from the launcher; tabs chosen afterwards are
-kept. If Play Store crashes repeatedly (three times within two minutes), the optional interface filters
-are skipped on the following launches while ad filtering stays active. Updating Play Store or the module,
-or using **Apply and restart Play Store**, re-enables them.
+Open the settings from the app drawer or from the module entry in your Xposed manager. The launcher icon can
+be hidden in **Appearance and icon**.
 
-The compatibility section contains two additional controls:
-
-- **Block Play Store self-updates** prevents `com.android.vending` from scheduling its own update. It does
-  not block updates of other apps and is disabled by default.
-- **Apply and restart Play Store** asks the active module inside Play Store to remove only its cached feed
-  responses (`cache/streamdatastore`), terminate the process, discard its old task snapshot, and relaunch. Root is used
-  only as a fallback. Accounts, installed-app records, preferences, the rest of the cache, and Play Store app data
-  are not cleared.
-
-Some filters require a restart before an already-created screen changes. Hiding a currently selected
-persistent tab may still briefly expose cached content on unusual Play Store builds; the module switches to
-the configured replacement tab synchronously and falls back to a main-thread callback if the direct switch
-is rejected.
+To update Full, download the Full APK from Releases. Managers that install the first APK in a release
+can replace Full with Core, so select the flavor when updating.
 
 ## Compatibility
 

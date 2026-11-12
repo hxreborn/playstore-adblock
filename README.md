@@ -68,7 +68,7 @@ Every filter is off by default, and ad blocking never depends on them:
 The settings app saves changes on the device. **Apply and restart Play Store** sends them to your Xposed
 manager, closes Play Store, and opens it again with the new filters. When a content filter changed it also
 clears Play Store's cached feeds (`cache/streamdatastore`). If that clear fails, Play Store still restarts and
-Apply keeps the changes pending for another attempt. Play Store refuses the restart while
+Apply marks the settings applied and keeps the cache clear pending for another attempt. Play Store refuses the restart while
 it is installing apps or in a purchase. If Play Store doesn't respond, **Restart with root** makes the same
 checks and clears the same folder through `su`, then opens Play Store again. A filter whose target is not found on a Play Store release is skipped,
 and that screen looks as it does without the module.

@@ -1,3 +1,19 @@
+## [2.0.0-beta.2](https://github.com/hxreborn/playstore-adblock/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-11-12)
+
+### Bug Fixes
+
+* allow restart with staged system updates and Back without home tab ([2e5f4fb](https://github.com/hxreborn/playstore-adblock/commit/2e5f4fbc07e9224cdbaccf63abc58184772e6dc0))
+* **hook:** keep filtering after an optional scan linkage error ([33e9715](https://github.com/hxreborn/playstore-adblock/commit/33e97153a01fc842bb33065634aedf783d37e4d9))
+* **hook:** preserve tab click and onboarding callbacks ([598fbf2](https://github.com/hxreborn/playstore-adblock/commit/598fbf2905dab5130d1794849e12f5cc729c3903))
+* **hook:** report installed filters and removable content ([7f10af9](https://github.com/hxreborn/playstore-adblock/commit/7f10af950f697cef574cbf8605aa952b1756be9f))
+* **hook:** resolve embedded promotion fields before filtering ([615f868](https://github.com/hxreborn/playstore-adblock/commit/615f8684086073d51e3871899d0e2081b6a08edc))
+* **hook:** retain optional features from each APK ([8819609](https://github.com/hxreborn/playstore-adblock/commit/88196097a3aecbbaa4ab195290402e652b43f0b0))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [2.0.0-beta.1](https://github.com/hxreborn/playstore-adblock/compare/v1.6.1...v2.0.0-beta.1) (2026-11-12)
 
 ### ⚠ BREAKING CHANGES

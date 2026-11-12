@@ -83,9 +83,13 @@ object PersistentNavFilter {
 
                 val generation = launchGeneration.get()
                 val now = SystemClock.elapsedRealtime()
+                // The grace period covers the model built before the sheet is resumed; after
+                // that the sheet's lifecycle decides, however late the model arrives.
                 val isExternalNavigation =
                     now < externalNavigationDeadline.get() || recovery.protectsNavigation()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
+                // The first model after a link always takes the request. If the sheet is already
+                // closed (a late model), nothing has to wait: the planner switches tabs directly.
                 val recoveryToken = recovery.consumeRequest()
                 val hideBar = hideBarWithOneTab && retained.size == 1
                 if (retained.size == indexed.size &&
@@ -143,7 +147,11 @@ object PersistentNavFilter {
                     }
                 }
                 latestCallback.set(originalCallback)
+                // Switching tabs while the details sheet opened by the link is showing
+                // dismisses it, so the switch waits until the sheet is closed and the main
+                // activity is resumed again (see installLaunchTracking).
                 plan.externalRecoveryIndex?.let { index ->
+                    // The sheet may already be closed when a slow model arrives: recover now.
                     if (recoveryToken != null && recovery.plan(index, recoveryToken)) {
                         Handler(Looper.getMainLooper()).post { runPendingRecovery(callbackMethod) }
                     }
@@ -255,6 +263,7 @@ object PersistentNavFilter {
                     activity: Activity,
                     savedInstanceState: Bundle?,
                 ) {
+                    // A recreated activity (rotation, process restore) is not a new launch.
                     if (savedInstanceState != null ||
                         !mainActivityClass.isInstance(activity)
                     ) {
@@ -328,11 +337,14 @@ object PersistentNavFilter {
                 launchGeneration.incrementAndGet()
                 externalNavigationDeadline.set(0L)
                 recovery.onLauncherLaunch()
+                // The start tab is a launch preference: apply it once for a fresh launcher
+                // launch, never again while the user moves between tabs.
                 if (newTask) startTabDeadline.set(now + START_TAB_WINDOW_MILLIS)
             }
         }
     }
 
+    /** Enum constant name; enums are compared by name, never by an overridable toString. */
     private fun enumName(value: Any?): String? = (value as? Enum<*>)?.name
 
     private fun mainActivityName(application: Application): String {

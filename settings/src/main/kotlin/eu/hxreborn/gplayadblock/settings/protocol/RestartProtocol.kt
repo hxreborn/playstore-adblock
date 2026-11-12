@@ -7,6 +7,12 @@ object RestartProtocol {
     const val PERMISSION = "eu.hxreborn.gplayadblock.permission.RESTART_PLAY_STORE"
     const val EXTRA_CALLBACK = "restart_callback"
     const val EXTRA_CLEAR_STREAM_CACHE = "clear_stream_cache"
+
+    /**
+     * [android.os.SystemClock.elapsedRealtime] after which the module must ignore the request:
+     * by then the caller has stopped waiting and may have moved on, so a late request must not
+     * restart Play Store behind its back.
+     */
     const val EXTRA_DEADLINE = "restart_deadline"
     const val EXTRA_STARTED_AT = "started_at"
     const val RESULT_FAILED = 0
@@ -15,8 +21,17 @@ object RestartProtocol {
     const val RESULT_CACHE_PENDING = 4
     const val RESULT_BUSY = 2
     const val RESULT_RESTARTED_WITHOUT_REPLY = 5
+
+    /**
+     * Play Store's cached feed responses, relative to its cache directory. The only cache content
+     * a restart removes: the rest holds sign-in and install state.
+     */
     const val STREAM_DATA_STORE_DIR = "streamdatastore"
+
+    /** Play Store activities of a purchase flow; a restart must not interrupt them. */
     const val PURCHASE_ACTIVITY_PACKAGE = "com.google.android.finsky.billing."
+
+    /** Crash-loop guard state, relative to Play Store's data directory. */
     const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
 
     fun isPastDeadline(

@@ -81,6 +81,7 @@ class CrashLoopGuardTest {
         guard.recordCrash()
         assertTrue("state removed", guard.reset())
 
+        // A directory in place of the state file cannot be deleted while it has content.
         val stuck = File(temporary.root, "stuck").apply { mkdirs() }
         File(stuck, "child").writeText("x")
         assertFalse(guard(file = stuck).reset())

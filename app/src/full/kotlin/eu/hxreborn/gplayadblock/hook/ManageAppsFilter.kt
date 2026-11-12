@@ -32,6 +32,8 @@ object ManageAppsFilter {
                     targets.deviceSyncRowClassName?.let(::add)
                 }
             }.mapNotNullTo(mutableSetOf()) { name -> loadOrNull(classLoader, name) }
+        // The visual categories cluster (VE 7567) only appears on the
+        // Search landing page (checked on the Apps home and Categories too).
         val searchLandingItem =
             if (settings.isOn(FilterSwitch.MINIMAL_SEARCH_HOME)) {
                 targets.searchLandingItemClassName?.let { name -> loadOrNull(classLoader, name) }

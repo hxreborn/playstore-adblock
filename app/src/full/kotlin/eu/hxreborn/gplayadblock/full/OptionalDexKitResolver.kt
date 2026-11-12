@@ -448,6 +448,10 @@ object OptionalDexKitResolver {
             .singleOrNull()
             ?.name
 
+    /**
+     * Row models created by the Play Protect section provider of the Manage overview. They are
+     * single-state wrappers built directly by the class that logs under the provider's tag.
+     */
     private fun playProtectRows(anchored: AnchoredClasses): List<String> {
         val provider =
             anchored.all(listOf(PROTECT_SECTION_ANCHOR)).singleOrNull() ?: return emptyList()
@@ -461,6 +465,7 @@ object OptionalDexKitResolver {
                     !method.declaredClassName.startsWith("kotlin.")
             }.mapNotNull(MethodData::declaredClass)
             .filter { row ->
+                // A row wraps one UI state; plain text wrappers are not rows.
                 row.fields
                     .filter { field -> !Modifier.isStatic(field.modifiers) }
                     .singleOrNull()
@@ -541,6 +546,7 @@ object OptionalDexKitResolver {
         val callbackClass =
             bridge.getClassData(callbackClassName)
                 ?: throw ResolutionFailure("nav callback class missing")
+        // The filter wraps the callback in a java.lang.reflect.Proxy, which needs an interface.
         if (!Modifier.isInterface(callbackClass.modifiers)) {
             throw ResolutionFailure("nav callback type is not an interface")
         }

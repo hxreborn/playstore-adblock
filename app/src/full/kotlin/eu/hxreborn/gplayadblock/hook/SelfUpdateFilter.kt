@@ -23,6 +23,10 @@ object SelfUpdateFilter {
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept { _ ->
                 Logger.debug { "Play Store self-update scheduling skipped" }
+                // Same outcome as Play Store's own "Self-update scheduling is disabled." branch:
+                // return false without running the completion Runnable. Callers treat false as
+                // "nothing scheduled" (log "Skipping self-update" or run their own fallback);
+                // none of them retries (verified on 54.0.09).
                 false
             }
 
@@ -48,6 +52,8 @@ object SelfUpdateFilter {
                     Logger.debug { "Play Store removed from an auto-update request" }
                     return@intercept chain.proceed(arguments)
                 }
+                // Skipping the request is only safe when its caller is told it finished;
+                // otherwise the auto-update job would wait forever, so let it run instead.
                 val callback = chain.getArg(request.callback) ?: return@intercept chain.proceed()
                 request.completion.invoke(callback, emptySet<String>())
                 Logger.debug { "Play Store auto-update request skipped" }

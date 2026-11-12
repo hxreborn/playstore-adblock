@@ -83,7 +83,7 @@ fun rememberReducedMotion(): Boolean = LocalReducedMotion.current
 @Composable
 private fun ProvideReducedMotion(content: @Composable () -> Unit) {
     val resolver = LocalContext.current.contentResolver
-    var reduced by remember(resolver) { mutableStateOf(true) }
+    var reduced by remember(resolver) { mutableStateOf(readAnimationsOff(resolver)) }
     DisposableEffect(resolver) {
         val observer =
             object : ContentObserver(Handler(Looper.getMainLooper())) {

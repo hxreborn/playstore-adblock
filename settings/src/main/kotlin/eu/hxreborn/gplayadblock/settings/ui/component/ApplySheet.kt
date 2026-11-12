@@ -44,9 +44,11 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -105,10 +107,6 @@ class FailureAction(
     val onClick: () -> Unit,
 )
 
-private class LastContent {
-    var value: ApplySheetContent? = null
-}
-
 private val CompactWindowHeight = 480.dp
 private const val SUMMARY_NAMES_SHOWN = 2
 
@@ -130,8 +128,10 @@ fun ApplySheetScaffold(
     extraFailureAction: FailureAction? = null,
     body: @Composable () -> Unit,
 ) {
-    val last = remember { LastContent() }
-    if (content != null) last.value = content
+    var lastContent by remember { mutableStateOf(content) }
+    SideEffect {
+        if (content != null) lastContent = content
+    }
     val shown by rememberUpdatedState(content != null)
     val keepShown = remember { { value: SheetValue -> value != SheetValue.Hidden || !shown } }
     val sheetState =
@@ -184,7 +184,7 @@ fun ApplySheetScaffold(
                 }
             },
             sheetContent = {
-                when (val shownContent = last.value) {
+                when (val shownContent = content ?: lastContent) {
                     is ApplySheetContent.Pending -> {
                         PendingSheet(
                             content = shownContent,

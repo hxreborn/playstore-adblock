@@ -17,6 +17,7 @@ class NavSelectionPlannerTest {
         applyStartTab: Boolean = false,
         external: Boolean = false,
         externalRecovery: Boolean = false,
+        previous: Int? = null,
     ) = NavSelectionPlanner.plan(
         retainedTypes = types,
         retainedIndices = indices,
@@ -25,7 +26,39 @@ class NavSelectionPlannerTest {
         applyStartTab = applyStartTab,
         isExternalNavigation = external,
         externalRecoveryRequested = externalRecovery,
+        previousSelected = previous,
     )
+
+    @Test
+    fun `back from the tab standing in for a hidden home tab leaves Play Store`() {
+        val plan = plan(selected = 3, startTab = StartTab.UNCHANGED.name, previous = 0)
+        assertTrue(plan.leavesApp)
+        assertEquals(0, plan.navigateToIndex)
+    }
+
+    @Test
+    fun `back from another tab first returns to the stand-in home tab`() {
+        val plan = plan(selected = 3, startTab = StartTab.UNCHANGED.name, previous = 2)
+        assertFalse(plan.leavesApp)
+        assertEquals(0, plan.navigateToIndex)
+    }
+
+    @Test
+    fun `the configured start tab stands in for a hidden home tab`() {
+        assertTrue(plan(selected = 3, previous = 1).leavesApp)
+        assertFalse(plan(selected = 3, previous = 0).leavesApp)
+    }
+
+    @Test
+    fun `a launch onto a hidden home tab never leaves Play Store`() {
+        assertFalse(plan(selected = 3, previous = null).leavesApp)
+        assertFalse(plan(selected = 3, external = true, previous = 1).leavesApp)
+    }
+
+    @Test
+    fun `a visible selected tab never leaves Play Store`() {
+        assertFalse(plan(selected = 2, previous = 1).leavesApp)
+    }
 
     @Test
     fun `a fresh launch switches once to the configured start tab`() {

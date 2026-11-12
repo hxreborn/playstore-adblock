@@ -14,6 +14,7 @@ import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
+import java.lang.ref.WeakReference
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
@@ -60,6 +61,7 @@ object PersistentNavFilter {
                     chain.getArg(positions.items) as? List<*> ?: return@intercept chain.proceed()
                 val selected = chain.getArg(positions.selected) as Int
                 recovery.onSelected(selected)
+                val previousSelected = lastSelected.getAndSet(selected)
                 val indexed =
                     original.mapIndexedNotNull { index, item ->
                         item?.let { value -> IndexedValue(index, value) }
@@ -98,6 +100,7 @@ object PersistentNavFilter {
                         applyStartTab = applyStartTab,
                         isExternalNavigation = isExternalNavigation,
                         externalRecoveryRequested = externalRecoveryRequested,
+                        previousSelected = previousSelected,
                     )
                 if (plan.consumesStartTab) {
                     startTabDeadline.set(0L)
@@ -130,6 +133,14 @@ object PersistentNavFilter {
                     }
                 }
                 latestCallback.set(originalCallback)
+                if (plan.leavesApp) {
+                    Logger.debug { "persistent nav back on the stand-in home tab: leaving" }
+                    Handler(Looper.getMainLooper()).post {
+                        // A launch meanwhile opened a new view: it must not go to the back.
+                        if (launchGeneration.get() != generation) return@post
+                        resumedMain.get()?.get()?.moveTaskToBack(true)
+                    }
+                }
                 plan.externalRecoveryIndex?.let { index ->
                     if (recoveryToken != null && recovery.plan(index, recoveryToken)) {
                         Handler(Looper.getMainLooper()).post { runPendingRecovery(callbackMethod) }
@@ -246,6 +257,7 @@ object PersistentNavFilter {
                     ) {
                         return
                     }
+                    lastSelected.set(null)
                     updateLaunchState(activity.intent, newTask = true)
                 }
 
@@ -257,12 +269,17 @@ object PersistentNavFilter {
                 override fun onActivityStarted(activity: Activity) = Unit
 
                 override fun onActivityResumed(activity: Activity) {
+                    if (mainActivityClass.isInstance(activity)) {
+                        resumedMain.set(WeakReference(activity))
+                    }
                     if (recovery.onActivityResumed(mainActivityClass.isInstance(activity))) {
                         mainHandler.postAtFrontOfQueue(onMainResumedAfterOverlay)
                     }
                 }
 
-                override fun onActivityPaused(activity: Activity) = Unit
+                override fun onActivityPaused(activity: Activity) {
+                    if (resumedMain.get()?.get() === activity) resumedMain.set(null)
+                }
 
                 override fun onActivityStopped(activity: Activity) = Unit
 
@@ -298,6 +315,10 @@ object PersistentNavFilter {
         newTask: Boolean,
     ) {
         val now = SystemClock.elapsedRealtime()
+        // A launch starts a new tab history: its first hidden home tab is no Back.
+        if (intent?.action == Intent.ACTION_VIEW || intent?.action == Intent.ACTION_MAIN) {
+            lastSelected.set(null)
+        }
         when {
             intent?.action == Intent.ACTION_VIEW -> {
                 launchGeneration.incrementAndGet()
@@ -361,6 +382,10 @@ object PersistentNavFilter {
     private val externalNavigationDeadline = AtomicLong(0L)
     private val recovery = ExternalRecovery()
     private val latestCallback = AtomicReference<Any?>(null)
+
+    // The tab selected by the previous navigation model, to recognize Back to a hidden home tab.
+    private val lastSelected = AtomicReference<Int?>(null)
+    private val resumedMain = AtomicReference<WeakReference<Activity>?>(null)
     private val startTabDeadline = AtomicLong(0L)
 
     private const val EXTERNAL_NAVIGATION_GRACE_MILLIS = 2_000L

@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -201,7 +202,29 @@ object PlayStoreSettingsReceiver {
     private fun hasActiveInstallSession(context: Context): Boolean =
         runCatching {
             context.packageManager.packageInstaller.mySessions
-                .any { session -> session.isActive }
+                .any { session ->
+                    blocksRestart(session.isActive, session.isStaged, session.isCommittedCompat())
+                }
         }.onFailure { error -> Logger.warn("install session check failed", error) }
             .getOrDefault(true)
+
+    // SessionInfo.isCommitted needs API 31; before it, a ready, applied or failed staged session
+    // has been committed.
+    private fun PackageInstaller.SessionInfo.isCommittedCompat(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            isCommitted
+        } else {
+            isStagedSessionReady || isStagedSessionApplied || isStagedSessionFailed
+        }
 }
+
+/**
+ * Whether an install session of Play Store makes a restart unsafe. A committed staged session (a
+ * system update waiting for the next reboot) stays active until that reboot, but the system
+ * applies it without Play Store, so it must not block the restart indefinitely.
+ */
+internal fun blocksRestart(
+    active: Boolean,
+    staged: Boolean,
+    committed: Boolean,
+): Boolean = active && !(staged && committed)

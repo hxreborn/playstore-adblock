@@ -1,3 +1,45 @@
+## [2.0.0-beta.1](https://github.com/hxreborn/playstore-adblock/compare/v1.6.1...v2.0.0-beta.1) (2026-11-12)
+
+### ⚠ BREAKING CHANGES
+
+* ship core and full downloads in place of the single APK
+
+### Features
+
+* add optional Play Store UI filters with a settings screen ([9458035](https://github.com/hxreborn/playstore-adblock/commit/94580358ada85ddd38fd96f8575defb5ef3f33ec))
+* **prefs:** save optional Play Store settings ([2445c95](https://github.com/hxreborn/playstore-adblock/commit/2445c9560a84ae79b3eeb6bd536dbf1c68199aad))
+* ship core and full downloads in place of the single APK ([8f3cae6](https://github.com/hxreborn/playstore-adblock/commit/8f3cae6e64c7881fd8b60cb20ca7080890321e94))
+* **ui:** add a Telegram row and the GitHub mark to About ([a945406](https://github.com/hxreborn/playstore-adblock/commit/a94540646fe977d15d00548678bad95d032d80fb))
+* **ui:** add about screen with contributors ([4c1598e](https://github.com/hxreborn/playstore-adblock/commit/4c1598e85bb211129303fdba8e23d27a4999f4e4))
+* **ui:** add launcher icon visibility setting ([50cd361](https://github.com/hxreborn/playstore-adblock/commit/50cd361f9d626c1a652f3aea0bd0197310c08fb4))
+* **ui:** add optional filter settings ([c3e45a4](https://github.com/hxreborn/playstore-adblock/commit/c3e45a4bb87b97055acc01d754cf6f98e1dfac78))
+* **ui:** replace the Apply bar with a standard bottom sheet ([e2e3de2](https://github.com/hxreborn/playstore-adblock/commit/e2e3de2192a9e864daac0106910fffab5dbc6249))
+* **ui:** restart Play Store from the module or with root ([187edb1](https://github.com/hxreborn/playstore-adblock/commit/187edb11ce2dcc10fd67c01b9154cf07daee9437))
+* **ui:** show sponsored listing removal as always on in Home ([6b3613f](https://github.com/hxreborn/playstore-adblock/commit/6b3613f6ad8b2cd3c8c5d77f8ae6ab55fbf66f1a))
+
+### Bug Fixes
+
+* **ui:** describe an unconfirmed cache clear as pending ([c90c17c](https://github.com/hxreborn/playstore-adblock/commit/c90c17c3afc9f539d42b67d29b1af8f24c10c0f7))
+* **ui:** distinguish root denial from failed restart commands ([35e9510](https://github.com/hxreborn/playstore-adblock/commit/35e9510350b5df9bf2d0ef768fa7ce639e1cf580))
+* **ui:** keep applied settings consistent across framework rebinds ([708a56d](https://github.com/hxreborn/playstore-adblock/commit/708a56dbbb7538bdd35b5e78c077021a2f478db7))
+* **ui:** keep restart recovery actions reachable with large text ([85eac45](https://github.com/hxreborn/playstore-adblock/commit/85eac457053a88c4c62d85a01de2fe5f4274a72c))
+* **ui:** log failures when opening Play Store ([1d36a15](https://github.com/hxreborn/playstore-adblock/commit/1d36a15be7b46181ac6e705c94ce24b106483fb1))
+* **ui:** report failed install checks as restart failures ([f09453a](https://github.com/hxreborn/playstore-adblock/commit/f09453af321f942be627fc52ba036b265a0de0d2))
+* **ui:** report settings failures separately from restart failures ([4741d5b](https://github.com/hxreborn/playstore-adblock/commit/4741d5b5ee711755cdd7dc24890fbface0033762))
+* **ui:** retain sheet content through Compose state ([85fdce3](https://github.com/hxreborn/playstore-adblock/commit/85fdce3afff645ef21744a441b7abf6dc8350676))
+* **ui:** translate the remaining settings screens into Russian ([f74f227](https://github.com/hxreborn/playstore-adblock/commit/f74f227bbb83365848df50f03d1cad1179ed54c8))
+* **ui:** use the system motion setting on the first frame ([a35e9ba](https://github.com/hxreborn/playstore-adblock/commit/a35e9ba3bad2cafed1d4cd5686a03f831d743733))
+
+### Refactor
+
+* isolate optional Play Store filters ([2226e0f](https://github.com/hxreborn/playstore-adblock/commit/2226e0f4bdb77f9e49519b7ba29ebfc33adceb26))
+* **ui:** name restart results and tests by their behavior ([602cd45](https://github.com/hxreborn/playstore-adblock/commit/602cd450793d7bde2399ec61594ea639becf7221))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [1.6.1](https://github.com/hxreborn/playstore-adblock/compare/v1.6.0...v1.6.1) (2026-11-07)
 
 ### Bug Fixes

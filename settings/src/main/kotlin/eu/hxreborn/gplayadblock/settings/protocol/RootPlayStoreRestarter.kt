@@ -2,6 +2,7 @@ package eu.hxreborn.gplayadblock.settings.protocol
 
 import android.annotation.SuppressLint
 import android.os.Process
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import java.io.File
@@ -9,47 +10,81 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class RootPlayStoreRestarter(
+    private val cacheDirectory: File,
     private val userId: Int = Process.myUid() / PER_USER_UID_RANGE,
     private val timeoutSeconds: Long = ROOT_TIMEOUT_SECONDS,
+    private val startProcess: (String, File) -> java.lang.Process = { script, output ->
+        ProcessBuilder("su", "-c", script)
+            .redirectErrorStream(true)
+            .redirectOutput(output)
+            .start()
+    },
 ) : PlayStoreRestarter {
     override suspend fun restart(
         clearStreamCache: Boolean,
         onExited: () -> Unit,
     ): RestartOutcome {
-        val restartedOutcome =
+        val outcomeAfterStop =
             when (execute(rootScript(userId, clearStreamCache))) {
                 0 -> RestartOutcome.Restarted
                 EXIT_CACHE_PENDING -> RestartOutcome.RestartedCachePending
                 EXIT_GUARD_KEPT -> RestartOutcome.Failed
                 EXIT_BUSY -> return RestartOutcome.Busy
                 EXIT_FAILED -> return RestartOutcome.Failed
-                else -> return RestartOutcome.RootUnavailable
+                EXIT_ROOT_UNAVAILABLE -> return RestartOutcome.RootUnavailable
+                else -> return RestartOutcome.Failed
             }
         onExited()
         if (execute(startScript(userId)) != 0) return RestartOutcome.Failed
-        return restartedOutcome
+        return outcomeAfterStop
     }
 
     private suspend fun execute(script: String): Int =
         runInterruptible(Dispatchers.IO) {
-            val process =
-                try {
-                    ProcessBuilder("su", "-c", script)
-                        .redirectErrorStream(true)
-                        .redirectOutput(ProcessBuilder.Redirect.to(File("/dev/null")))
-                        .start()
-                } catch (_: IOException) {
-                    return@runInterruptible EXIT_ROOT_UNAVAILABLE
-                }
+            val output = File.createTempFile("gplay-root-", ".log", cacheDirectory)
             try {
-                val exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-                if (exited) process.exitValue() else EXIT_FAILED
+                val process =
+                    try {
+                        startProcess("printf '%s\\n' '$SHELL_STARTED'\n$script", output)
+                    } catch (exception: IOException) {
+                        Log.w(TAG, "starting su failed", exception)
+                        val message = exception.message.orEmpty()
+                        return@runInterruptible if (message.contains("error=2,") ||
+                            message.contains("error=13,")
+                        ) {
+                            EXIT_ROOT_UNAVAILABLE
+                        } else {
+                            EXIT_FAILED
+                        }
+                    }
+                try {
+                    if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                        Log.w(TAG, "root command timed out")
+                        return@runInterruptible EXIT_FAILED
+                    }
+                    val exitCode = process.exitValue()
+                    val lines = output.bufferedReader().useLines { it.take(16).toList() }
+                    if (SHELL_STARTED !in lines) {
+                        val denied =
+                            exitCode != 0 && lines.any { it.trim() in ROOT_DENIAL_MESSAGES }
+                        Log.w(TAG, "su did not start the command: exit=$exitCode")
+                        return@runInterruptible if (denied) EXIT_ROOT_UNAVAILABLE else EXIT_FAILED
+                    }
+                    if (exitCode != 0) Log.w(TAG, "root command failed: exit=$exitCode")
+                    return@runInterruptible exitCode.takeUnless { it == EXIT_ROOT_UNAVAILABLE }
+                        ?: EXIT_FAILED
+                } finally {
+                    process.destroyForcibly()
+                }
             } finally {
-                process.destroyForcibly()
+                output.delete()
             }
         }
 
     companion object {
+        private const val TAG = "GPlayAdblock"
+        private const val SHELL_STARTED = "GPLAY_ADBLOCK_SHELL_STARTED"
+        private val ROOT_DENIAL_MESSAGES = setOf("Permission denied", "su: Permission denied")
         const val EXIT_FAILED = 4
         const val EXIT_BUSY = 3
         const val EXIT_CACHE_PENDING = 5

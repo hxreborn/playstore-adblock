@@ -14,7 +14,7 @@ class GPlayAdblockApp : Application() {
 
     val playStoreRestarter: PlayStoreRestarter by lazy { BroadcastPlayStoreRestarter(this) }
 
-    val rootPlayStoreRestarter: PlayStoreRestarter = RootPlayStoreRestarter()
+    val rootPlayStoreRestarter: PlayStoreRestarter by lazy { RootPlayStoreRestarter(cacheDir) }
 
     val prefsRepository: PrefsRepository by lazy {
         PrefsRepository(

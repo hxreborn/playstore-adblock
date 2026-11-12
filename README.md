@@ -43,21 +43,21 @@
 ## Install
 
 1. Download one APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases):
-   - **Core** (`playstore-adblock-v<version>-core-arm64-v8a.apk`): ad blocking only, with no app icon or settings screen. This is the same module earlier releases shipped
-   - **Full** (`playstore-adblock-v<version>-full-arm64-v8a.apk`): the same ad blocking plus optional Play Store filters and a settings app
+   - **Core** (`playstore-adblock-v<version>-core-arm64-v8a.apk`): ad blocking only, with no icon or settings. This is what 1.x shipped
+   - **Full** (`playstore-adblock-v<version>-full-arm64-v8a.apk`): ad blocking plus optional filters and a settings app
 2. Enable the module in your Xposed manager, scoped to Google Play Store (`com.android.vending`)
-3. Force-stop the Play Store so it restarts with the module active
+3. Force-stop Play Store
 
-Core and Full are one package signed with the same key, so installing one replaces the other and the
-module is still enabled afterwards. Core ignores the Full settings but keeps them, and installing Full again brings them
-back. Force-stop the Play Store after switching.
+Core and Full are the same package with the same signature. Switching between them keeps the module enabled and
+keeps your Full settings. Force-stop Play Store after switching. Some managers update to the first APK in a
+release, which is Core, so pick the APK yourself when you update Full.
 
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
 ## Optional filters (Full)
 
-Every filter is off by default, and ad blocking never depends on them:
+All filters are off by default. Ad blocking works without them.
 
 - **Content**: editorial promotion cards, the pre-registration games shelf, promoted search shelves
 - **Account menu**: the notification badge, Help & feedback, Personalization in Google Play
@@ -65,22 +65,15 @@ Every filter is off by default, and ad blocking never depends on them:
 - **Navigation**: the Games, Apps, Books and You tabs, a minimal Search home, and a start screen
 - **Play Store updates**: block Play Store self-updates (other apps keep updating)
 
-The settings app saves changes on the device. **Apply and restart Play Store** sends them to your Xposed
-manager, closes Play Store, and opens it again with the new filters. When a content filter changed it also
-clears Play Store's cached feeds (`cache/streamdatastore`). If that clear fails, Play Store still restarts and
-Apply marks the settings applied and keeps the cache clear pending for another attempt. Play Store refuses the restart while
-it is installing apps or in a purchase. If Play Store doesn't respond, **Restart with root** makes the same
-checks and clears the same folder through `su`, then opens Play Store again. A filter whose target is not found on a Play Store release is skipped,
-and that screen looks as it does without the module.
+**Apply and restart Play Store** sends your filters to the Xposed manager and restarts Play Store. After a
+content filter change it also clears Play Store's cached feeds. Play Store won't restart while it's installing
+apps or in a purchase. If it doesn't respond, use **Restart with root**.
 
-If Play Store crashes three times within two minutes, the filters are skipped on the following launches while
-ad blocking keeps working. Updating Play Store or the module, or **Apply and restart Play Store**, turns them back on.
+A filter that can't find its target on your Play Store version does nothing. If Play Store crashes three times
+within two minutes, the optional filters turn off until Play Store or the module updates, or you apply again.
+Ad blocking keeps working.
 
-Open the settings from the app drawer or from the module entry in your Xposed manager. The launcher icon can
-be hidden in **Appearance and icon**.
-
-To update Full, download the Full APK from Releases. Managers that install the first APK in a release
-can replace Full with Core, so select the flavor when updating.
+Open the settings from the app drawer or your Xposed manager. You can hide the icon in **Appearance and icon**.
 
 ## Compatibility
 

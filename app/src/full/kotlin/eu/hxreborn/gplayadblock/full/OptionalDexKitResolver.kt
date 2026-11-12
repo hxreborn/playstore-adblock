@@ -197,18 +197,24 @@ object OptionalDexKitResolver {
         val headerCards = attempt("account header cards") { resolveHeaderCards(anchored) }
         val targets = actions.success() as? AccountMenuTargets ?: AccountMenuTargets()
         val notification = badge.success() as? AccountMenuTargets
-        val results = listOf(actions, badge, labeledActions, headerCards)
+        val results =
+            mapOf(
+                "account actions" to actions,
+                "notification badge" to badge,
+                "labeled account actions" to labeledActions,
+                "account header cards" to headerCards,
+            )
         return targets.copy(
             notificationTopBarConstructor = notification?.notificationTopBarConstructor,
             notificationBadgeTypeName = notification?.notificationBadgeTypeName,
             labeledActions = labeledActions.success() as? LabeledActionTargets,
             headerCards = headerCards.success() as? HeaderCardTargets,
             unresolved =
-                results.mapNotNull { result ->
-                    (result as? Resolution.Failure)?.reason
+                results.mapNotNull { (name, result) ->
+                    (result as? Resolution.Failure)?.reason?.let { "$name: $it" }
                 },
             transientFailure =
-                results.any { result ->
+                results.values.any { result ->
                     (result as? Resolution.Failure)?.transient == true
                 },
         )

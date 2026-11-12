@@ -32,23 +32,11 @@ data class OptionalTargets(
 
     fun withMoreCompleteGroups(next: OptionalTargets): OptionalTargets =
         copy(
-            accountMenu = moreComplete(accountMenu, next.accountMenu) { it.unresolved.size },
-            manageApps = moreComplete(manageApps, next.manageApps) { it.unresolved.size },
+            accountMenu = accountMenu?.merge(next.accountMenu) ?: next.accountMenu,
+            manageApps = manageApps?.merge(next.manageApps) ?: next.manageApps,
             persistentNav = persistentNav ?: next.persistentNav,
             selfUpdate = selfUpdate ?: next.selfUpdate,
         )
-
-    private inline fun <T : Any> moreComplete(
-        current: T?,
-        candidate: T?,
-        unresolvedCount: (T) -> Int,
-    ): T? =
-        when {
-            current == null -> candidate
-            candidate == null -> current
-            unresolvedCount(candidate) < unresolvedCount(current) -> candidate
-            else -> current
-        }
 }
 
 data class AccountMenuTargets(
@@ -61,7 +49,41 @@ data class AccountMenuTargets(
     val headerCards: HeaderCardTargets? = null,
     val unresolved: List<String> = emptyList(),
     val transientFailure: Boolean = false,
-)
+) {
+    internal fun merge(next: AccountMenuTargets?): AccountMenuTargets {
+        if (next == null) return this
+        val features = FeatureTargets(unresolved + next.unresolved)
+        val actions = features.merge("account actions", actions(), next.actions())
+        val badge = features.merge("notification badge", badge(), next.badge())
+        val labeled =
+            features.merge("labeled account actions", labeledActions, next.labeledActions)
+        val cards = features.merge("account header cards", headerCards, next.headerCards)
+        return AccountMenuTargets(
+            featuresClassName = actions?.first,
+            immutableListClassName = actions?.second,
+            actionRoleField = actions?.third,
+            notificationTopBarConstructor = badge?.first,
+            notificationBadgeTypeName = badge?.second,
+            labeledActions = labeled,
+            headerCards = cards,
+            unresolved = features.unresolved.toList(),
+            transientFailure = transientFailure || next.transientFailure,
+        )
+    }
+
+    private fun actions(): Triple<String, String, FieldRef>? {
+        val features = featuresClassName ?: return null
+        val list = immutableListClassName ?: return null
+        val role = actionRoleField ?: return null
+        return Triple(features, list, role)
+    }
+
+    private fun badge(): Pair<ConstructorRef, String>? {
+        val constructor = notificationTopBarConstructor ?: return null
+        val type = notificationBadgeTypeName ?: return null
+        return constructor to type
+    }
+}
 
 data class ResourcePair(
     val labelId: Int,
@@ -94,7 +116,48 @@ data class ManageAppsTargets(
     val deviceSyncRowClassName: String?,
     val searchLandingItemClassName: String?,
     val unresolved: List<String>,
-)
+) {
+    internal fun merge(next: ManageAppsTargets?): ManageAppsTargets {
+        if (next == null) return this
+        val features = FeatureTargets(unresolved + next.unresolved)
+        val listClass = features.merge("manage list", manageListClassName, next.manageListClassName)
+        val protectRows =
+            if (listClass == null) {
+                emptyList()
+            } else {
+                (playProtectRowClassNames + next.playProtectRowClassNames).distinct()
+            }
+        val ratings = features.merge("ratings row", ratingsRowClassName, next.ratingsRowClassName)
+        val contributions =
+            features.merge(
+                "contributions row",
+                contributionsRowClassName,
+                next.contributionsRowClassName,
+            )
+        val deviceSync =
+            features.merge(
+                "device sync row",
+                deviceSyncRowClassName,
+                next.deviceSyncRowClassName,
+            )
+        val search =
+            features.merge(
+                "search landing item",
+                searchLandingItemClassName,
+                next.searchLandingItemClassName,
+            )
+        if (protectRows.isNotEmpty()) features.unresolved.remove("play protect rows")
+        return ManageAppsTargets(
+            manageListClassName = listClass ?: manageListClassName,
+            playProtectRowClassNames = protectRows,
+            ratingsRowClassName = ratings.takeIf { listClass != null },
+            contributionsRowClassName = contributions.takeIf { listClass != null },
+            deviceSyncRowClassName = deviceSync.takeIf { listClass != null },
+            searchLandingItemClassName = search.takeIf { listClass != null },
+            unresolved = features.unresolved.toList(),
+        )
+    }
+}
 
 data class PersistentNavTargets(
     val navConstructor: ConstructorRef,
@@ -105,3 +168,29 @@ data class PersistentNavTargets(
     val navCallbackMethod: MethodRef,
     val navHiddenInstanceField: FieldRef?,
 )
+
+private class FeatureTargets(
+    reasons: List<String>,
+) {
+    val unresolved = reasons.toCollection(LinkedHashSet())
+
+    fun <T> merge(
+        name: String,
+        current: T?,
+        candidate: T?,
+    ): T? {
+        val conflict = "$name: conflicting targets across APKs"
+        if (conflict in unresolved) {
+            unresolved.removeAll { it != conflict && (it == name || it.startsWith("$name:")) }
+            return null
+        }
+        if (current != null && candidate != null && current != candidate) {
+            unresolved.removeAll { it == name || it.startsWith("$name:") }
+            unresolved += conflict
+            return null
+        }
+        val resolved = current ?: candidate
+        if (resolved != null) unresolved.removeAll { it == name || it.startsWith("$name:") }
+        return resolved
+    }
+}

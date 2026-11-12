@@ -60,11 +60,11 @@ class RootPlayStoreRestarter(
         private const val ACTIVE_SESSIONS_HEADER = "Active install sessions:"
 
         // Exits 1 when a Play Store install session would be aborted by stopping Play Store. Each
-        // "Active Session"/"Active Child Session" block is one session. A committed staged session
+        // session block, headed "Session N:" or, on newer Android, "Active (Child) Session N:". A committed staged session
         // (a system update waiting for the next reboot) stays listed until that reboot, but the
         // system applies it without Play Store, so it does not count.
         internal val BLOCKING_SESSION_FILTER =
-            "/^ *Active (Child )?Session [0-9]+:/ { " +
+            "/^ *(Active )?(Child )?Session [0-9]+:/ { " +
                 "if (mine && !(staged && committed)) busy = 1; mine = staged = committed = 0 } " +
                 "/ installerPackageName=" +
                 RestartProtocol.PLAY_STORE_PACKAGE.replace(".", "\\.") +

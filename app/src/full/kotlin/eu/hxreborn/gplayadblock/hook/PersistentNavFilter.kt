@@ -136,6 +136,8 @@ object PersistentNavFilter {
                 if (plan.leavesApp) {
                     Logger.debug { "persistent nav back on the stand-in home tab: leaving" }
                     Handler(Looper.getMainLooper()).post {
+                        // A launch meanwhile opened a new view: it must not go to the back.
+                        if (launchGeneration.get() != generation) return@post
                         resumedMain.get()?.get()?.moveTaskToBack(true)
                     }
                 }

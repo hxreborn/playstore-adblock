@@ -113,6 +113,18 @@ class RootPlayStoreScriptTest {
     }
 
     @Test
+    fun `sessions with headers without the Active prefix are checked one by one`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Session 1", STORE, staged = true, committed = true) +
+                session("Session 2", STORE, staged = false, committed = false),
+        )
+        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, true))
+        assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
+        assertFalse(log.contains("HOST_STUB am"))
+    }
+
+    @Test
     fun `another installer's session does not block the restart`() {
         prepare(
             "Active install sessions:\n" +

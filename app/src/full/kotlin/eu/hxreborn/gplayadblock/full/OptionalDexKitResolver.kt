@@ -105,6 +105,12 @@ object OptionalDexKitResolver {
                         "$apkPath: ${exception.javaClass.simpleName}: ${exception.message}"
                 }
                 transientFailure = true
+            } catch (error: LinkageError) {
+                pending.forEach { group ->
+                    reasons.getValue(group) +=
+                        "$apkPath: ${error.javaClass.simpleName}: ${error.message}"
+                }
+                transientFailure = true
             }
         }
         return merged.copy(
@@ -598,6 +604,11 @@ object OptionalDexKitResolver {
         } catch (exception: Exception) {
             Resolution.Failure(
                 "$name resolution threw ${exception.javaClass.simpleName}: ${exception.message}",
+                transient = true,
+            )
+        } catch (error: LinkageError) {
+            Resolution.Failure(
+                "$name resolution threw ${error.javaClass.simpleName}: ${error.message}",
                 transient = true,
             )
         }

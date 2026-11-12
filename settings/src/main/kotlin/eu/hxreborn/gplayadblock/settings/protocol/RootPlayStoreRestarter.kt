@@ -25,21 +25,21 @@ class RootPlayStoreRestarter(
         onExited: () -> Unit,
     ): RestartOutcome {
         val outcomeAfterStop =
-            when (execute(rootScript(userId, clearStreamCache))) {
+            when (runAsRoot(stopScript(userId, clearStreamCache))) {
                 0 -> RestartOutcome.Restarted
                 EXIT_CACHE_PENDING -> RestartOutcome.RestartedCachePending
-                EXIT_GUARD_KEPT -> RestartOutcome.Failed
+                EXIT_CRASH_GUARD_KEPT -> RestartOutcome.Failed
                 EXIT_BUSY -> return RestartOutcome.Busy
                 EXIT_FAILED -> return RestartOutcome.Failed
                 EXIT_ROOT_UNAVAILABLE -> return RestartOutcome.RootUnavailable
                 else -> return RestartOutcome.Failed
             }
         onExited()
-        if (execute(startScript(userId)) != 0) return RestartOutcome.Failed
+        if (runAsRoot(startScript(userId)) != 0) return RestartOutcome.Failed
         return outcomeAfterStop
     }
 
-    private suspend fun execute(script: String): Int =
+    private suspend fun runAsRoot(script: String): Int =
         runInterruptible(Dispatchers.IO) {
             val output = File.createTempFile("gplay-root-", ".log", cacheDirectory)
             try {
@@ -88,7 +88,7 @@ class RootPlayStoreRestarter(
         const val EXIT_FAILED = 4
         const val EXIT_BUSY = 3
         const val EXIT_CACHE_PENDING = 5
-        const val EXIT_GUARD_KEPT = 7
+        const val EXIT_CRASH_GUARD_KEPT = 7
         private const val EXIT_ROOT_UNAVAILABLE = 6
         private const val ROOT_TIMEOUT_SECONDS = 60L
         private const val PER_USER_UID_RANGE = 100_000
@@ -98,7 +98,7 @@ class RootPlayStoreRestarter(
         private fun dataDir(userId: Int): String =
             "/data/user/$userId/${RestartProtocol.PLAY_STORE_PACKAGE}"
 
-        fun rootScript(
+        fun stopScript(
             userId: Int,
             clearStreamCache: Boolean,
         ): String {
@@ -106,13 +106,13 @@ class RootPlayStoreRestarter(
             val target = RestartProtocol.PLAY_STORE_PACKAGE
             val dataDir = dataDir(userId)
             val cacheDir = "$dataDir/cache"
-            val feedCache = "$cacheDir/${RestartProtocol.STREAM_DATA_STORE_DIR}"
+            val streamCache = "$cacheDir/${RestartProtocol.STREAM_DATA_STORE_DIR}"
             val crashGuard = "$dataDir/${RestartProtocol.CRASH_GUARD_PATH}"
             val purchaseActivity = "$target/${RestartProtocol.PURCHASE_ACTIVITY_PACKAGE}"
-            val guardRemoval = "rm -f $crashGuard && [ ! -e $crashGuard ]"
+            val crashGuardRemoval = "rm -f $crashGuard && [ ! -e $crashGuard ]"
             val cacheCleanup =
-                "[ ! -L $cacheDir ] && [ ! -L $feedCache ] && " +
-                    "rm -rf $feedCache && [ ! -e $feedCache ]"
+                "[ ! -L $cacheDir ] && [ ! -L $streamCache ] && " +
+                    "rm -rf $streamCache && [ ! -e $streamCache ]"
             return listOfNotNull(
                 "ls /data/app >/dev/null || exit $EXIT_FAILED",
                 "package_state=\$(dumpsys package) || exit $EXIT_FAILED",
@@ -123,7 +123,7 @@ class RootPlayStoreRestarter(
                 "activities=\$(dumpsys activity activities) || exit $EXIT_FAILED",
                 "case \"\$activities\" in *'$purchaseActivity'*) exit $EXIT_BUSY ;; esac",
                 "am force-stop --user $userId $target || exit $EXIT_FAILED",
-                "nsenter -t 1 -m -- sh -c '$guardRemoval' || exit $EXIT_GUARD_KEPT",
+                "nsenter -t 1 -m -- sh -c '$crashGuardRemoval' || exit $EXIT_CRASH_GUARD_KEPT",
                 "nsenter -t 1 -m -- sh -c '$cacheCleanup' || exit $EXIT_CACHE_PENDING".takeIf {
                     clearStreamCache
                 },

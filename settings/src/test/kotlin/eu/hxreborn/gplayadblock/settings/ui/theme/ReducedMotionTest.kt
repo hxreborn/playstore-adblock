@@ -40,7 +40,7 @@ class ReducedMotionTest {
         val observed = ArrayList<Boolean>()
         compose.setContent {
             GPlayAdblockTheme(Appearance(dynamicColor = false)) {
-                val reduced = rememberReducedMotion()
+                val reduced = isReducedMotion()
                 SideEffect { observed += reduced }
             }
         }

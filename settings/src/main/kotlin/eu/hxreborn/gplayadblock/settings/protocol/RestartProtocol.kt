@@ -10,7 +10,7 @@ object RestartProtocol {
     const val EXTRA_DEADLINE = "restart_deadline"
     const val EXTRA_STARTED_AT = "started_at"
     const val RESULT_FAILED = 0
-    const val RESULT_NO_RECEIVER = 1
+    const val RESULT_UNSET = 1
     const val RESULT_READY = 3
     const val RESULT_CACHE_PENDING = 4
     const val RESULT_BUSY = 2
@@ -19,8 +19,8 @@ object RestartProtocol {
     const val PURCHASE_ACTIVITY_PACKAGE = "com.google.android.finsky.billing."
     const val CRASH_GUARD_PATH = "files/playstore-adblock/optional-crash-guard"
 
-    fun refusalBeforeStop(
+    fun isPastDeadline(
         now: Long,
         deadline: Long,
-    ): Int? = if (now > deadline) RESULT_FAILED else null
+    ): Boolean = now > deadline
 }

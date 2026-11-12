@@ -284,7 +284,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `restart outcomes map to failure reasons and keep changes pending`() {
+    fun `failed restart outcomes keep changes pending with their failure reasons`() {
         connectFramework()
         val viewModel = viewModel()
         val expected =
@@ -292,6 +292,7 @@ class SettingsViewModelTest {
                 RestartOutcome.Busy to ApplyFailure.Busy,
                 RestartOutcome.NoReply to ApplyFailure.NoReply,
                 RestartOutcome.Failed to ApplyFailure.RestartFailed,
+                RestartOutcome.RootUnavailable to ApplyFailure.RootUnavailable,
             )
         expected.forEach { (outcome, failure) ->
             restarter.outcome = outcome
@@ -304,7 +305,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `an apply that does not restart publishes the applied snapshot again`() {
+    fun `an apply that does not restart attempts to publish the applied snapshot again`() {
         connectFramework()
         val viewModel = viewModel()
         viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
@@ -322,8 +323,8 @@ class SettingsViewModelTest {
                     remote.accept = false
                 },
             )
-        attempts.forEach { setUp ->
-            setUp()
+        attempts.forEach { makeFail ->
+            makeFail()
             remote.commits.clear()
             viewModel.apply()
             assertTrue(viewModel.ready().phase is ApplyPhase.Failed)
@@ -345,7 +346,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `a content filter retry still clears the stream cache`() {
+    fun `a content filter retry requests a stream cache clear again`() {
         connectFramework()
         val viewModel = viewModel()
         viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
@@ -430,7 +431,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `the stream cache is cleared only when a content filter changed`() {
+    fun `stream cache clearing is requested for content edits but not tab or self update edits`() {
         connectFramework()
         val viewModel = viewModel()
         viewModel.setFilter(FilterSwitch.HIDE_GAMES_TAB, true)
@@ -457,7 +458,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `the phase reads reopening once Play Store has closed`() {
+    fun `the phase becomes Reopening when the restarter invokes onExited`() {
         connectFramework()
         val viewModel = viewModel()
         val exited = CompletableDeferred<Unit>()
@@ -495,7 +496,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `root is used only after the module route got no reply or failed`() {
+    fun `root restart is ignored before failure and while Busy and used after NoReply`() {
         connectFramework()
         val viewModel = viewModel()
         viewModel.restartWithRoot()
@@ -519,7 +520,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `a missing or denied su is reported apart from a failed restart`() {
+    fun `root outcomes RootUnavailable and Busy map to their failure reasons`() {
         connectFramework()
         val viewModel = viewModel()
         restarter.outcome = RestartOutcome.Failed
@@ -534,7 +535,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `a restart transport exception keeps settings pending without escaping the UI scope`() {
+    fun `a restarter throwing SecurityException reports RestartFailed and keeps changes pending`() {
         connectFramework()
         restarter.delegate =
             object : PlayStoreRestarter {
@@ -568,19 +569,19 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `a restart with an uncleared cache marks the settings applied`() {
+    fun `RestartedCachePending marks settings applied and keeps the cache clear pending`() {
         connectFramework()
         restarter.outcome = RestartOutcome.RestartedCachePending
         val first = viewModel()
         first.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
         remote.commits.clear()
         first.apply()
-        assertEquals(ApplyPhase.Failed(ApplyFailure.CacheNotCleared), first.ready().phase)
+        assertEquals(ApplyPhase.Failed(ApplyFailure.StreamCacheClearPending), first.ready().phase)
         assertEquals(preferences.desiredSettings(), preferences.appliedSettings())
         assertEquals(1, remote.commits.size)
         assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
         assertTrue(first.ready().streamCacheClearPending)
-        assertTrue(first.ready().feedCacheClearWithoutContentChange)
+        assertTrue(first.ready().streamCacheClearWithoutContentChange)
         assertEquals(1, first.ready().pendingCount)
 
         restarter.outcome = RestartOutcome.Restarted
@@ -602,7 +603,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `a cache clear survives recreation after reverting the content switch`() {
+    fun `a pending cache clear is requested after recreation and a reverted content switch`() {
         connectFramework()
         restarter.outcome = RestartOutcome.RestartedCachePending
         val first = viewModel()
@@ -631,8 +632,11 @@ class SettingsViewModelTest {
         viewModel.restartWithRoot()
         assertTrue(rootRestarter.clearRequests.isEmpty())
         viewModel.apply()
+        remote.commits.clear()
         viewModel.restartWithRoot()
         assertEquals(listOf(true), rootRestarter.clearRequests)
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_HELP.key])
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
         assertEquals(preferences.desiredSettings(), preferences.appliedSettings())
     }
 
@@ -643,9 +647,9 @@ class SettingsViewModelTest {
         viewModel.setFilter(FilterSwitch.HIDE_GAMES_TAB, true)
         val state = viewModel.ready()
         assertEquals(StartTab.UNCHANGED, state.desired.startTab)
-        assertEquals(StartTab.GAMES, state.startTabReset)
+        assertEquals(StartTab.GAMES, state.startTabBeforeReset)
         viewModel.setStartTab(StartTab.SEARCH)
-        assertNull(viewModel.ready().startTabReset)
+        assertNull(viewModel.ready().startTabBeforeReset)
     }
 
     @Test
@@ -659,7 +663,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `every framework bind publishes the applied snapshot once`() {
+    fun `framework binds before and after Apply publish the applied snapshot`() {
         val viewModel = viewModel()
         viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
         assertTrue(remote.commits.isEmpty())
@@ -718,6 +722,9 @@ class SettingsViewModelTest {
         val state = viewModel.ready()
         assertEquals(ThemeMode.DARK, state.appearance.themeMode)
         assertFalse(state.appearance.dynamicColor)
+        assertEquals(state.appearance, appearance.appearance())
+        assertEquals(FilterSettings(), preferences.desiredSettings())
+        assertNull(preferences.appliedSettings())
         assertEquals(0, state.pendingCount)
     }
 }

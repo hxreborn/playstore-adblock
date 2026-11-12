@@ -12,7 +12,9 @@ import io.github.libxposed.service.XposedServiceHelper
 class GPlayAdblockApp : Application() {
     val frameworkConnection = FrameworkConnection()
 
-    val playStoreRestarter: PlayStoreRestarter by lazy { BroadcastPlayStoreRestarter(this) }
+    val broadcastPlayStoreRestarter: PlayStoreRestarter by lazy {
+        BroadcastPlayStoreRestarter(this)
+    }
 
     val rootPlayStoreRestarter: PlayStoreRestarter by lazy { RootPlayStoreRestarter(cacheDir) }
 

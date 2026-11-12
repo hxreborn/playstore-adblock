@@ -12,7 +12,7 @@ class SettingsKeysTest {
     }
 
     @Test
-    fun `values saved by the earlier settings screen keep their meaning`() {
+    fun `stored Boolean and start tab values read as saved`() {
         val settings =
             SettingsKeys.read(
                 mapOf(
@@ -30,7 +30,7 @@ class SettingsKeysTest {
     }
 
     @Test
-    fun `wrongly typed values fall back to off and unchanged`() {
+    fun `string TRUE enables a filter while invalid values use defaults`() {
         val settings =
             SettingsKeys.read(
                 mapOf(
@@ -45,7 +45,7 @@ class SettingsKeysTest {
     }
 
     @Test
-    fun `a lowercase start tab is accepted`() {
+    fun `a start tab is read trimmed and case insensitively`() {
         assertEquals(StartTab.YOU, SettingsKeys.read(mapOf("start_tab" to " you ")).startTab)
     }
 

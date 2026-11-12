@@ -88,7 +88,7 @@ sealed interface PendingChange {
         val tab: StartTab,
     ) : PendingChange
 
-    data object FeedCacheClear : PendingChange
+    data object StreamCacheClear : PendingChange
 }
 
 sealed interface ApplySheetContent {
@@ -347,7 +347,7 @@ private fun PendingChangeRow(change: PendingChange) {
             }
         }
 
-        PendingChange.FeedCacheClear -> {
+        PendingChange.StreamCacheClear -> {
             ListItem(colors = colors) {
                 Text(stringResource(R.string.pending_feed_cache_clear))
             }
@@ -418,7 +418,7 @@ private fun failureTitleRes(reason: ApplyFailure): Int =
         ApplyFailure.NoReply -> R.string.apply_no_reply_title
         ApplyFailure.RestartFailed -> R.string.status_failed_title
         ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_title
-        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_title
+        ApplyFailure.StreamCacheClearPending -> R.string.apply_cache_not_cleared_title
     }
 
 private fun failureBodyRes(reason: ApplyFailure): Int =
@@ -429,7 +429,7 @@ private fun failureBodyRes(reason: ApplyFailure): Int =
         ApplyFailure.NoReply -> R.string.apply_no_reply_body
         ApplyFailure.RestartFailed -> R.string.apply_failed_body
         ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_body
-        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_body
+        ApplyFailure.StreamCacheClearPending -> R.string.apply_cache_not_cleared_body
     }
 
 @Composable
@@ -447,7 +447,7 @@ private fun changedAreasSummary(changes: List<PendingChange>): String {
                     changes.any { it is PendingChange.StartScreen }
                 },
                 stringResource(R.string.pending_feed_cache_clear).takeIf {
-                    PendingChange.FeedCacheClear in changes
+                    PendingChange.StreamCacheClear in changes
                 },
             )
     if (names.size <= SUMMARY_NAMES_SHOWN) return names.joinToString(", ")

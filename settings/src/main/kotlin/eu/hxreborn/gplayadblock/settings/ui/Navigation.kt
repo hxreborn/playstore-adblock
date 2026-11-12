@@ -54,7 +54,7 @@ import eu.hxreborn.gplayadblock.settings.ui.screen.CategoryScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.HomeScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.LicensesScreen
 import eu.hxreborn.gplayadblock.settings.ui.theme.GPlayAdblockTheme
-import eu.hxreborn.gplayadblock.settings.ui.theme.rememberReducedMotion
+import eu.hxreborn.gplayadblock.settings.ui.theme.isReducedMotion
 
 sealed interface Destination {
     data object Home : Destination
@@ -128,7 +128,7 @@ private class ScreenTransitions(
 
 @Composable
 private fun rememberScreenTransitions(): ScreenTransitions {
-    if (rememberReducedMotion()) {
+    if (isReducedMotion()) {
         val instant = EnterTransition.None togetherWith ExitTransition.None
         return ScreenTransitions(instant, instant)
     }
@@ -186,7 +186,7 @@ private fun SettingsNavigation(
         extraFailureAction =
             FailureAction(R.string.apply_restart_with_root, viewModel::restartWithRoot).takeIf {
                 (state.phase as? ApplyPhase.Failed)?.reason in
-                    SettingsViewModel.ROOT_RECOVERABLE_FAILURES
+                    SettingsViewModel.ROOT_RESTART_OFFERED_FAILURES
             },
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -211,7 +211,7 @@ private fun SettingsNavigation(
                         CategoryScreen(
                             category = key.category,
                             settings = state.desired,
-                            startTabReset = state.startTabReset,
+                            startTabBeforeReset = state.startTabBeforeReset,
                             onFilterChange = viewModel::setFilter,
                             onStartTabChange = viewModel::setStartTab,
                             onBack = { popIfTop(key) },
@@ -289,9 +289,9 @@ private fun pendingChanges(state: SettingsUiState.Ready): List<PendingChange> {
             .map { PendingChange.Switch(it, desired.isOn(it)) }
     val startScreen =
         if (state.startScreenChanged) PendingChange.StartScreen(desired.startTab) else null
-    val feedCacheClear =
-        PendingChange.FeedCacheClear.takeIf {
-            state.feedCacheClearWithoutContentChange
+    val streamCacheClear =
+        PendingChange.StreamCacheClear.takeIf {
+            state.streamCacheClearWithoutContentChange
         }
-    return switches + listOfNotNull(startScreen, feedCacheClear)
+    return switches + listOfNotNull(startScreen, streamCacheClear)
 }

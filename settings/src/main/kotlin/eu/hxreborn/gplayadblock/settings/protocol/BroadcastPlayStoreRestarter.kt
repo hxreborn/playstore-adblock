@@ -33,7 +33,7 @@ class BroadcastPlayStoreRestarter(
         val resultCode =
             try {
                 withTimeoutOrNull(replyTimeoutMillis) {
-                    requestExit(clearStreamCache, deadline, freshStart)
+                    requestStopAndAwaitResult(clearStreamCache, deadline, freshStart)
                 }
             } finally {
                 startReceiver?.let(context::unregisterReceiver)
@@ -101,13 +101,13 @@ class BroadcastPlayStoreRestarter(
         return receiver
     }
 
-    private suspend fun requestExit(
+    private suspend fun requestStopAndAwaitResult(
         clearStreamCache: Boolean,
         deadline: Long,
         freshStart: Deferred<Unit>,
     ): Int {
-        val acknowledgement = CompletableDeferred<Int>()
-        val completion = CompletableDeferred<Int>()
+        val callbackReply = CompletableDeferred<Int>()
+        val broadcastFinished = CompletableDeferred<Int>()
         val handler = Handler(Looper.getMainLooper())
         val callback =
             object : ResultReceiver(handler) {
@@ -115,7 +115,7 @@ class BroadcastPlayStoreRestarter(
                     resultCode: Int,
                     resultData: Bundle?,
                 ) {
-                    acknowledgement.complete(resultCode)
+                    callbackReply.complete(resultCode)
                 }
             }
         context.sendOrderedBroadcast(
@@ -131,15 +131,15 @@ class BroadcastPlayStoreRestarter(
                     receiverContext: Context,
                     intent: Intent,
                 ) {
-                    completion.complete(resultCode)
+                    broadcastFinished.complete(resultCode)
                 }
             },
             handler,
-            RestartProtocol.RESULT_NO_RECEIVER,
+            RestartProtocol.RESULT_UNSET,
             null,
             null,
         )
-        return awaitRestartAcknowledgement(completion, acknowledgement, freshStart)
+        return awaitRestartResult(broadcastFinished, callbackReply, freshStart)
     }
 
     private fun ResultReceiver.platformCopy(): ResultReceiver {
@@ -175,15 +175,15 @@ class BroadcastPlayStoreRestarter(
     }
 }
 
-internal suspend fun awaitRestartAcknowledgement(
-    completion: Deferred<Int>,
-    acknowledgement: Deferred<Int>,
+internal suspend fun awaitRestartResult(
+    broadcastFinished: Deferred<Int>,
+    callbackReply: Deferred<Int>,
     freshStart: Deferred<Unit>,
 ): Int {
-    val result = completion.await()
-    if (result != RestartProtocol.RESULT_NO_RECEIVER) return result
+    val broadcastResult = broadcastFinished.await()
+    if (broadcastResult != RestartProtocol.RESULT_UNSET) return broadcastResult
     return select {
-        acknowledgement.onAwait { reply -> reply }
+        callbackReply.onAwait { reply -> reply }
         freshStart.onAwait { RestartProtocol.RESULT_RESTARTED_WITHOUT_REPLY }
     }
 }

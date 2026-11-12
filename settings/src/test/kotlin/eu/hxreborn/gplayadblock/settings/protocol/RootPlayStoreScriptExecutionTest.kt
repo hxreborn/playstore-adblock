@@ -9,7 +9,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class RootPlayStoreScriptTest {
+class RootPlayStoreScriptExecutionTest {
     @get:Rule
     val temporary = TemporaryFolder()
 
@@ -60,7 +60,7 @@ class RootPlayStoreScriptTest {
     @Test
     fun `an active install refuses stop and cleanup`() {
         prepare("Active install sessions:\n  installerPackageName=com.android.vending active=true")
-        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, true))
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
         assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
         assertFalse(log.contains("HOST_STUB am"))
         assertFalse(log.contains("HOST_STUB nsenter"))
@@ -69,41 +69,42 @@ class RootPlayStoreScriptTest {
     @Test
     fun `a live purchase refuses stop and cleanup`() {
         prepare(activity = "com.android.vending/com.google.android.finsky.billing.PurchaseActivity")
-        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, true))
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
         assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
         assertFalse(log.contains("HOST_STUB am"))
+        assertFalse(log.contains("HOST_STUB nsenter"))
     }
 
     @Test
-    fun `cleanup refuses a linked cache directory or a linked feed cache`() {
-        val script = RootPlayStoreRestarter.rootScript(10, true)
+    fun `the cleanup script checks cache and stream cache paths for links before removal`() {
+        val script = RootPlayStoreRestarter.stopScript(10, true)
         val cache = "/data/user/10/com.android.vending/cache"
         assertTrue(script.contains("[ ! -L $cache ] && [ ! -L $cache/streamdatastore ] && rm -rf"))
     }
 
     @Test
-    fun `cleanup failure after stop preserves a pending clear`() {
+    fun `a failed stream cache removal after force stop exits with EXIT_CACHE_PENDING`() {
         prepare()
         stub("nsenter", "case \"\$*\" in *'rm -rf'*) exit 1;; esac")
-        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, true))
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
         assertEquals(RootPlayStoreRestarter.EXIT_CACHE_PENDING, code)
         assertTrue(log.contains("HOST_STUB am force-stop --user 10 com.android.vending"))
         assertTrue(log.contains("rm -f $CRASH_GUARD && [ ! -e $CRASH_GUARD ]"))
     }
 
     @Test
-    fun `a kept crash guard fails before the cache cleanup`() {
+    fun `a failed crash guard removal exits before stream cache cleanup`() {
         prepare()
         stub("nsenter", "case \"\$*\" in *'rm -f '*) exit 1;; esac")
-        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, true))
-        assertEquals(RootPlayStoreRestarter.EXIT_GUARD_KEPT, code)
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(RootPlayStoreRestarter.EXIT_CRASH_GUARD_KEPT, code)
         assertFalse(log.contains("rm -rf"))
     }
 
     @Test
-    fun `the guard is removed when no cache clear is requested`() {
+    fun `without a cache clear the script requests crash guard removal only`() {
         prepare()
-        val (code, log) = execute(RootPlayStoreRestarter.rootScript(10, false))
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, false))
         assertEquals(0, code)
         assertTrue(log.contains("rm -f $CRASH_GUARD && [ ! -e $CRASH_GUARD ]"))
         assertFalse(log.contains("rm -rf"))
@@ -132,7 +133,7 @@ class RootPlayStoreScriptTest {
     }
 
     @Test
-    fun `a completed launch and running process confirm reopen`() {
+    fun `a successful launch and a process owned by the target user exit with zero`() {
         prepareOwners()
         stub("am", "printf 'Status: ok\\n'")
         stub("pidof", "printf '1234 5678\\n'")

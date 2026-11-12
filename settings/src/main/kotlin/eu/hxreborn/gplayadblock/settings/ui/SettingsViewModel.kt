@@ -31,6 +31,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 enum class ApplyFailure {
@@ -103,6 +105,7 @@ class SettingsViewModel(
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val phase = MutableStateFlow<ApplyPhase>(ApplyPhase.Idle)
+    private val applyLock = Mutex()
     private val startTabReset = MutableStateFlow<StartTab?>(null)
 
     val uiState: StateFlow<SettingsUiState> =
@@ -132,7 +135,7 @@ class SettingsViewModel(
     init {
         viewModelScope.launch {
             framework.binds.filter { it > 0 }.collect {
-                publishApplied()
+                applyLock.withLock { publishApplied() }
             }
         }
     }
@@ -180,36 +183,38 @@ class SettingsViewModel(
         val current = phase.value
         if (current.isRunning || !phase.compareAndSet(current, ApplyPhase.Saving)) return
         viewModelScope.launch {
-            var restarted = false
-            try {
-                val snapshot = preferences.desiredSettings()
-                val previous = preferences.appliedSettings() ?: FilterSettings()
-                val changedSwitches = snapshot.differingSwitches(previous)
-                if (!framework.publish(snapshot)) {
-                    phase.value = ApplyPhase.Failed(ApplyFailure.NotSent)
-                    return@launch
-                }
-                if (changedSwitches.any { it.category == FilterCategory.CONTENT }) {
-                    preferences.requestStreamCacheClear()
-                }
-                phase.value = ApplyPhase.WaitingForExit
-                val outcome =
-                    route.restart(clearStreamCache = preferences.streamCacheClearPending()) {
-                        phase.value = ApplyPhase.Reopening
+            applyLock.withLock {
+                var restarted = false
+                try {
+                    val snapshot = preferences.desiredSettings()
+                    val previous = preferences.appliedSettings() ?: FilterSettings()
+                    val changedSwitches = snapshot.differingSwitches(previous)
+                    if (!framework.publish(snapshot)) {
+                        phase.value = ApplyPhase.Failed(ApplyFailure.NotSent)
+                        return@launch
                     }
-                val cachePending = outcome == RestartOutcome.RestartedCachePending
-                restarted = outcome == RestartOutcome.Restarted || cachePending
-                if (restarted) {
-                    preferences.markApplied(snapshot, streamCacheClearPending = cachePending)
+                    if (changedSwitches.any { it.category == FilterCategory.CONTENT }) {
+                        preferences.requestStreamCacheClear()
+                    }
+                    phase.value = ApplyPhase.WaitingForExit
+                    val outcome =
+                        route.restart(clearStreamCache = preferences.streamCacheClearPending()) {
+                            phase.value = ApplyPhase.Reopening
+                        }
+                    val cachePending = outcome == RestartOutcome.RestartedCachePending
+                    restarted = outcome == RestartOutcome.Restarted || cachePending
+                    if (restarted) {
+                        preferences.markApplied(snapshot, streamCacheClearPending = cachePending)
+                    }
+                    phase.value = outcome.toPhase()
+                } catch (exception: CancellationException) {
+                    phase.value = ApplyPhase.Idle
+                    throw exception
+                } catch (_: Exception) {
+                    phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
+                } finally {
+                    if (!restarted) withContext(NonCancellable) { publishApplied() }
                 }
-                phase.value = outcome.toPhase()
-            } catch (exception: CancellationException) {
-                phase.value = ApplyPhase.Idle
-                throw exception
-            } catch (_: Exception) {
-                phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
-            } finally {
-                if (!restarted) withContext(NonCancellable) { publishApplied() }
             }
         }
     }

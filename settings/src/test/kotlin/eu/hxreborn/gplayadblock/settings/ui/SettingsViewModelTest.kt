@@ -214,6 +214,62 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `a framework rebind during restart republishes the newly applied snapshot`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        val previous = preferences.appliedSettings()
+        val rebound = Remote()
+        restarter.gate = CompletableDeferred()
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        remote.commits.clear()
+        viewModel.apply()
+        assertEquals(ApplyPhase.WaitingForExit, viewModel.ready().phase)
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
+
+        connection.attach(Any(), FrameworkInfo("Vector", "2.0", 101), rebound::editor)
+        scheduler.runCurrent()
+        assertEquals(previous, preferences.appliedSettings())
+        assertTrue(rebound.commits.isEmpty())
+
+        restarter.gate?.complete(Unit)
+        scheduler.advanceUntilIdle()
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+        assertEquals(preferences.desiredSettings(), preferences.appliedSettings())
+        assertEquals(0, viewModel.ready().pendingCount)
+        assertEquals(true, rebound.commits.single()[FilterSwitch.HIDE_HELP.key])
+        assertEquals(true, rebound.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
+    }
+
+    @Test
+    fun `a framework rebind during a failed restart republishes the previous snapshot`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        viewModel.apply()
+        val previous = preferences.appliedSettings()
+        restarter.gate = CompletableDeferred()
+        restarter.outcome = RestartOutcome.Failed
+        viewModel.setFilter(FilterSwitch.HIDE_LIVE_OPS, true)
+        viewModel.apply()
+        val rebound = Remote()
+        connection.attach(Any(), FrameworkInfo("Vector", "2.0", 101), rebound::editor)
+        scheduler.runCurrent()
+        assertTrue(rebound.commits.isEmpty())
+
+        restarter.gate?.complete(Unit)
+        scheduler.advanceUntilIdle()
+        assertEquals(previous, preferences.appliedSettings())
+        assertEquals(1, viewModel.ready().pendingCount)
+        assertTrue(rebound.commits.isNotEmpty())
+        rebound.commits.forEach { snapshot ->
+            assertEquals(true, snapshot[FilterSwitch.HIDE_HELP.key])
+            assertEquals(false, snapshot[FilterSwitch.HIDE_LIVE_OPS.key])
+        }
+    }
+
+    @Test
     fun `a second apply while one is running is ignored`() {
         connectFramework()
         restarter.gate = CompletableDeferred()

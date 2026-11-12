@@ -112,8 +112,8 @@
     <string name="apply_busy_body">An install, update, or purchase is in progress. Try again when it finishes</string>
     <string name="apply_failed_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_restart_with_root">Restart with root</string>
-    <string name="apply_cache_not_cleared_title">Play Store restarted with cached feeds</string>
-    <string name="apply_cache_not_cleared_body">The feed cache could not be cleared. Try again to apply content filters to cached feeds</string>
+    <string name="apply_cache_not_cleared_title">Play Store restarted</string>
+    <string name="apply_cache_not_cleared_body">Cached feeds may still need clearing. Try again to apply content filters to cached feeds</string>
     <string name="apply_root_unavailable_title">Root access isn\'t available</string>
     <string name="apply_root_unavailable_body">Allow GPlay Adblock in your root manager, or close Play Store from its app info</string>
     <string name="apply_app_info">Play Store app info</string>

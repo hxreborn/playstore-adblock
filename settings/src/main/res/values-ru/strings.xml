@@ -109,8 +109,8 @@
     <string name="apply_busy_body">Идёт установка, обновление или покупка. Повторите попытку после завершения</string>
     <string name="apply_failed_body">Закройте его в сведениях о приложении, повторите попытку или перезапустите его с root</string>
     <string name="apply_restart_with_root">Перезапустить с root</string>
-    <string name="apply_cache_not_cleared_title">Play Market перезапущен с кэшированными лентами</string>
-    <string name="apply_cache_not_cleared_body">Не удалось очистить кэш лент. Повторите попытку, чтобы фильтры контента применились к кэшированным лентам</string>
+    <string name="apply_cache_not_cleared_title">Play Market перезапущен</string>
+    <string name="apply_cache_not_cleared_body">Возможно, кэшированные ленты ещё нужно очистить. Повторите попытку, чтобы применить к ним фильтры контента</string>
     <string name="apply_root_unavailable_title">Root-доступ недоступен</string>
     <string name="apply_root_unavailable_body">Разрешите GPlay Adblock в root-менеджере или закройте Play Market в сведениях о приложении</string>
     <string name="apply_app_info">Сведения о Play Market</string>

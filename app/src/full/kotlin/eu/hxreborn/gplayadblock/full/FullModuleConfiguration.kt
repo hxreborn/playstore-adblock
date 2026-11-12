@@ -44,6 +44,9 @@ class FullModuleConfiguration(
         } catch (exception: ReflectiveOperationException) {
             Logger.error("content filters unavailable, sponsored filtering only", exception)
             sponsored
+        } catch (exception: RuntimeException) {
+            Logger.error("content filters unavailable, sponsored filtering only", exception)
+            sponsored
         } catch (error: LinkageError) {
             Logger.error("content filters unavailable, sponsored filtering only", error)
             sponsored

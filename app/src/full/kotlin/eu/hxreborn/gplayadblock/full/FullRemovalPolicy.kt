@@ -14,11 +14,10 @@ import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import java.lang.reflect.Field
 import java.lang.reflect.Method
-import java.lang.reflect.Modifier
 import java.util.Collections
 import java.util.WeakHashMap
 
-class FullRemovalPolicy(
+class FullRemovalPolicy internal constructor(
     private val sponsored: PresentationClassifier,
     private val presentationKindField: Field,
     private val presentationPayloadField: Field,
@@ -31,6 +30,8 @@ class FullRemovalPolicy(
     private val hideLiveOps: Boolean,
     private val hidePreRegistrationGames: Boolean,
     private val hideSearchPromotions: Boolean,
+    internal val embeddedFields: EmbeddedEditorialFields =
+        EmbeddedEditorialFields(emptyMap(), emptyMap()),
     private val reportFailure: (Exception) -> Unit = { exception ->
         Logger.error("optional content classification failed", exception)
     },
@@ -100,13 +101,7 @@ class FullRemovalPolicy(
         val details = detailsField.get(payload) ?: return null
         val mediaField = protobufChildContaining(details, LIVE_OP_DETAILS_MARKER) ?: return null
         val media = mediaField.get(details) ?: return null
-        val mediaItemsField =
-            instanceFields(media)
-                .filter { field ->
-                    field.isAccessible = true
-                    field.get(media) is List<*>
-                }.singleOrNull()
-                ?: return null
+        val mediaItemsField = embeddedFields.mediaItemsByClass[media.javaClass] ?: return null
         val mediaItems = mediaItemsField.get(media) as? List<*> ?: return null
         val filteredMediaItems =
             mediaItems.filterNot { item ->
@@ -141,19 +136,14 @@ class FullRemovalPolicy(
         owner: Any,
         marker: ByteArray,
     ): Field? =
-        instanceFields(owner)
+        embeddedFields.childrenByClass[owner.javaClass]
+            .orEmpty()
             .filter { field ->
-                field.isAccessible = true
                 val value = field.get(owner) ?: return@filter false
                 protobufToByteArrayMethod.declaringClass.isInstance(value) &&
                     (protobufToByteArrayMethod.invoke(value) as? ByteArray)
                         ?.containsSubsequence(marker) == true
             }.singleOrNull()
-
-    private fun instanceFields(owner: Any): List<Field> =
-        owner.javaClass.declaredFields.filterNot { field ->
-            field.isSynthetic || Modifier.isStatic(field.modifiers)
-        }
 
     private fun lengthDelimitedField(
         message: ByteArray,
@@ -272,6 +262,15 @@ class FullRemovalPolicy(
                 cardKindField = targets.cardKindField.resolve(classLoader),
                 cardPayloadField = targets.cardPayloadField.resolve(classLoader),
                 protobufToByteArrayMethod = targets.protobufToByteArrayMethod.resolve(classLoader),
+                embeddedFields =
+                    if (settings.isOn(FilterSwitch.HIDE_LIVE_OPS)) {
+                        EmbeddedEditorialFields.resolve(
+                            targets.cardKindField.resolve(classLoader).declaringClass,
+                            targets.protobufToByteArrayMethod.resolve(classLoader).declaringClass,
+                        )
+                    } else {
+                        EmbeddedEditorialFields(emptyMap(), emptyMap())
+                    },
                 hideLiveOps = settings.isOn(FilterSwitch.HIDE_LIVE_OPS),
                 hidePreRegistrationGames = settings.isOn(FilterSwitch.HIDE_PRE_REGISTRATION_GAMES),
                 hideSearchPromotions = settings.isOn(FilterSwitch.HIDE_SEARCH_PROMOTIONS),

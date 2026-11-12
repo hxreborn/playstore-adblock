@@ -9,7 +9,6 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.IdentityHashMap
-import java.util.concurrent.ConcurrentHashMap
 
 object StreamCacheFilter {
     fun install(
@@ -214,22 +213,25 @@ object StreamCacheFilter {
             return Replacement(replacementRoot, filteredRootChildren, replacementNodes)
         }
 
-        private val presentationFields = ConcurrentHashMap<Class<*>, Field>()
+        private val resolvedPresentationField =
+            if (classifier is PresentationClassifier) {
+                null
+            } else {
+                nodeClass.declaredFields
+                    .filter { field ->
+                        !Modifier.isStatic(field.modifiers) &&
+                            (
+                                field.type == Any::class.java ||
+                                    field.type == presentationAccessor.returnType
+                            )
+                    }.singleOrNull()
+                    ?.apply { isAccessible = true }
+            }
 
         private fun presentationField(
             node: Any,
             presentation: Any,
-        ): Field? {
-            presentationFields[node.javaClass]?.let { cached ->
-                return cached.takeIf { it.get(node) === presentation }
-            }
-            return node.javaClass.declaredFields
-                .filter { field -> !Modifier.isStatic(field.modifiers) && !field.type.isPrimitive }
-                .onEach { field -> field.isAccessible = true }
-                .filter { field -> field.get(node) === presentation }
-                .singleOrNull()
-                ?.also { field -> presentationFields[node.javaClass] = field }
-        }
+        ): Field? = resolvedPresentationField?.takeIf { it.get(node) === presentation }
 
         private fun record(
             node: Any,

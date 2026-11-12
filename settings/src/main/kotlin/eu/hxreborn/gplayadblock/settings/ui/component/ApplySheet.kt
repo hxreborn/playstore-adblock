@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,6 +62,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
@@ -158,6 +164,14 @@ fun ApplySheetScaffold(
             LocalWindowInfo.current.containerSize.height
                 .toDp() < CompactWindowHeight
         }
+    val failureMaxHeight =
+        with(LocalDensity.current) {
+            (
+                LocalWindowInfo.current.containerSize.height -
+                    WindowInsets.safeDrawing.getTop(this) - handleHeightPx
+            ).coerceAtLeast(0)
+                .toDp()
+        }
     val bodyMotionScheme = MaterialTheme.motionScheme
     MaterialTheme(motionScheme = MotionScheme.expressive()) {
         BottomSheetScaffold(
@@ -186,6 +200,7 @@ fun ApplySheetScaffold(
                             onTryAgain = onApply,
                             onOpenPlayStoreInfo = onOpenPlayStoreInfo,
                             extraAction = extraFailureAction,
+                            maxHeight = failureMaxHeight,
                             onPeekBlockHeight = { peekBlockHeightPx = it },
                         )
                     }
@@ -347,6 +362,7 @@ private fun FailureSheet(
     onTryAgain: () -> Unit,
     onOpenPlayStoreInfo: () -> Unit,
     extraAction: FailureAction?,
+    maxHeight: Dp,
     onPeekBlockHeight: (Int) -> Unit,
 ) {
     val actions =
@@ -360,7 +376,21 @@ private fun FailureSheet(
             FailureAction(R.string.apply_try_again, onTryAgain),
         )
     Column(
-        modifier = Modifier.peekBlock(onPeekBlockHeight),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight)
+                .onSizeChanged { onPeekBlockHeight(it.height) }
+                .verticalScroll(rememberScrollState())
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                    ),
+                ).padding(
+                    start = Tokens.RowPadding,
+                    end = Tokens.RowPadding,
+                    bottom = Tokens.RowPadding,
+                ),
         verticalArrangement = Arrangement.spacedBy(Tokens.RowPadding),
     ) {
         SheetMessage(

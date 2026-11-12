@@ -17,6 +17,7 @@ material3 = "1.5.0-rc01"
 navigation3 = "1.2.1"
 snakeyaml = "2.7"
 splashscreen = "1.2.0"
+robolectric = "4.17"
 
 [libraries]
 aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlibraries" }
@@ -34,6 +35,8 @@ compose-material3 = { module = "androidx.compose.material3:material3", version.r
 compose-preferences = { module = "me.zhanghai.compose.preference:preference", version.ref = "composePreferences" }
 compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
@@ -45,6 +48,8 @@ ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposedApi" }
 libxposed-service = { module = "io.github.libxposed:service", version.ref = "libxposedService" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [plugins]
 aboutlibraries-android = { id = "com.mikepenz.aboutlibraries.plugin.android", version.ref = "aboutlibraries" }

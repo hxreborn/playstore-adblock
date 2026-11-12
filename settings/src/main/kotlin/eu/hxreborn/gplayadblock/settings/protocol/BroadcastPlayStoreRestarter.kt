@@ -12,6 +12,7 @@ import android.os.Looper
 import android.os.Parcel
 import android.os.ResultReceiver
 import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.selects.select
@@ -159,14 +160,17 @@ class BroadcastPlayStoreRestarter(
         return try {
             context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             true
-        } catch (_: ActivityNotFoundException) {
+        } catch (exception: ActivityNotFoundException) {
+            Log.w(TAG, "opening Play Store failed", exception)
             false
-        } catch (_: SecurityException) {
+        } catch (exception: SecurityException) {
+            Log.w(TAG, "opening Play Store failed", exception)
             false
         }
     }
 
     companion object {
+        private const val TAG = "GPlayAdblock"
         private const val REPLY_TIMEOUT_MILLIS = 15_000L
     }
 }

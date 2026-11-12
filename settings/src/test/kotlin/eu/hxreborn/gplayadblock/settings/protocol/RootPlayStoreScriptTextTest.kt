@@ -17,9 +17,9 @@ class RootPlayStoreScriptTextTest {
     fun `install and purchase checks precede force stop in the script`() {
         val lines = lines()
         val stop = lines.stepIndex("am force-stop --user 10 ")
-        assertTrue(
-            lines.stepIndex("installerPackageName=${RestartProtocol.PLAY_STORE_PACKAGE} ") < stop,
-        )
+        val sessions = lines.stepIndex("awk '${RootPlayStoreRestarter.BLOCKING_SESSION_FILTER}'")
+        assertTrue(sessions < stop)
+        assertTrue(lines[sessions].endsWith("|| exit ${RootPlayStoreRestarter.EXIT_BUSY}"))
         assertTrue(lines.stepIndex(RestartProtocol.PURCHASE_ACTIVITY_PACKAGE) < stop)
     }
 

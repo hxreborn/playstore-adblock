@@ -66,6 +66,74 @@ class RootPlayStoreScriptExecutionTest {
         assertFalse(log.contains("HOST_STUB nsenter"))
     }
 
+    private fun session(
+        header: String,
+        installer: String,
+        staged: Boolean,
+        committed: Boolean,
+    ) = "  $header:\n" +
+        "    userId=0 mOriginalInstallerPackageName=$installer \n" +
+        "    installerPackageName=$installer installInitiatingPackageName=$installer \n" +
+        "    isMultiPackage=false isStaged=$staged forceQueryable=false \n" +
+        "    mProgress=0.8 mCommitted=$committed mSealed=$committed \n" +
+        "    params.isMultiPackage=false params.isStaged=true \n"
+
+    @Test
+    fun `a system update waiting for reboot does not block the restart`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Active Session 1", STORE, staged = true, committed = true) +
+                session("Active Child Session 2", STORE, staged = true, committed = true),
+        )
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(0, code)
+        assertTrue(log.contains("HOST_STUB am force-stop --user 10 com.android.vending"))
+    }
+
+    @Test
+    fun `a staged update still being written blocks the restart`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Active Session 1", STORE, staged = true, committed = false),
+        )
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
+        assertFalse(log.contains("HOST_STUB am"))
+    }
+
+    @Test
+    fun `an app install next to a waiting system update blocks the restart`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Active Session 1", STORE, staged = true, committed = true) +
+                session("Active Session 2", STORE, staged = false, committed = true),
+        )
+        val (code, _) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
+    }
+
+    @Test
+    fun `sessions with headers without the Active prefix are checked one by one`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Session 1", STORE, staged = true, committed = true) +
+                session("Session 2", STORE, staged = false, committed = false),
+        )
+        val (code, log) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(RootPlayStoreRestarter.EXIT_BUSY, code)
+        assertFalse(log.contains("HOST_STUB am"))
+    }
+
+    @Test
+    fun `another installer's session does not block the restart`() {
+        prepare(
+            "Active install sessions:\n" +
+                session("Active Session 1", "com.example.store", staged = false, committed = false),
+        )
+        val (code, _) = execute(RootPlayStoreRestarter.stopScript(10, true))
+        assertEquals(0, code)
+    }
+
     @Test
     fun `a live purchase refuses stop and cleanup`() {
         prepare(activity = "com.android.vending/com.google.android.finsky.billing.PurchaseActivity")
@@ -120,6 +188,7 @@ class RootPlayStoreScriptExecutionTest {
     }
 
     private companion object {
+        const val STORE = RestartProtocol.PLAY_STORE_PACKAGE
         const val CRASH_GUARD =
             "/data/user/10/com.android.vending/${RestartProtocol.CRASH_GUARD_PATH}"
     }

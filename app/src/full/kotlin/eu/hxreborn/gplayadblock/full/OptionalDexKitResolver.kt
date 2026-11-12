@@ -503,6 +503,31 @@ object OptionalDexKitResolver {
         if (actionFields.size != 2 || actionFields.map(FieldData::typeName).distinct().size != 1) {
             throw ResolutionFailure("nav action fields=${actionFields.size}")
         }
+        val actionDescription =
+            navActionClass.methods.singleOrNull { method ->
+                method.methodName == "toString" && method.paramCount == 0 &&
+                    method.usingStrings.filter { it != ")" } ==
+                    listOf(
+                        NAV_ACTION_ANCHOR,
+                        ", onPersistentNavItemOnboardingAnimationPlayed=",
+                    )
+            } ?: throw ResolutionFailure("nav action role description missing or ambiguous")
+        val roleReads =
+            actionDescription.opNames
+                .filter { operation ->
+                    operation.startsWith("const-string") || operation == "iget-object"
+                }.map { operation ->
+                    if (operation.startsWith("const-string")) "string" else "field"
+                }
+        if (roleReads != listOf("string", "field", "string", "field") &&
+            roleReads != listOf("string", "field", "string", "field", "string")
+        ) {
+            throw ResolutionFailure("nav action role read order is not established")
+        }
+        val describedFields = actionDescription.usingFields.map { it.field }
+        if (describedFields.size != 2 || describedFields.toSet() != actionFields.toSet()) {
+            throw ResolutionFailure("nav action role fields missing or ambiguous")
+        }
         val callbackClassName = actionFields.first().typeName
         val callbackClass =
             bridge.getClassData(callbackClassName)
@@ -545,8 +570,8 @@ object OptionalDexKitResolver {
         return PersistentNavTargets(
             navConstructor = navConstructor.toConstructorRef(),
             navItemTypeField = navItemTypeField.toRef(),
-            navPrimaryCallbackField = actionFields[0].toRef(),
-            navSecondaryCallbackField = actionFields[1].toRef(),
+            navPrimaryCallbackField = describedFields[0].toRef(),
+            navSecondaryCallbackField = describedFields[1].toRef(),
             navActionConstructor = actionConstructor.toConstructorRef(),
             navCallbackMethod = callbackMethod.toRef(),
             navHiddenInstanceField = navHiddenField?.toRef(),

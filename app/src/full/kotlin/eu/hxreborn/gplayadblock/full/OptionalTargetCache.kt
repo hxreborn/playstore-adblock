@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 object OptionalTargetCache {
-    const val SCHEMA_VERSION = 3
+    const val SCHEMA_VERSION = 4
     private const val FILE_PREFIX = "optional-targets-"
 
     fun load(

@@ -35,6 +35,12 @@ object PersistentNavFilter {
         val secondaryCallbackField = targets.navSecondaryCallbackField.resolve(classLoader)
         val actionConstructor = targets.navActionConstructor.resolve(classLoader)
         val callbackMethod = targets.navCallbackMethod.resolve(classLoader)
+        val actionArguments =
+            NavActionArguments.resolve(
+                actionConstructor,
+                primaryCallbackField,
+                secondaryCallbackField,
+            )
         val callbackClass = callbackMethod.declaringClass
         require(callbackClass.isInterface) { "nav callback ${callbackClass.name} is no interface" }
         val navHidden =
@@ -116,8 +122,10 @@ object PersistentNavFilter {
                     arguments[positions.items] = retained.map { it.value }
                     arguments[positions.action] =
                         actionConstructor.newInstance(
-                            filteredCallback,
-                            secondaryCallbackField.get(originalAction),
+                            *actionArguments.values(
+                                filteredCallback,
+                                secondaryCallbackField.get(originalAction),
+                            ),
                         )
                 }
                 arguments[positions.selected] = plan.selectedPosition

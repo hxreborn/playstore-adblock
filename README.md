@@ -43,44 +43,36 @@
 ## Install
 
 1. Download one APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases):
-   - **Core** (`playstore-adblock-v<version>-core-arm64-v8a.apk`): ad blocking only, with no app icon or settings screen. This is the same module earlier releases shipped
-   - **Full** (`playstore-adblock-v<version>-full-arm64-v8a.apk`): the same ad blocking plus optional Play Store filters and a settings app
+   - **Core**: ad blocking only, with no app icon or settings. This is the module earlier releases shipped
+   - **Full**: the same ad blocking plus optional filters and a settings app
 2. Enable the module in your Xposed manager, scoped to Google Play Store (`com.android.vending`)
 3. Force-stop the Play Store so it restarts with the module active
 
-Core and Full are one package signed with the same key, so installing one replaces the other and the
-module is still enabled afterwards. Core ignores the Full settings but keeps them, and installing Full again brings them
-back. Force-stop the Play Store after switching.
+Core and Full install over each other, and your Full settings come back when you switch back to Full.
+If you use Full, check that your Xposed manager's update picks the Full APK. Some managers install the
+first APK in a release, which is Core.
 
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
 ## Optional filters (Full)
 
-Every filter is off by default, and ad blocking never depends on them:
+Turn on the ones you want in the settings app. Ad blocking works without them:
 
 - **Content**: editorial promotion cards, the pre-registration games shelf, promoted search shelves
-- **Account menu**: the notification badge, Help & feedback, Personalization in Google Play
+- **Account menu**: notification badge, Help & feedback, Personalization, Play Points reminder,
+  Notifications & offers, Payments & subscriptions, experimental features, Library, Play Pass
 - **Manage apps & device**: Play Protect, device sync, Ratings & reviews, Contributions
-- **Navigation**: the Games, Apps, Books and You tabs, a minimal Search home, and a start screen
-- **Play Store updates**: block Play Store self-updates (other apps keep updating)
+- **Navigation**: the Games, Apps, Books and You tabs, a minimal Search home, the tab Play Store opens on
+- **Play Store updates**: block Play Store self-updates. Other apps still update
 
-The settings app saves changes on the device. **Apply and restart Play Store** sends them to your Xposed
-manager, closes Play Store, and opens it again with the new filters. When a content filter changed it also
-clears Play Store's cached feeds (`cache/streamdatastore`). If that clear fails, Play Store still restarts and
-Apply keeps the changes pending for another attempt. Play Store refuses the restart while
-it is installing apps or in a purchase. If Play Store doesn't respond, **Restart with root** makes the same
-checks and clears the same folder through `su`, then opens Play Store again. A filter whose target is not found on a Play Store release is skipped,
-and that screen looks as it does without the module.
+Open the settings from the app drawer or from the module in your Xposed manager. Changes take effect
+after **Apply and restart Play Store**. You can hide the launcher icon in **Appearance and icon**.
 
-If Play Store crashes three times within two minutes, the filters are skipped on the following launches while
-ad blocking keeps working. Updating Play Store or the module, or **Apply and restart Play Store**, turns them back on.
-
-Open the settings from the app drawer or from the module entry in your Xposed manager. The launcher icon can
-be hidden in **Appearance and icon**.
-
-To update Full, download the Full APK from Releases. Managers that install the first APK in a release
-can replace Full with Core, so select the flavor when updating.
+Google changes these Play Store screens often. A filter that can't find its target on your Play Store
+version does nothing, and that screen looks as it does without the module. If Play Store crashes three
+times in two minutes, the module turns the optional filters off and shows a message. Ad blocking keeps
+working, and the next **Apply and restart Play Store** turns them back on.
 
 ## Compatibility
 

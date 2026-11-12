@@ -59,6 +59,20 @@ class RootPlayStoreRestarter(
         private const val PER_USER_UID_RANGE = 100_000
         private const val ACTIVE_SESSIONS_HEADER = "Active install sessions:"
 
+        // Exits 1 when a Play Store install session would be aborted by stopping Play Store. Each
+        // "Active Session"/"Active Child Session" block is one session. A committed staged session
+        // (a system update waiting for the next reboot) stays listed until that reboot, but the
+        // system applies it without Play Store, so it does not count.
+        internal val BLOCKING_SESSION_FILTER =
+            "/^ *Active (Child )?Session [0-9]+:/ { " +
+                "if (mine && !(staged && committed)) busy = 1; mine = staged = committed = 0 } " +
+                "/ installerPackageName=" +
+                RestartProtocol.PLAY_STORE_PACKAGE.replace(".", "\\.") +
+                "( |\$)/ { mine = 1 } " +
+                "/ isStaged=true( |\$)/ { staged = 1 } " +
+                "/ mCommitted=true( |\$)/ { committed = 1 } " +
+                "END { if (mine && !(staged && committed)) busy = 1; exit busy }"
+
         @SuppressLint("SdCardPath")
         private fun dataDir(userId: Int): String =
             "/data/user/$userId/${RestartProtocol.PLAY_STORE_PACKAGE}"
@@ -84,7 +98,7 @@ class RootPlayStoreRestarter(
                 "sessions=\$(printf '%s\\n' \"\$package_state\" | " +
                     "sed -n '/^$ACTIVE_SESSIONS_HEADER/,/^[^ ]/p')",
                 "case \"\$sessions\" in '$ACTIVE_SESSIONS_HEADER'*) ;; *) exit $EXIT_FAILED ;; esac",
-                "case \"\$sessions\" in *'installerPackageName=$target '*) exit $EXIT_BUSY ;; esac",
+                "printf '%s\\n' \"\$sessions\" | awk '$BLOCKING_SESSION_FILTER' || exit $EXIT_BUSY",
                 "activities=\$(dumpsys activity activities) || exit $EXIT_FAILED",
                 "case \"\$activities\" in *'$purchaseActivity'*) exit $EXIT_BUSY ;; esac",
                 "am force-stop --user $userId $target || exit $EXIT_FAILED",

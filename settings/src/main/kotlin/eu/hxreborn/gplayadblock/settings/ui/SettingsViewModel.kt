@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.settings.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -37,6 +38,7 @@ import kotlinx.coroutines.withContext
 
 enum class ApplyFailure {
     NotSent,
+    SettingsFailed,
     Busy,
     NoReply,
     RestartFailed,
@@ -197,9 +199,18 @@ class SettingsViewModel(
                         preferences.requestStreamCacheClear()
                     }
                     phase.value = ApplyPhase.WaitingForExit
+                    val clearStreamCache = preferences.streamCacheClearPending()
                     val outcome =
-                        route.restart(clearStreamCache = preferences.streamCacheClearPending()) {
-                            phase.value = ApplyPhase.Reopening
+                        try {
+                            route.restart(clearStreamCache = clearStreamCache) {
+                                phase.value = ApplyPhase.Reopening
+                            }
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            Log.e(TAG, "Play Store restart failed", exception)
+                            phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
+                            return@launch
                         }
                     val cachePending = outcome == RestartOutcome.RestartedCachePending
                     restarted = outcome == RestartOutcome.Restarted || cachePending
@@ -210,8 +221,9 @@ class SettingsViewModel(
                 } catch (exception: CancellationException) {
                     phase.value = ApplyPhase.Idle
                     throw exception
-                } catch (_: Exception) {
-                    phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
+                } catch (exception: Exception) {
+                    Log.e(TAG, "applying settings failed", exception)
+                    phase.value = ApplyPhase.Failed(ApplyFailure.SettingsFailed)
                 } finally {
                     if (!restarted) withContext(NonCancellable) { publishApplied() }
                 }
@@ -230,9 +242,18 @@ class SettingsViewModel(
         }
 
     private suspend fun publishApplied(): Boolean =
-        framework.publish(preferences.appliedSettings() ?: FilterSettings())
+        try {
+            framework.publish(preferences.appliedSettings() ?: FilterSettings())
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Log.w(TAG, "publishing applied settings failed", exception)
+            false
+        }
 
     companion object {
+        private const val TAG = "GPlayAdblock"
+
         val ROOT_RECOVERABLE_FAILURES =
             setOf(
                 ApplyFailure.NoReply,

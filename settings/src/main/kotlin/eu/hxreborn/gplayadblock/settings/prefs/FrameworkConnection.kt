@@ -1,8 +1,10 @@
 package eu.hxreborn.gplayadblock.settings.prefs
 
 import android.content.SharedPreferences
+import android.util.Log
 import io.github.libxposed.service.XposedService
 import io.github.libxposed.service.XposedServiceHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +46,7 @@ class FrameworkConnection(
             try {
                 FrameworkInfo(service.frameworkName, service.frameworkVersion, service.apiVersion)
             } catch (exception: RuntimeException) {
+                Log.w(TAG, "framework info read failed", exception)
                 null
             }
         attach(service, info) { service.getRemotePreferences(SettingsKeys.GROUP).edit() }
@@ -80,9 +83,16 @@ class FrameworkConnection(
                 val current = session.value ?: return@withContext false
                 try {
                     SettingsKeys.write(settings, current.openRemoteEditor()).commit()
+                } catch (exception: CancellationException) {
+                    throw exception
                 } catch (exception: RuntimeException) {
+                    Log.w(TAG, "remote preferences commit failed", exception)
                     false
                 }
             }
         }
+
+    companion object {
+        private const val TAG = "GPlayAdblock"
+    }
 }

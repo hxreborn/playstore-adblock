@@ -77,7 +77,9 @@ class SettingsViewModelTest {
     private val connection = FrameworkConnection(Dispatchers.Unconfined)
     private val restarter = RecordingRestarter()
     private val rootRestarter = RecordingRestarter()
-    private val preferences = PrefsRepository(FakeSharedPreferences(), FakeSharedPreferences())
+    private val desired = FakeSharedPreferences()
+    private val applied = FakeSharedPreferences()
+    private val preferences = PrefsRepository(desired, applied)
     private val appearance = AppearanceRepository(FakeSharedPreferences())
 
     @Before
@@ -382,6 +384,34 @@ class SettingsViewModelTest {
         viewModel.apply()
         assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
         assertEquals(0, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a settings read failure reports SettingsFailed without requesting a restart`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        desired.readFailure = IllegalStateException("settings read failed")
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.SettingsFailed), viewModel.ready().phase)
+        assertTrue(restarter.clearRequests.isEmpty())
+        assertEquals(1, viewModel.ready().pendingCount)
+    }
+
+    @Test
+    fun `a failed applied snapshot write reports SettingsFailed after a successful restart`() {
+        connectFramework()
+        val viewModel = viewModel()
+        viewModel.setFilter(FilterSwitch.HIDE_HELP, true)
+        applied.editFailure = IllegalStateException("settings write failed")
+        remote.commits.clear()
+        viewModel.apply()
+        assertEquals(ApplyPhase.Failed(ApplyFailure.SettingsFailed), viewModel.ready().phase)
+        assertEquals(listOf(false), restarter.clearRequests)
+        assertEquals(1, remote.commits.size)
+        assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_HELP.key])
+        assertEquals(1, viewModel.ready().pendingCount)
+        assertNull(preferences.appliedSettings())
     }
 
     @Test

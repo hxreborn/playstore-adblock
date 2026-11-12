@@ -158,4 +158,6 @@
     <string name="launcher_icon_hide_title">Скрыть значок?</string>
     <string name="launcher_icon_hide_body">GPlay Adblock пропадёт из списка приложений. Открывайте настройки из Xposed-менеджера.</string>
     <string name="launcher_icon_hide_confirm">Скрыть значок</string>
+    <string name="apply_settings_failed_title">Не удалось применить настройки</string>
+    <string name="apply_settings_failed_body">Повторите попытку. Если ошибка повторится, проверьте журналы модуля</string>
 </resources>

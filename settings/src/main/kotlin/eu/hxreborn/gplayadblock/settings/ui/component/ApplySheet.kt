@@ -413,6 +413,7 @@ private fun FailureSheet(
 private fun failureTitleRes(reason: ApplyFailure): Int =
     when (reason) {
         ApplyFailure.NotSent -> R.string.status_not_sent_title
+        ApplyFailure.SettingsFailed -> R.string.apply_settings_failed_title
         ApplyFailure.Busy -> R.string.apply_busy_title
         ApplyFailure.NoReply -> R.string.apply_no_reply_title
         ApplyFailure.RestartFailed -> R.string.status_failed_title
@@ -423,6 +424,7 @@ private fun failureTitleRes(reason: ApplyFailure): Int =
 private fun failureBodyRes(reason: ApplyFailure): Int =
     when (reason) {
         ApplyFailure.NotSent -> R.string.apply_not_sent_body
+        ApplyFailure.SettingsFailed -> R.string.apply_settings_failed_body
         ApplyFailure.Busy -> R.string.apply_busy_body
         ApplyFailure.NoReply -> R.string.apply_no_reply_body
         ApplyFailure.RestartFailed -> R.string.apply_failed_body

@@ -160,4 +160,6 @@
     <string name="launcher_icon_hide_title">Hide launcher icon?</string>
     <string name="launcher_icon_hide_body">GPlay Adblock leaves your app drawer. Open these settings from your Xposed manager instead.</string>
     <string name="launcher_icon_hide_confirm">Hide icon</string>
+    <string name="apply_settings_failed_title">Could not apply settings</string>
+    <string name="apply_settings_failed_body">Try again. If it still fails, check the module logs</string>
 </resources>

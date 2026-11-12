@@ -238,14 +238,14 @@ object OptionalDexKitResolver {
                 ?: throw ResolutionFailure("account immutable lists=${immutableLists.size}")
         val roleEnum = anchored.single(*accountRoleAnchors.toTypedArray())
         if (roleEnum.superClass?.name != "java.lang.Enum") {
-            throw ResolutionFailure("account role class ${roleEnum.name} is no enum")
+            throw ResolutionFailure("account role class ${roleEnum.name} is not an enum")
         }
         return AccountMenuTargets(
             featuresClassName = featuresClass.name,
             immutableListClassName = immutableList.name,
             actionRoleField =
                 actionRoleField(bridge, roleEnum)?.toRef()
-                    ?: throw ResolutionFailure("account action role field not unique"),
+                    ?: throw ResolutionFailure("account action role field missing or ambiguous"),
         )
     }
 
@@ -347,7 +347,7 @@ object OptionalDexKitResolver {
         val hashCode =
             topBar.methods.singleOrNull { method ->
                 method.methodName == "hashCode" && method.paramCount == 0
-            } ?: throw ResolutionFailure("notification top bar hashCode not unique")
+            } ?: throw ResolutionFailure("notification top bar hashCode missing or ambiguous")
         val operations = hashCode.opNames
         val badgeField = hashCode.usingFields.firstOrNull()?.field
         if (operations.size < 2 || !operations[0].startsWith("iget-object") ||
@@ -359,7 +359,7 @@ object OptionalDexKitResolver {
             topBar.methods.singleOrNull { method ->
                 method.isConstructor &&
                     method.paramTypeNames.count { it == badgeField.typeName } == 1
-            } ?: throw ResolutionFailure("notification badge constructor not unique")
+            } ?: throw ResolutionFailure("notification badge constructor missing or ambiguous")
         return AccountMenuTargets(
             notificationTopBarConstructor = constructor.toConstructorRef(),
             notificationBadgeTypeName = badgeField.typeName,
@@ -507,7 +507,10 @@ object OptionalDexKitResolver {
                 !Modifier.isStatic(field.modifiers)
             }
         if (actionFields.size != 2 || actionFields.map(FieldData::typeName).distinct().size != 1) {
-            throw ResolutionFailure("nav action fields=${actionFields.size}")
+            throw ResolutionFailure(
+                "nav action fields=${actionFields.size} " +
+                    "distinctTypes=${actionFields.map(FieldData::typeName).distinct().size}",
+            )
         }
         val actionDescription =
             navActionClass.methods.singleOrNull { method ->
@@ -555,7 +558,7 @@ object OptionalDexKitResolver {
             navActionClass.methods.singleOrNull { method ->
                 method.isConstructor &&
                     method.paramTypeNames == listOf(callbackClassName, callbackClassName)
-            } ?: throw ResolutionFailure("nav action constructor not unique")
+            } ?: throw ResolutionFailure("nav action constructor missing or ambiguous")
         val navConstructors =
             navClass.methods.filter { method ->
                 val types = method.paramTypeNames

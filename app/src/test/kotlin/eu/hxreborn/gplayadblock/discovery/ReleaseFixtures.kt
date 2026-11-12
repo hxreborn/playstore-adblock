@@ -60,6 +60,10 @@ object ReleaseFixtures {
                 "$HOST_RESOLVER_LIBRARY is not on java.library.path"
             }
 
+            DexKitResolver.hasNativeLoadFailure() -> {
+                "$HOST_RESOLVER_LIBRARY cannot be loaded on this host"
+            }
+
             else -> {
                 null
             }

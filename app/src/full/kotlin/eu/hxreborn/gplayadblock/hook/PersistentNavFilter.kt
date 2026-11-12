@@ -28,7 +28,7 @@ object PersistentNavFilter {
         classLoader: ClassLoader,
         settings: FilterSettings,
         targets: PersistentNavTargets,
-    ) {
+    ): Boolean {
         val constructor = targets.navConstructor.resolve(classLoader)
         val itemTypeField = targets.navItemTypeField.resolve(classLoader)
         val primaryCallbackField = targets.navPrimaryCallbackField.resolve(classLoader)
@@ -42,13 +42,18 @@ object PersistentNavFilter {
                 secondaryCallbackField,
             )
         val callbackClass = callbackMethod.declaringClass
-        require(callbackClass.isInterface) { "nav callback ${callbackClass.name} is no interface" }
+        require(
+            callbackClass.isInterface,
+        ) { "nav callback ${callbackClass.name} is not an interface" }
         val navHidden =
             if (settings.isOn(FilterSwitch.MINIMAL_SEARCH_HOME)) {
                 targets.navHiddenInstanceField?.resolve(classLoader)?.get(null)
             } else {
                 null
             }
+        if (settings.isOn(FilterSwitch.MINIMAL_SEARCH_HOME) && navHidden == null) {
+            Logger.warn("navigation visibility target unresolved, bottom bar kept")
+        }
         val positions = NavArguments.of(constructor, actionConstructor.declaringClass, navHidden)
         val hiddenTypes = settings.hiddenTabs().mapTo(mutableSetOf(), StartTab::name)
         val startTab = settings.startTab.name
@@ -148,6 +153,7 @@ object PersistentNavFilter {
                 }
                 result
             }
+        return true
     }
 
     private class NavArguments(

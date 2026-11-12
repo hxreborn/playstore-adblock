@@ -137,13 +137,13 @@ object StreamCacheFilter {
                     val node = requireNotNull(entry.value)
                     key to record(node, keyFor)
                 }
-            val adCasesByKey = LinkedHashMap<String, Int>()
+            val removableCasesByKey = LinkedHashMap<String, Int>()
             val presentationRewrites = HashMap<String, Pair<Field, Any>>()
             for ((key, record) in records) {
                 val presentation = presentationAccessor.invoke(record.node) ?: continue
                 val case = classifier.classify(presentation)
                 if (classifier.isRemovable(case)) {
-                    adCasesByKey[key] = case
+                    removableCasesByKey[key] = case
                 } else {
                     classifier.strippedPresentation(presentation, editor)?.let { stripped ->
                         presentationField(record.node, presentation)?.let { field ->
@@ -155,16 +155,16 @@ object StreamCacheFilter {
             val rootCase = presentationAccessor.invoke(root)?.let(classifier::classify) ?: 0
             if (classifier.isRemovable(rootCase)) {
                 Logger.warn(
-                    "cache assembly root is sponsored case=${classifier.caseName(rootCase)} " +
+                    "cache assembly root is removable case=${classifier.caseName(rootCase)} " +
                         "and cannot be removed by rewriting this call",
                 )
             }
-            if (adCasesByKey.isEmpty() && presentationRewrites.isEmpty()) return null
+            if (removableCasesByKey.isEmpty() && presentationRewrites.isEmpty()) return null
 
             val rootRecord = record(root, keyFor)
             val removableKeys =
                 RemovableNodes.select(
-                    adCasesByKey.keys,
+                    removableCasesByKey.keys,
                     records.mapValues { (_, record) ->
                         RemovableNodes.Parent(record.childKeys, record.hasContinuation)
                     },
@@ -190,7 +190,7 @@ object StreamCacheFilter {
                                 field.set(mutableNode, stripped)
                             }
                         } catch (exception: Exception) {
-                            Logger.warn("cache LiveOps rewrite skipped", exception)
+                            Logger.warn("cache presentation rewrite skipped", exception)
                             filteredNode
                         }
                     } ?: filteredNode ?: continue
@@ -206,7 +206,7 @@ object StreamCacheFilter {
 
             Logger.debug {
                 "cache removal removable=${removableKeys.size} " +
-                    "strippedLiveOps=${presentationRewrites.size} " +
+                    "strippedPresentations=${presentationRewrites.size} " +
                     "children=${rootList.size}->${filteredRootChildren.size} " +
                     "nodes=${nodeMap.size}"
             }

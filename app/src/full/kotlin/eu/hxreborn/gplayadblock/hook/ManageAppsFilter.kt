@@ -13,8 +13,10 @@ object ManageAppsFilter {
         classLoader: ClassLoader,
         settings: FilterSettings,
         targets: ManageAppsTargets,
-    ) {
-        targets.unresolved.forEach { feature -> Logger.warn("manage apps $feature unresolved") }
+    ): Boolean {
+        targets.unresolved.forEach { reason ->
+            Logger.warn("manage apps unresolved reason=$reason")
+        }
         val hiddenRows =
             buildSet {
                 if (settings.isOn(FilterSwitch.HIDE_PLAY_PROTECT)) {
@@ -36,40 +38,43 @@ object ManageAppsFilter {
             } else {
                 null
             }
-        if (hiddenRows.isEmpty() && searchLandingItem == null) return
+        if (hiddenRows.isEmpty() && searchLandingItem == null) return false
 
-        classLoader
-            .loadClass(targets.manageListClassName)
-            .declaredConstructors
-            .filter { constructor ->
-                constructor.parameterTypes.count { type -> type == List::class.java } == 1
-            }.forEach { constructor ->
-                constructor.isAccessible = true
-                val itemsIndex = constructor.parameterTypes.indexOf(List::class.java)
-                module
-                    .hook(constructor)
-                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-                    .intercept { chain ->
-                        val original =
-                            chain.getArg(itemsIndex) as? List<*> ?: return@intercept chain.proceed()
-                        val retained =
-                            if (searchLandingItem != null &&
-                                original.any(searchLandingItem::isInstance)
-                            ) {
-                                emptyList<Any?>()
-                            } else {
-                                original.filterNot { item ->
-                                    item != null &&
-                                        item.javaClass in hiddenRows
-                                }
+        val constructors =
+            classLoader
+                .loadClass(targets.manageListClassName)
+                .declaredConstructors
+                .filter { constructor ->
+                    constructor.parameterTypes.count { type -> type == List::class.java } == 1
+                }
+        constructors.forEach { constructor ->
+            constructor.isAccessible = true
+            val itemsIndex = constructor.parameterTypes.indexOf(List::class.java)
+            module
+                .hook(constructor)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept { chain ->
+                    val original =
+                        chain.getArg(itemsIndex) as? List<*> ?: return@intercept chain.proceed()
+                    val retained =
+                        if (searchLandingItem != null &&
+                            original.any(searchLandingItem::isInstance)
+                        ) {
+                            emptyList<Any?>()
+                        } else {
+                            original.filterNot { item ->
+                                item != null &&
+                                    item.javaClass in hiddenRows
                             }
-                        if (retained.size == original.size) return@intercept chain.proceed()
-                        Logger.debug { "manage list removed=${original.size - retained.size}" }
-                        val arguments = chain.args.toTypedArray()
-                        arguments[itemsIndex] = retained
-                        chain.proceed(arguments)
-                    }
-            }
+                        }
+                    if (retained.size == original.size) return@intercept chain.proceed()
+                    Logger.debug { "manage list removed=${original.size - retained.size}" }
+                    val arguments = chain.args.toTypedArray()
+                    arguments[itemsIndex] = retained
+                    chain.proceed(arguments)
+                }
+        }
+        return constructors.isNotEmpty()
     }
 
     private fun loadOrNull(

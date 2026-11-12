@@ -117,7 +117,7 @@ class FullModuleConfiguration(
                 OptionalGroup.MANAGE_APPS -> {
                     optionalTargets.manageApps?.let { manageApps ->
                         ManageAppsFilter.install(module, classLoader, settings, manageApps)
-                    } != null
+                    } ?: false
                 }
 
                 OptionalGroup.PERSISTENT_NAV -> {
@@ -129,13 +129,13 @@ class FullModuleConfiguration(
                             settings,
                             persistentNav,
                         )
-                    } != null
+                    } ?: false
                 }
 
                 OptionalGroup.SELF_UPDATE -> {
                     optionalTargets.selfUpdate?.let { selfUpdate ->
                         SelfUpdateFilter.install(module, classLoader, settings, selfUpdate)
-                    } != null
+                    } ?: false
                 }
             }
         } catch (exception: Exception) {

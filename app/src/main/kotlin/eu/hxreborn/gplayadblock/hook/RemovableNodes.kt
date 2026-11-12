@@ -7,10 +7,10 @@ internal object RemovableNodes {
     )
 
     fun <T> select(
-        sponsored: Set<T>,
+        removableIds: Set<T>,
         parents: Map<T, Parent<T>>,
     ): Set<T> {
-        val removable = HashSet(sponsored)
+        val removable = HashSet(removableIds)
         var changed = true
         while (changed) {
             changed = false

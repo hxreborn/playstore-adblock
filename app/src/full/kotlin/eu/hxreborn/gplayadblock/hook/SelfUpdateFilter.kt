@@ -15,8 +15,8 @@ object SelfUpdateFilter {
         classLoader: ClassLoader,
         settings: FilterSettings,
         targets: SelfUpdateTargets,
-    ) {
-        if (!settings.isOn(FilterSwitch.BLOCK_STORE_SELF_UPDATES)) return
+    ): Boolean {
+        if (!settings.isOn(FilterSwitch.BLOCK_STORE_SELF_UPDATES)) return false
         val scheduler = targets.schedulerMethod.resolve(classLoader)
         module
             .hook(scheduler)
@@ -26,13 +26,13 @@ object SelfUpdateFilter {
                 false
             }
 
-        val autoUpdate = targets.autoUpdateMethod?.resolve(classLoader) ?: return
+        val autoUpdate = targets.autoUpdateMethod?.resolve(classLoader) ?: return true
         val request =
             try {
                 AutoUpdateRequest.of(autoUpdate)
             } catch (exception: IllegalArgumentException) {
                 Logger.warn("Play Store auto-update requests not filtered", exception)
-                return
+                return true
             }
         module
             .hook(autoUpdate)
@@ -53,6 +53,7 @@ object SelfUpdateFilter {
                 Logger.debug { "Play Store auto-update request skipped" }
                 null
             }
+        return true
     }
 
     private class AutoUpdateRequest(

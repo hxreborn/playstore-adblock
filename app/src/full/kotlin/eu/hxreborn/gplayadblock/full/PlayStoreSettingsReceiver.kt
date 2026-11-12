@@ -58,7 +58,7 @@ object PlayStoreSettingsReceiver {
                                 stopIfIdle(crashGuard, deadline, cleared, callback, pendingResult)
                             }
                         } catch (exception: Exception) {
-                            Logger.error("Play Store restart failed", exception)
+                            Logger.error("Play Store restart failed before stopping", exception)
                             pendingResult.resultCode = RestartProtocol.RESULT_FAILED
                             pendingResult.finish()
                         }
@@ -203,5 +203,5 @@ object PlayStoreSettingsReceiver {
             context.packageManager.packageInstaller.mySessions
                 .any { session -> session.isActive }
         }.onFailure { error -> Logger.warn("install session check failed", error) }
-            .getOrDefault(true)
+            .getOrThrow()
 }

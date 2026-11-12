@@ -109,7 +109,7 @@
     <string name="apply_no_reply_title">Play Store didn\'t respond</string>
     <string name="apply_no_reply_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_busy_title">Play Store is busy</string>
-    <string name="apply_busy_body">It is installing or updating apps. Try again when it finishes</string>
+    <string name="apply_busy_body">An install, update, or purchase is in progress. Try again when it finishes</string>
     <string name="apply_failed_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_restart_with_root">Restart with root</string>
     <string name="apply_cache_not_cleared_title">Play Store restarted with cached feeds</string>

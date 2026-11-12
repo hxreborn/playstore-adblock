@@ -106,7 +106,7 @@
     <string name="apply_no_reply_title">Play Market не ответил</string>
     <string name="apply_no_reply_body">Закройте его в сведениях о приложении, повторите попытку или перезапустите его с root</string>
     <string name="apply_busy_title">Play Market занят</string>
-    <string name="apply_busy_body">Он устанавливает или обновляет приложения. Повторите попытку, когда он закончит</string>
+    <string name="apply_busy_body">Идёт установка, обновление или покупка. Повторите попытку после завершения</string>
     <string name="apply_failed_body">Закройте его в сведениях о приложении, повторите попытку или перезапустите его с root</string>
     <string name="apply_restart_with_root">Перезапустить с root</string>
     <string name="apply_cache_not_cleared_title">Play Market перезапущен с кэшированными лентами</string>

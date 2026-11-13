@@ -41,7 +41,6 @@
     }],
     ["@semantic-release/github", {
       "successCommentCondition": "<% return !branch.prerelease; %>",
-      "draftRelease": true,
       "assets": [
         "playstore-adblock-v*-core-arm64-v8a.apk",
         "playstore-adblock-v*-full-arm64-v8a.apk",

@@ -43,7 +43,7 @@ import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.ui.ApplyPhase
 import eu.hxreborn.gplayadblock.settings.ui.SettingsUiState
 import eu.hxreborn.gplayadblock.settings.ui.theme.Tokens
-import eu.hxreborn.gplayadblock.settings.ui.theme.rememberReducedMotion
+import eu.hxreborn.gplayadblock.settings.ui.theme.isReducedMotion
 
 private enum class BadgeKind {
     Healthy,
@@ -190,7 +190,7 @@ private fun StatusBadge(kind: BadgeKind) {
         }
 
         BadgeKind.Busy -> {
-            if (rememberReducedMotion()) {
+            if (isReducedMotion()) {
                 Box(
                     Modifier
                         .size(BadgeSize)

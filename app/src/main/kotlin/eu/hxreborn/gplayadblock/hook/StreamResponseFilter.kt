@@ -114,7 +114,7 @@ object StreamResponseFilter {
 
             val decodedNodes = IdentityHashMap<Any, Any>()
             val presentationRewrites = IdentityHashMap<Any, Any>()
-            val adCasesById = LinkedHashMap<Any, Int>()
+            val removableCasesById = LinkedHashMap<Any, Int>()
             for (wrapper in nodeWrappers) {
                 val decoded = decodeNode(wrapper) ?: continue
                 decodedNodes[wrapper] = decoded
@@ -125,9 +125,9 @@ object StreamResponseFilter {
                 val case = classifier.classify(presentation)
                 if (!classifier.isRemovable(case)) continue
                 val id = nodeIdField.get(wrapper) ?: continue
-                adCasesById[id] = case
+                removableCasesById[id] = case
             }
-            if (adCasesById.isEmpty() && presentationRewrites.isEmpty()) return null
+            if (removableCasesById.isEmpty() && presentationRewrites.isEmpty()) return null
 
             val decodedRoots = IdentityHashMap<Any, Any>()
             lists.values
@@ -139,7 +139,7 @@ object StreamResponseFilter {
                     decodeRoot(wrapper)?.let { decoded -> decodedRoots[wrapper] = decoded }
                 }
 
-            val removableIds = RemovableNodes.select(adCasesById.keys, parents(decodedNodes))
+            val removableIds = RemovableNodes.select(removableCasesById.keys, parents(decodedNodes))
             val replacement =
                 editor.copy(response) { mutableResponse ->
                     for ((field, originalList) in lists) {
@@ -169,24 +169,24 @@ object StreamResponseFilter {
                     }
                 }
 
-            val survivors = sponsoredSurvivors(replacement, removableIds)
+            val survivors = removableSurvivors(replacement, removableIds)
             if (survivors > 0) {
-                Logger.error("response rewrite left $survivors sponsored nodes in place")
+                Logger.error("response rewrite left $survivors removable nodes in place")
                 return null
             }
             Logger.debug {
                 "response rewrite removed=${removableIds.size} " +
-                    "strippedLiveOps=${presentationRewrites.size} " +
-                    "sponsored=${adCasesById.size} " +
-                    "collapsed=${(removableIds - adCasesById.keys).size} " +
+                    "strippedPresentations=${presentationRewrites.size} " +
+                    "removableCases=${removableCasesById.size} " +
+                    "collapsed=${(removableIds - removableCasesById.keys).size} " +
                     "nodes=${nodeWrappers.size} roots=${decodedRoots.size} " +
-                    "cases=${adCasesById.values.map(classifier::caseName).groupingBy { it }
+                    "cases=${removableCasesById.values.map(classifier::caseName).groupingBy { it }
                         .eachCount()}"
             }
             return replacement
         }
 
-        private fun sponsoredSurvivors(
+        private fun removableSurvivors(
             response: Any,
             removableIds: Set<Any>,
         ): Int =
@@ -243,7 +243,7 @@ object StreamResponseFilter {
                     rebuild(strippedPresentation)
                 } catch (exception: Exception) {
                     if (strippedPresentation == null) throw exception
-                    Logger.warn("response LiveOps rewrite skipped", exception)
+                    Logger.warn("response presentation rewrite skipped", exception)
                     if (filteredChildren == null) return wrapper
                     rebuild(null)
                 }

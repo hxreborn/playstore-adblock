@@ -2,11 +2,21 @@ package eu.hxreborn.gplayadblock.hook
 
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 
+/**
+ * Pure tab-selection policy for [PersistentNavFilter], kept free of Android and reflection so
+ * it can be unit tested.
+ *
+ * Positions refer to the filtered (retained) tab list; indices refer to the original list
+ * that Play Store built and that its click callback understands.
+ */
 internal object NavSelectionPlanner {
     data class Plan(
+        /** Position, in the retained list, that the rebuilt model reports as selected. */
         val selectedPosition: Int,
         val navigateToIndex: Int?,
+        /** True when the one-shot start-tab request has been honoured and must be cleared. */
         val consumesStartTab: Boolean,
+        /** Original tab index to switch to after an external link, or null. */
         val externalRecoveryIndex: Int?,
         // Back on the tab that replaces a hidden home tab: leave Play Store like stock Back does.
         val leavesApp: Boolean = false,
@@ -46,6 +56,8 @@ internal object NavSelectionPlanner {
                     startPosition.takeIf { it >= 0 }
                         ?: currentPosition.takeIf { it >= 0 }
                         ?: 0
+                // Re-selecting the current tab can pop the stack to the tab root and close the
+                // page the external link opened, so only an actual tab change is scheduled.
                 retainedIndices[recoveryPosition].takeIf { index -> index != selected }
             } else {
                 null

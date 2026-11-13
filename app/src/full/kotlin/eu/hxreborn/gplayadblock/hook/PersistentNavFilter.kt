@@ -29,21 +29,32 @@ object PersistentNavFilter {
         classLoader: ClassLoader,
         settings: FilterSettings,
         targets: PersistentNavTargets,
-    ) {
+    ): Boolean {
         val constructor = targets.navConstructor.resolve(classLoader)
         val itemTypeField = targets.navItemTypeField.resolve(classLoader)
         val primaryCallbackField = targets.navPrimaryCallbackField.resolve(classLoader)
         val secondaryCallbackField = targets.navSecondaryCallbackField.resolve(classLoader)
         val actionConstructor = targets.navActionConstructor.resolve(classLoader)
         val callbackMethod = targets.navCallbackMethod.resolve(classLoader)
+        val actionArguments =
+            NavActionArguments.resolve(
+                actionConstructor,
+                primaryCallbackField,
+                secondaryCallbackField,
+            )
         val callbackClass = callbackMethod.declaringClass
-        require(callbackClass.isInterface) { "nav callback ${callbackClass.name} is no interface" }
+        require(
+            callbackClass.isInterface,
+        ) { "nav callback ${callbackClass.name} is not an interface" }
         val navHidden =
             if (settings.isOn(FilterSwitch.MINIMAL_SEARCH_HOME)) {
                 targets.navHiddenInstanceField?.resolve(classLoader)?.get(null)
             } else {
                 null
             }
+        if (settings.isOn(FilterSwitch.MINIMAL_SEARCH_HOME) && navHidden == null) {
+            Logger.warn("navigation visibility target unresolved, bottom bar kept")
+        }
         val positions = NavArguments.of(constructor, actionConstructor.declaringClass, navHidden)
         val hiddenTypes = settings.hiddenTabs().mapTo(mutableSetOf(), StartTab::name)
         val startTab = settings.startTab.name
@@ -74,9 +85,13 @@ object PersistentNavFilter {
 
                 val generation = launchGeneration.get()
                 val now = SystemClock.elapsedRealtime()
+                // The grace period covers the model built before the sheet is resumed; after
+                // that the sheet's lifecycle decides, however late the model arrives.
                 val isExternalNavigation =
                     now < externalNavigationDeadline.get() || recovery.protectsNavigation()
                 val applyStartTab = !isExternalNavigation && now < startTabDeadline.get()
+                // The first model after a link always takes the request. If the sheet is already
+                // closed (a late model), nothing has to wait: the planner switches tabs directly.
                 val recoveryToken = recovery.consumeRequest()
                 val hideBar = hideBarWithOneTab && retained.size == 1
                 if (retained.size == indexed.size &&
@@ -119,8 +134,10 @@ object PersistentNavFilter {
                     arguments[positions.items] = retained.map { it.value }
                     arguments[positions.action] =
                         actionConstructor.newInstance(
-                            filteredCallback,
-                            secondaryCallbackField.get(originalAction),
+                            *actionArguments.values(
+                                filteredCallback,
+                                secondaryCallbackField.get(originalAction),
+                            ),
                         )
                 }
                 arguments[positions.selected] = plan.selectedPosition
@@ -141,7 +158,11 @@ object PersistentNavFilter {
                         resumedMain.get()?.get()?.moveTaskToBack(true)
                     }
                 }
+                // Switching tabs while the details sheet opened by the link is showing
+                // dismisses it, so the switch waits until the sheet is closed and the main
+                // activity is resumed again (see installLaunchTracking).
                 plan.externalRecoveryIndex?.let { index ->
+                    // The sheet may already be closed when a slow model arrives: recover now.
                     if (recoveryToken != null && recovery.plan(index, recoveryToken)) {
                         Handler(Looper.getMainLooper()).post { runPendingRecovery(callbackMethod) }
                     }
@@ -151,6 +172,7 @@ object PersistentNavFilter {
                 }
                 result
             }
+        return true
     }
 
     private class NavArguments(
@@ -252,6 +274,7 @@ object PersistentNavFilter {
                     activity: Activity,
                     savedInstanceState: Bundle?,
                 ) {
+                    // A recreated activity (rotation, process restore) is not a new launch.
                     if (savedInstanceState != null ||
                         !mainActivityClass.isInstance(activity)
                     ) {
@@ -335,11 +358,14 @@ object PersistentNavFilter {
                 launchGeneration.incrementAndGet()
                 externalNavigationDeadline.set(0L)
                 recovery.onLauncherLaunch()
+                // The start tab is a launch preference: apply it once for a fresh launcher
+                // launch, never again while the user moves between tabs.
                 if (newTask) startTabDeadline.set(now + START_TAB_WINDOW_MILLIS)
             }
         }
     }
 
+    /** Enum constant name; enums are compared by name, never by an overridable toString. */
     private fun enumName(value: Any?): String? = (value as? Enum<*>)?.name
 
     private fun mainActivityName(application: Application): String {

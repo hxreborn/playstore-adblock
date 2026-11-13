@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NavSelectionPlannerTest {
+    // Original tabs: 0 GAMES, 1 APPS, 2 SEARCH, 3 BOOKS (hidden), 4 YOU.
     private val types = listOf("GAMES", "APPS", "SEARCH", "YOU")
     private val indices = listOf(0, 1, 2, 4)
 
@@ -70,6 +71,7 @@ class NavSelectionPlannerTest {
 
     @Test
     fun `a tab chosen by the user is kept once the start tab was applied`() {
+        // The model is rebuilt after the user tapped GAMES; it must not bounce back to APPS.
         val plan = plan(selected = 0, applyStartTab = false)
         assertEquals(0, plan.selectedPosition)
         assertNull(plan.navigateToIndex)
@@ -151,6 +153,8 @@ class NavSelectionPlannerTest {
 
     @Test
     fun `a late model after the sheet closed switches away from a hidden tab directly`() {
+        // Opened by a link, the first navigation model arrives after the sheet was closed and
+        // the grace period ended: the request is taken, but nothing waits for a recovery.
         val recovery = ExternalRecovery()
         recovery.onExternalLink()
         recovery.onActivityResumed(false)

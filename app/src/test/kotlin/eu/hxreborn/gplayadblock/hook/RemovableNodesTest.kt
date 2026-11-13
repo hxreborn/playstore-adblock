@@ -13,7 +13,7 @@ class RemovableNodesTest {
     fun `a sponsored node no parent references is still removed`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("shelf"),
+                removableIds = setOf("shelf"),
                 parents = mapOf("shelf" to parent("card1", "card2")),
             )
 
@@ -25,7 +25,7 @@ class RemovableNodesTest {
         val cards = List(5) { index -> "card$index" }
         val removable =
             RemovableNodes.select(
-                sponsored = (cards + "shelf").toSet(),
+                removableIds = (cards + "shelf").toSet(),
                 parents = mapOf("shelf" to RemovableNodes.Parent(cards, paginated = false)),
             )
 
@@ -36,7 +36,7 @@ class RemovableNodesTest {
     fun `a parent whose children are all sponsored collapses`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card1", "card2"),
+                removableIds = setOf("card1", "card2"),
                 parents = mapOf("shelf" to parent("card1", "card2")),
             )
 
@@ -47,7 +47,7 @@ class RemovableNodesTest {
     fun `a parent keeping one organic child survives`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card1"),
+                removableIds = setOf("card1"),
                 parents = mapOf("shelf" to parent("card1", "organic")),
             )
 
@@ -58,7 +58,7 @@ class RemovableNodesTest {
     fun `a paginated parent survives even when every loaded child is sponsored`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card1", "card2"),
+                removableIds = setOf("card1", "card2"),
                 parents = mapOf("shelf" to parent("card1", "card2", paginated = true)),
             )
 
@@ -69,7 +69,7 @@ class RemovableNodesTest {
     fun `a parent with no children survives`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card1"),
+                removableIds = setOf("card1"),
                 parents = mapOf("empty" to parent(), "shelf" to parent("card1")),
             )
 
@@ -80,7 +80,7 @@ class RemovableNodesTest {
     fun `collapse reaches a grandparent`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card"),
+                removableIds = setOf("card"),
                 parents =
                     mapOf(
                         "page" to parent("shelf"),
@@ -95,7 +95,7 @@ class RemovableNodesTest {
     fun `a paginated grandparent stops the collapse`() {
         val removable =
             RemovableNodes.select(
-                sponsored = setOf("card"),
+                removableIds = setOf("card"),
                 parents =
                     mapOf(
                         "page" to parent("shelf", paginated = true),
@@ -110,7 +110,7 @@ class RemovableNodesTest {
     fun `a cycle terminates`() {
         val removable =
             RemovableNodes.select(
-                sponsored = emptySet(),
+                removableIds = emptySet(),
                 parents = mapOf("a" to parent("b"), "b" to parent("a")),
             )
 
@@ -121,7 +121,7 @@ class RemovableNodesTest {
     fun `nothing sponsored removes nothing`() {
         val removable =
             RemovableNodes.select(
-                sponsored = emptySet<String>(),
+                removableIds = emptySet<String>(),
                 parents = mapOf("shelf" to parent("card1", "card2")),
             )
 

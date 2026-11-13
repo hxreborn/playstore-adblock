@@ -6,7 +6,13 @@ class FakeSharedPreferences : SharedPreferences {
     private val values = LinkedHashMap<String, Any?>()
     private val listeners = LinkedHashSet<SharedPreferences.OnSharedPreferenceChangeListener>()
 
-    override fun getAll(): Map<String, *> = LinkedHashMap(values)
+    var readFailure: Exception? = null
+    var editFailure: Exception? = null
+
+    override fun getAll(): Map<String, *> {
+        readFailure?.let { throw it }
+        return LinkedHashMap(values)
+    }
 
     override fun getString(
         key: String,
@@ -41,6 +47,7 @@ class FakeSharedPreferences : SharedPreferences {
     override fun contains(key: String): Boolean = key in values
 
     override fun edit(): SharedPreferences.Editor {
+        editFailure?.let { throw it }
         val pending = LinkedHashMap<String, Any?>()
         return RecordingEditor(pending) {
             values.putAll(pending)

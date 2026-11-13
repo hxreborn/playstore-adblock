@@ -3,6 +3,13 @@ package eu.hxreborn.gplayadblock.full
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import java.io.File
 
+/**
+ * Remembers recent Play Store crashes so that optional UI hooks can be skipped after a crash
+ * loop. Ad filtering is not affected.
+ *
+ * The guard is keyed by [fingerprint] (Play Store and module build), so updating either one,
+ * or calling [reset] (the settings restart button), gives the optional hooks another chance.
+ */
 internal class CrashLoopGuard(
     private val file: File,
     private val fingerprint: String,
@@ -22,6 +29,7 @@ internal class CrashLoopGuard(
         write(State(fingerprint, tripped, crashes))
     }
 
+    /** Forgets recorded crashes. Returns false when the state file exists and was not removed. */
     fun reset(): Boolean = file.delete() || !file.exists()
 
     private data class State(

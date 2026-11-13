@@ -2,8 +2,15 @@
 set -euo pipefail
 
 VERSION="$1"
-IFS='.' read -r MAJOR MINOR PATCH <<<"$VERSION"
+IFS='.' read -r MAJOR MINOR PATCH <<<"${VERSION%%-*}"
 CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+if [[ "$VERSION" == *-* ]]; then
+  if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.0-beta\.([1-9][0-9]?)$ ]] || ((BASH_REMATCH[1] >= 50)); then
+    echo "prerelease $VERSION must be X.Y.0-beta.N with N below 50" >&2
+    exit 1
+  fi
+  CODE=$((CODE - 50 + BASH_REMATCH[1]))
+fi
 
 sed -i "s/^version\.name=.*/version.name=$VERSION/" gradle.properties
 sed -i "s/^version\.code=.*/version.code=$CODE/" gradle.properties

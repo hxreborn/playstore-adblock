@@ -105,6 +105,12 @@ object OptionalDexKitResolver {
                         "$apkPath: ${exception.javaClass.simpleName}: ${exception.message}"
                 }
                 transientFailure = true
+            } catch (error: LinkageError) {
+                pending.forEach { group ->
+                    reasons.getValue(group) +=
+                        "$apkPath: ${error.javaClass.simpleName}: ${error.message}"
+                }
+                transientFailure = true
             }
         }
         return merged.copy(
@@ -191,18 +197,24 @@ object OptionalDexKitResolver {
         val headerCards = attempt("account header cards") { resolveHeaderCards(anchored) }
         val targets = actions.success() as? AccountMenuTargets ?: AccountMenuTargets()
         val notification = badge.success() as? AccountMenuTargets
-        val results = listOf(actions, badge, labeledActions, headerCards)
+        val results =
+            mapOf(
+                "account actions" to actions,
+                "notification badge" to badge,
+                "labeled account actions" to labeledActions,
+                "account header cards" to headerCards,
+            )
         return targets.copy(
             notificationTopBarConstructor = notification?.notificationTopBarConstructor,
             notificationBadgeTypeName = notification?.notificationBadgeTypeName,
             labeledActions = labeledActions.success() as? LabeledActionTargets,
             headerCards = headerCards.success() as? HeaderCardTargets,
             unresolved =
-                results.mapNotNull { result ->
-                    (result as? Resolution.Failure)?.reason
+                results.mapNotNull { (name, result) ->
+                    (result as? Resolution.Failure)?.reason?.let { "$name: $it" }
                 },
             transientFailure =
-                results.any { result ->
+                results.values.any { result ->
                     (result as? Resolution.Failure)?.transient == true
                 },
         )
@@ -226,14 +238,14 @@ object OptionalDexKitResolver {
                 ?: throw ResolutionFailure("account immutable lists=${immutableLists.size}")
         val roleEnum = anchored.single(*accountRoleAnchors.toTypedArray())
         if (roleEnum.superClass?.name != "java.lang.Enum") {
-            throw ResolutionFailure("account role class ${roleEnum.name} is no enum")
+            throw ResolutionFailure("account role class ${roleEnum.name} is not an enum")
         }
         return AccountMenuTargets(
             featuresClassName = featuresClass.name,
             immutableListClassName = immutableList.name,
             actionRoleField =
                 actionRoleField(bridge, roleEnum)?.toRef()
-                    ?: throw ResolutionFailure("account action role field not unique"),
+                    ?: throw ResolutionFailure("account action role field missing or ambiguous"),
         )
     }
 
@@ -335,7 +347,7 @@ object OptionalDexKitResolver {
         val hashCode =
             topBar.methods.singleOrNull { method ->
                 method.methodName == "hashCode" && method.paramCount == 0
-            } ?: throw ResolutionFailure("notification top bar hashCode not unique")
+            } ?: throw ResolutionFailure("notification top bar hashCode missing or ambiguous")
         val operations = hashCode.opNames
         val badgeField = hashCode.usingFields.firstOrNull()?.field
         if (operations.size < 2 || !operations[0].startsWith("iget-object") ||
@@ -347,7 +359,7 @@ object OptionalDexKitResolver {
             topBar.methods.singleOrNull { method ->
                 method.isConstructor &&
                     method.paramTypeNames.count { it == badgeField.typeName } == 1
-            } ?: throw ResolutionFailure("notification badge constructor not unique")
+            } ?: throw ResolutionFailure("notification badge constructor missing or ambiguous")
         return AccountMenuTargets(
             notificationTopBarConstructor = constructor.toConstructorRef(),
             notificationBadgeTypeName = badgeField.typeName,
@@ -436,6 +448,10 @@ object OptionalDexKitResolver {
             .singleOrNull()
             ?.name
 
+    /**
+     * Row models created by the Play Protect section provider of the Manage overview. They are
+     * single-state wrappers built directly by the class that logs under the provider's tag.
+     */
     private fun playProtectRows(anchored: AnchoredClasses): List<String> {
         val provider =
             anchored.all(listOf(PROTECT_SECTION_ANCHOR)).singleOrNull() ?: return emptyList()
@@ -449,6 +465,7 @@ object OptionalDexKitResolver {
                     !method.declaredClassName.startsWith("kotlin.")
             }.mapNotNull(MethodData::declaredClass)
             .filter { row ->
+                // A row wraps one UI state; plain text wrappers are not rows.
                 row.fields
                     .filter { field -> !Modifier.isStatic(field.modifiers) }
                     .singleOrNull()
@@ -495,12 +512,41 @@ object OptionalDexKitResolver {
                 !Modifier.isStatic(field.modifiers)
             }
         if (actionFields.size != 2 || actionFields.map(FieldData::typeName).distinct().size != 1) {
-            throw ResolutionFailure("nav action fields=${actionFields.size}")
+            throw ResolutionFailure(
+                "nav action fields=${actionFields.size} " +
+                    "distinctTypes=${actionFields.map(FieldData::typeName).distinct().size}",
+            )
+        }
+        val actionDescription =
+            navActionClass.methods.singleOrNull { method ->
+                method.methodName == "toString" && method.paramCount == 0 &&
+                    method.usingStrings.filter { it != ")" } ==
+                    listOf(
+                        NAV_ACTION_ANCHOR,
+                        ", onPersistentNavItemOnboardingAnimationPlayed=",
+                    )
+            } ?: throw ResolutionFailure("nav action role description missing or ambiguous")
+        val roleReads =
+            actionDescription.opNames
+                .filter { operation ->
+                    operation.startsWith("const-string") || operation == "iget-object"
+                }.map { operation ->
+                    if (operation.startsWith("const-string")) "string" else "field"
+                }
+        if (roleReads != listOf("string", "field", "string", "field") &&
+            roleReads != listOf("string", "field", "string", "field", "string")
+        ) {
+            throw ResolutionFailure("nav action role read order is not established")
+        }
+        val describedFields = actionDescription.usingFields.map { it.field }
+        if (describedFields.size != 2 || describedFields.toSet() != actionFields.toSet()) {
+            throw ResolutionFailure("nav action role fields missing or ambiguous")
         }
         val callbackClassName = actionFields.first().typeName
         val callbackClass =
             bridge.getClassData(callbackClassName)
                 ?: throw ResolutionFailure("nav callback class missing")
+        // The filter wraps the callback in a java.lang.reflect.Proxy, which needs an interface.
         if (!Modifier.isInterface(callbackClass.modifiers)) {
             throw ResolutionFailure("nav callback type is not an interface")
         }
@@ -518,7 +564,7 @@ object OptionalDexKitResolver {
             navActionClass.methods.singleOrNull { method ->
                 method.isConstructor &&
                     method.paramTypeNames == listOf(callbackClassName, callbackClassName)
-            } ?: throw ResolutionFailure("nav action constructor not unique")
+            } ?: throw ResolutionFailure("nav action constructor missing or ambiguous")
         val navConstructors =
             navClass.methods.filter { method ->
                 val types = method.paramTypeNames
@@ -539,8 +585,8 @@ object OptionalDexKitResolver {
         return PersistentNavTargets(
             navConstructor = navConstructor.toConstructorRef(),
             navItemTypeField = navItemTypeField.toRef(),
-            navPrimaryCallbackField = actionFields[0].toRef(),
-            navSecondaryCallbackField = actionFields[1].toRef(),
+            navPrimaryCallbackField = describedFields[0].toRef(),
+            navSecondaryCallbackField = describedFields[1].toRef(),
             navActionConstructor = actionConstructor.toConstructorRef(),
             navCallbackMethod = callbackMethod.toRef(),
             navHiddenInstanceField = navHiddenField?.toRef(),
@@ -598,6 +644,11 @@ object OptionalDexKitResolver {
         } catch (exception: Exception) {
             Resolution.Failure(
                 "$name resolution threw ${exception.javaClass.simpleName}: ${exception.message}",
+                transient = true,
+            )
+        } catch (error: LinkageError) {
+            Resolution.Failure(
+                "$name resolution threw ${error.javaClass.simpleName}: ${error.message}",
                 transient = true,
             )
         }

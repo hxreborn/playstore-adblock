@@ -44,6 +44,9 @@ class FullModuleConfiguration(
         } catch (exception: ReflectiveOperationException) {
             Logger.error("content filters unavailable, sponsored filtering only", exception)
             sponsored
+        } catch (exception: RuntimeException) {
+            Logger.error("content filters unavailable, sponsored filtering only", exception)
+            sponsored
         } catch (error: LinkageError) {
             Logger.error("content filters unavailable, sponsored filtering only", error)
             sponsored
@@ -114,7 +117,7 @@ class FullModuleConfiguration(
                 OptionalGroup.MANAGE_APPS -> {
                     optionalTargets.manageApps?.let { manageApps ->
                         ManageAppsFilter.install(module, classLoader, settings, manageApps)
-                    } != null
+                    } ?: false
                 }
 
                 OptionalGroup.PERSISTENT_NAV -> {
@@ -126,13 +129,13 @@ class FullModuleConfiguration(
                             settings,
                             persistentNav,
                         )
-                    } != null
+                    } ?: false
                 }
 
                 OptionalGroup.SELF_UPDATE -> {
                     optionalTargets.selfUpdate?.let { selfUpdate ->
                         SelfUpdateFilter.install(module, classLoader, settings, selfUpdate)
-                    } != null
+                    } ?: false
                 }
             }
         } catch (exception: Exception) {

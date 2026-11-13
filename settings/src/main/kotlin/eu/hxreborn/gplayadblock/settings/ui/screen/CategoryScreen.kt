@@ -58,7 +58,7 @@ import eu.hxreborn.gplayadblock.settings.ui.titleRes
 fun CategoryScreen(
     category: FilterCategory,
     settings: FilterSettings,
-    startTabReset: StartTab?,
+    startTabBeforeReset: StartTab?,
     onFilterChange: (FilterSwitch, Boolean) -> Unit,
     onStartTabChange: (StartTab) -> Unit,
     onBack: () -> Unit,
@@ -104,12 +104,12 @@ fun CategoryScreen(
                             )
                         },
                 )
-                if (startTabReset != null) {
+                if (startTabBeforeReset != null) {
                     Text(
                         text =
                             stringResource(
                                 R.string.start_screen_reset,
-                                stringResource(startTabReset.labelRes),
+                                stringResource(startTabBeforeReset.labelRes),
                             ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

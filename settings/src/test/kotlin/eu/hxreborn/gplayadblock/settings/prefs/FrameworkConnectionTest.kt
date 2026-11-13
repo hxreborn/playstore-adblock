@@ -50,7 +50,7 @@ class FrameworkConnectionTest {
         }
 
     @Test
-    fun `an editor that throws reports failure`() =
+    fun `opening the remote editor throws and publishing reports failure`() =
         runTest {
             connection.attach(Any(), null) { throw IllegalStateException("binder died") }
             assertFalse(connection.publish(settings))

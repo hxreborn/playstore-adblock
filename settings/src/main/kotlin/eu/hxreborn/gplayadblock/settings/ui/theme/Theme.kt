@@ -78,17 +78,17 @@ private val DarkNavigationScrim = argb(0x80, 0x1B, 0x1B, 0x1B)
 val LocalReducedMotion = staticCompositionLocalOf { false }
 
 @Composable
-fun rememberReducedMotion(): Boolean = LocalReducedMotion.current
+fun isReducedMotion(): Boolean = LocalReducedMotion.current
 
 @Composable
 private fun ProvideReducedMotion(content: @Composable () -> Unit) {
     val resolver = LocalContext.current.contentResolver
-    var reduced by remember(resolver) { mutableStateOf(true) }
+    var reduced by remember(resolver) { mutableStateOf(readReducedMotion(resolver)) }
     DisposableEffect(resolver) {
         val observer =
             object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) {
-                    reduced = readAnimationsOff(resolver)
+                    reduced = readReducedMotion(resolver)
                 }
             }
         resolver.registerContentObserver(
@@ -96,13 +96,13 @@ private fun ProvideReducedMotion(content: @Composable () -> Unit) {
             false,
             observer,
         )
-        reduced = readAnimationsOff(resolver)
+        reduced = readReducedMotion(resolver)
         onDispose { resolver.unregisterContentObserver(observer) }
     }
     CompositionLocalProvider(LocalReducedMotion provides reduced, content = content)
 }
 
-private fun readAnimationsOff(resolver: ContentResolver): Boolean =
+private fun readReducedMotion(resolver: ContentResolver): Boolean =
     Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
 @Composable

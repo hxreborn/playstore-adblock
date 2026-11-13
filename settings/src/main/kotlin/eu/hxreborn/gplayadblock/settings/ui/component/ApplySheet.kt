@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,9 +44,11 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -57,6 +64,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
@@ -80,7 +88,7 @@ sealed interface PendingChange {
         val tab: StartTab,
     ) : PendingChange
 
-    data object FeedCacheClear : PendingChange
+    data object StreamCacheClear : PendingChange
 }
 
 sealed interface ApplySheetContent {
@@ -98,10 +106,6 @@ class FailureAction(
     @param:StringRes val label: Int,
     val onClick: () -> Unit,
 )
-
-private class LastContent {
-    var value: ApplySheetContent? = null
-}
 
 private val CompactWindowHeight = 480.dp
 private const val SUMMARY_NAMES_SHOWN = 2
@@ -124,8 +128,10 @@ fun ApplySheetScaffold(
     extraFailureAction: FailureAction? = null,
     body: @Composable () -> Unit,
 ) {
-    val last = remember { LastContent() }
-    if (content != null) last.value = content
+    var lastContent by remember { mutableStateOf(content) }
+    SideEffect {
+        if (content != null) lastContent = content
+    }
     val shown by rememberUpdatedState(content != null)
     val keepShown = remember { { value: SheetValue -> value != SheetValue.Hidden || !shown } }
     val sheetState =
@@ -158,6 +164,14 @@ fun ApplySheetScaffold(
             LocalWindowInfo.current.containerSize.height
                 .toDp() < CompactWindowHeight
         }
+    val failureMaxHeight =
+        with(LocalDensity.current) {
+            (
+                LocalWindowInfo.current.containerSize.height -
+                    WindowInsets.safeDrawing.getTop(this) - handleHeightPx
+            ).coerceAtLeast(0)
+                .toDp()
+        }
     val bodyMotionScheme = MaterialTheme.motionScheme
     MaterialTheme(motionScheme = MotionScheme.expressive()) {
         BottomSheetScaffold(
@@ -170,7 +184,7 @@ fun ApplySheetScaffold(
                 }
             },
             sheetContent = {
-                when (val shownContent = last.value) {
+                when (val shownContent = content ?: lastContent) {
                     is ApplySheetContent.Pending -> {
                         PendingSheet(
                             content = shownContent,
@@ -186,6 +200,7 @@ fun ApplySheetScaffold(
                             onTryAgain = onApply,
                             onOpenPlayStoreInfo = onOpenPlayStoreInfo,
                             extraAction = extraFailureAction,
+                            maxHeight = failureMaxHeight,
                             onPeekBlockHeight = { peekBlockHeightPx = it },
                         )
                     }
@@ -332,7 +347,7 @@ private fun PendingChangeRow(change: PendingChange) {
             }
         }
 
-        PendingChange.FeedCacheClear -> {
+        PendingChange.StreamCacheClear -> {
             ListItem(colors = colors) {
                 Text(stringResource(R.string.pending_feed_cache_clear))
             }
@@ -347,6 +362,7 @@ private fun FailureSheet(
     onTryAgain: () -> Unit,
     onOpenPlayStoreInfo: () -> Unit,
     extraAction: FailureAction?,
+    maxHeight: Dp,
     onPeekBlockHeight: (Int) -> Unit,
 ) {
     val actions =
@@ -360,7 +376,21 @@ private fun FailureSheet(
             FailureAction(R.string.apply_try_again, onTryAgain),
         )
     Column(
-        modifier = Modifier.peekBlock(onPeekBlockHeight),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight)
+                .onSizeChanged { onPeekBlockHeight(it.height) }
+                .verticalScroll(rememberScrollState())
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                    ),
+                ).padding(
+                    start = Tokens.RowPadding,
+                    end = Tokens.RowPadding,
+                    bottom = Tokens.RowPadding,
+                ),
         verticalArrangement = Arrangement.spacedBy(Tokens.RowPadding),
     ) {
         SheetMessage(
@@ -383,21 +413,23 @@ private fun FailureSheet(
 private fun failureTitleRes(reason: ApplyFailure): Int =
     when (reason) {
         ApplyFailure.NotSent -> R.string.status_not_sent_title
+        ApplyFailure.SettingsFailed -> R.string.apply_settings_failed_title
         ApplyFailure.Busy -> R.string.apply_busy_title
         ApplyFailure.NoReply -> R.string.apply_no_reply_title
         ApplyFailure.RestartFailed -> R.string.status_failed_title
         ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_title
-        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_title
+        ApplyFailure.StreamCacheClearPending -> R.string.apply_cache_not_cleared_title
     }
 
 private fun failureBodyRes(reason: ApplyFailure): Int =
     when (reason) {
         ApplyFailure.NotSent -> R.string.apply_not_sent_body
+        ApplyFailure.SettingsFailed -> R.string.apply_settings_failed_body
         ApplyFailure.Busy -> R.string.apply_busy_body
         ApplyFailure.NoReply -> R.string.apply_no_reply_body
         ApplyFailure.RestartFailed -> R.string.apply_failed_body
         ApplyFailure.RootUnavailable -> R.string.apply_root_unavailable_body
-        ApplyFailure.CacheNotCleared -> R.string.apply_cache_not_cleared_body
+        ApplyFailure.StreamCacheClearPending -> R.string.apply_cache_not_cleared_body
     }
 
 @Composable
@@ -415,7 +447,7 @@ private fun changedAreasSummary(changes: List<PendingChange>): String {
                     changes.any { it is PendingChange.StartScreen }
                 },
                 stringResource(R.string.pending_feed_cache_clear).takeIf {
-                    PendingChange.FeedCacheClear in changes
+                    PendingChange.StreamCacheClear in changes
                 },
             )
     if (names.size <= SUMMARY_NAMES_SHOWN) return names.joinToString(", ")

@@ -48,18 +48,25 @@ object PlayStoreSettingsReceiver {
                     val pendingResult = goAsync()
                     Thread {
                         try {
-                            val refusal = refusal(receiverContext, deadline)
+                            val refusal = refusalResult(receiverContext, deadline)
                             if (refusal != null) {
                                 pendingResult.resultCode = refusal
                                 pendingResult.finish()
                                 return@Thread
                             }
-                            val cleared = !clearStreamCache || clearStreamCache(receiverContext)
+                            val cacheClearPending =
+                                clearStreamCache && !clearStreamCache(receiverContext)
                             Handler(Looper.getMainLooper()).post {
-                                stopIfIdle(crashGuard, deadline, cleared, callback, pendingResult)
+                                replyAndStopProcess(
+                                    crashGuard,
+                                    deadline,
+                                    cacheClearPending,
+                                    callback,
+                                    pendingResult,
+                                )
                             }
                         } catch (exception: Exception) {
-                            Logger.error("Play Store restart failed", exception)
+                            Logger.error("Play Store restart failed before stopping", exception)
                             pendingResult.resultCode = RestartProtocol.RESULT_FAILED
                             pendingResult.finish()
                         }
@@ -90,23 +97,23 @@ object PlayStoreSettingsReceiver {
             StreamCacheCleaner.clear(File(context.cacheDir, RestartProtocol.STREAM_DATA_STORE_DIR))
             true
         } catch (exception: IOException) {
-            Logger.warn("Play Store cache clear pending after restart", exception)
+            Logger.warn("stream cache clear failed, restart continues", exception)
             false
         } catch (exception: SecurityException) {
-            Logger.warn("Play Store cache clear pending after restart", exception)
+            Logger.warn("stream cache clear failed, restart continues", exception)
             false
         }
 
-    private fun stopIfIdle(
+    private fun replyAndStopProcess(
         crashGuard: CrashLoopGuard,
         deadline: Long,
-        cleared: Boolean,
+        cacheClearPending: Boolean,
         callback: ResultReceiver?,
         pendingResult: BroadcastReceiver.PendingResult,
     ) {
         try {
             val expired =
-                RestartProtocol.refusalBeforeStop(SystemClock.elapsedRealtime(), deadline) != null
+                RestartProtocol.isPastDeadline(SystemClock.elapsedRealtime(), deadline)
             val refusal =
                 when {
                     livePurchaseActivities.get() > 0 -> {
@@ -133,23 +140,27 @@ object PlayStoreSettingsReceiver {
                 return
             }
             val reply =
-                if (cleared) RestartProtocol.RESULT_READY else RestartProtocol.RESULT_CACHE_PENDING
+                if (cacheClearPending) {
+                    RestartProtocol.RESULT_CACHE_PENDING
+                } else {
+                    RestartProtocol.RESULT_READY
+                }
             callback?.send(reply, Bundle.EMPTY)
             Logger.info("restart requested, ending the Play Store process")
             Process.killProcess(Process.myPid())
         } catch (exception: Exception) {
-            Logger.error("Play Store restart failed", exception)
+            Logger.error("Play Store restart failed while stopping", exception)
             pendingResult.resultCode = RestartProtocol.RESULT_FAILED
         } finally {
             pendingResult.finish()
         }
     }
 
-    private fun refusal(
+    private fun refusalResult(
         context: Context,
         deadline: Long,
     ): Int? {
-        if (RestartProtocol.refusalBeforeStop(SystemClock.elapsedRealtime(), deadline) != null) {
+        if (RestartProtocol.isPastDeadline(SystemClock.elapsedRealtime(), deadline)) {
             Logger.info("restart refused: request expired")
             return RestartProtocol.RESULT_FAILED
         }
@@ -206,7 +217,7 @@ object PlayStoreSettingsReceiver {
                     blocksRestart(session.isActive, session.isStaged, session.isCommittedCompat())
                 }
         }.onFailure { error -> Logger.warn("install session check failed", error) }
-            .getOrDefault(true)
+            .getOrThrow()
 
     // SessionInfo.isCommitted needs API 31; before it, a ready, applied or failed staged session
     // has been committed.

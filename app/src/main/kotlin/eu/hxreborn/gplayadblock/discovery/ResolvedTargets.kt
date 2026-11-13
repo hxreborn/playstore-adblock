@@ -69,10 +69,15 @@ sealed interface ResolvedTargets {
     ) : ResolvedTargets
 
     companion object {
+        /** Marks an optional failure caused by an exception during the scan, not a missing target. */
         const val TRANSIENT_FAILURE_MARKER = "resolution threw"
     }
 }
 
+/**
+ * True when an optional lookup failed with an exception. Such a result is used for this process
+ * but not cached, so the next start scans again instead of keeping the filter off.
+ */
 internal val ResolvedTargets.Resolved.hasTransientFailure: Boolean
     get() =
         listOf(suggestionFailure, spotlightFailure).any { failure ->

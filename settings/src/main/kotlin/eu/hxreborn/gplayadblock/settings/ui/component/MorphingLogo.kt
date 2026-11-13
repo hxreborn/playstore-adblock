@@ -32,7 +32,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.graphics.shapes.Morph
 import androidx.graphics.shapes.RoundedPolygon
-import eu.hxreborn.gplayadblock.settings.ui.theme.rememberReducedMotion
+import eu.hxreborn.gplayadblock.settings.ui.theme.isReducedMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.floor
@@ -72,7 +72,7 @@ class LogoPulse(
 @Composable
 fun rememberLogoPulse(): LogoPulse {
     val scope = rememberCoroutineScope()
-    val enabled = !rememberReducedMotion()
+    val enabled = !isReducedMotion()
     return remember(scope, enabled) { LogoPulse(scope, enabled) }
 }
 
@@ -83,7 +83,7 @@ fun MorphingLogo(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val reducedMotion = rememberReducedMotion()
+    val reducedMotion = isReducedMotion()
     val morphs =
         remember {
             LogoPolygons.indices.map {

@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.settings.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -31,15 +32,18 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 enum class ApplyFailure {
     NotSent,
+    SettingsFailed,
     Busy,
     NoReply,
     RestartFailed,
     RootUnavailable,
-    CacheNotCleared,
+    StreamCacheClearPending,
 }
 
 sealed interface ApplyPhase {
@@ -68,11 +72,11 @@ sealed interface SettingsUiState {
         val appearance: Appearance,
         val framework: FrameworkInfo?,
         val phase: ApplyPhase,
-        val startTabReset: StartTab?,
+        val startTabBeforeReset: StartTab?,
         val streamCacheClearPending: Boolean = false,
     ) : SettingsUiState {
         val appliedOrDefault: FilterSettings get() = applied ?: FilterSettings()
-        val feedCacheClearWithoutContentChange: Boolean
+        val streamCacheClearWithoutContentChange: Boolean
             get() =
                 streamCacheClearPending &&
                     desired.differingSwitches(appliedOrDefault).none {
@@ -81,7 +85,11 @@ sealed interface SettingsUiState {
         val pendingCount: Int
             get() {
                 val switchChanges = desired.countDifferences(appliedOrDefault)
-                return if (feedCacheClearWithoutContentChange) switchChanges + 1 else switchChanges
+                return if (streamCacheClearWithoutContentChange) {
+                    switchChanges + 1
+                } else {
+                    switchChanges
+                }
             }
         val startScreenChanged: Boolean get() = desired.startTab != appliedOrDefault.startTab
     }
@@ -98,12 +106,13 @@ class SettingsViewModel(
     private val preferences: PrefsRepository,
     private val appearanceRepository: AppearanceRepository,
     private val framework: FrameworkConnection,
-    private val restarter: PlayStoreRestarter,
+    private val broadcastRestarter: PlayStoreRestarter,
     private val rootRestarter: PlayStoreRestarter,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
     private val phase = MutableStateFlow<ApplyPhase>(ApplyPhase.Idle)
-    private val startTabReset = MutableStateFlow<StartTab?>(null)
+    private val applyLock = Mutex()
+    private val startTabBeforeReset = MutableStateFlow<StartTab?>(null)
 
     val uiState: StateFlow<SettingsUiState> =
         combine(
@@ -116,7 +125,7 @@ class SettingsViewModel(
             ),
             framework.framework,
             phase,
-            startTabReset,
+            startTabBeforeReset,
         ) { stored, frameworkInfo, applyPhase, reset ->
             SettingsUiState.Ready(
                 desired = stored.desired,
@@ -124,15 +133,15 @@ class SettingsViewModel(
                 appearance = stored.appearance,
                 framework = frameworkInfo,
                 phase = applyPhase,
-                startTabReset = reset,
+                startTabBeforeReset = reset,
                 streamCacheClearPending = stored.streamCacheClearPending,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState.Loading)
 
     init {
         viewModelScope.launch {
-            framework.binds.filter { it > 0 }.collect {
-                publishApplied()
+            framework.bindCount.filter { it > 0 }.collect {
+                applyLock.withLock { publishApplied() }
             }
         }
     }
@@ -146,7 +155,7 @@ class SettingsViewModel(
         preferences.save(after)
         clearFailure()
         if (filter.hiddenTab != null) {
-            startTabReset.value =
+            startTabBeforeReset.value =
                 before.startTab.takeIf {
                     after.startTab == StartTab.UNCHANGED &&
                         it != after.startTab
@@ -156,7 +165,7 @@ class SettingsViewModel(
 
     fun setStartTab(tab: StartTab) {
         preferences.save(preferences.desiredSettings().withStartTab(tab))
-        startTabReset.value = null
+        startTabBeforeReset.value = null
         clearFailure()
     }
 
@@ -168,72 +177,110 @@ class SettingsViewModel(
 
     fun setDynamicColor(enabled: Boolean) = appearanceRepository.setDynamicColor(enabled)
 
-    fun apply() = applyWith(restarter)
+    fun apply() = applyWith(broadcastRestarter)
 
     fun restartWithRoot() {
         val current = phase.value as? ApplyPhase.Failed ?: return
-        if (current.reason !in ROOT_RECOVERABLE_FAILURES) return
+        if (current.reason !in ROOT_RESTART_OFFERED_FAILURES) return
         applyWith(rootRestarter)
     }
 
-    private fun applyWith(route: PlayStoreRestarter) {
+    private fun applyWith(restarter: PlayStoreRestarter) {
         val current = phase.value
         if (current.isRunning || !phase.compareAndSet(current, ApplyPhase.Saving)) return
         viewModelScope.launch {
-            var restarted = false
-            try {
-                val snapshot = preferences.desiredSettings()
-                val previous = preferences.appliedSettings() ?: FilterSettings()
-                val changedSwitches = snapshot.differingSwitches(previous)
-                if (!framework.publish(snapshot)) {
-                    phase.value = ApplyPhase.Failed(ApplyFailure.NotSent)
-                    return@launch
-                }
-                if (changedSwitches.any { it.category == FilterCategory.CONTENT }) {
-                    preferences.requestStreamCacheClear()
-                }
-                phase.value = ApplyPhase.WaitingForExit
-                val outcome =
-                    route.restart(clearStreamCache = preferences.streamCacheClearPending()) {
-                        phase.value = ApplyPhase.Reopening
+            applyLock.withLock {
+                var restarted = false
+                try {
+                    val snapshot = preferences.desiredSettings()
+                    val previous = preferences.appliedSettings() ?: FilterSettings()
+                    val changedSwitches = snapshot.differingSwitches(previous)
+                    if (!framework.publish(snapshot)) {
+                        phase.value = ApplyPhase.Failed(ApplyFailure.NotSent)
+                        return@launch
                     }
-                val cachePending = outcome == RestartOutcome.RestartedCachePending
-                restarted = outcome == RestartOutcome.Restarted || cachePending
-                if (restarted) {
-                    preferences.markApplied(snapshot, streamCacheClearPending = cachePending)
+                    if (changedSwitches.any { it.category == FilterCategory.CONTENT }) {
+                        preferences.requestStreamCacheClear()
+                    }
+                    phase.value = ApplyPhase.WaitingForExit
+                    val clearStreamCache = preferences.streamCacheClearPending()
+                    val outcome =
+                        try {
+                            restarter.restart(clearStreamCache = clearStreamCache) {
+                                phase.value = ApplyPhase.Reopening
+                            }
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            Log.e(TAG, "Play Store restart failed", exception)
+                            phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
+                            return@launch
+                        }
+                    val cachePending = outcome == RestartOutcome.RestartedCachePending
+                    restarted = outcome == RestartOutcome.Restarted || cachePending
+                    if (restarted) {
+                        preferences.markApplied(snapshot, streamCacheClearPending = cachePending)
+                    }
+                    phase.value = outcome.toPhase()
+                } catch (exception: CancellationException) {
+                    phase.value = ApplyPhase.Idle
+                    throw exception
+                } catch (exception: Exception) {
+                    Log.e(TAG, "applying settings failed", exception)
+                    phase.value = ApplyPhase.Failed(ApplyFailure.SettingsFailed)
+                } finally {
+                    if (!restarted) withContext(NonCancellable) { publishApplied() }
                 }
-                phase.value = outcome.toPhase()
-            } catch (exception: CancellationException) {
-                phase.value = ApplyPhase.Idle
-                throw exception
-            } catch (_: Exception) {
-                phase.value = ApplyPhase.Failed(ApplyFailure.RestartFailed)
-            } finally {
-                if (!restarted) withContext(NonCancellable) { publishApplied() }
             }
         }
     }
 
     private fun RestartOutcome.toPhase(): ApplyPhase =
         when (this) {
-            RestartOutcome.Restarted -> ApplyPhase.Idle
-            RestartOutcome.RestartedCachePending -> ApplyPhase.Failed(ApplyFailure.CacheNotCleared)
-            RestartOutcome.Busy -> ApplyPhase.Failed(ApplyFailure.Busy)
-            RestartOutcome.NoReply -> ApplyPhase.Failed(ApplyFailure.NoReply)
-            RestartOutcome.Failed -> ApplyPhase.Failed(ApplyFailure.RestartFailed)
-            RestartOutcome.RootUnavailable -> ApplyPhase.Failed(ApplyFailure.RootUnavailable)
+            RestartOutcome.Restarted -> {
+                ApplyPhase.Idle
+            }
+
+            RestartOutcome.RestartedCachePending -> {
+                ApplyPhase.Failed(ApplyFailure.StreamCacheClearPending)
+            }
+
+            RestartOutcome.Busy -> {
+                ApplyPhase.Failed(ApplyFailure.Busy)
+            }
+
+            RestartOutcome.NoReply -> {
+                ApplyPhase.Failed(ApplyFailure.NoReply)
+            }
+
+            RestartOutcome.Failed -> {
+                ApplyPhase.Failed(ApplyFailure.RestartFailed)
+            }
+
+            RestartOutcome.RootUnavailable -> {
+                ApplyPhase.Failed(ApplyFailure.RootUnavailable)
+            }
         }
 
     private suspend fun publishApplied(): Boolean =
-        framework.publish(preferences.appliedSettings() ?: FilterSettings())
+        try {
+            framework.publish(preferences.appliedSettings() ?: FilterSettings())
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Log.w(TAG, "publishing applied settings failed", exception)
+            false
+        }
 
     companion object {
-        val ROOT_RECOVERABLE_FAILURES =
+        private const val TAG = "GPlayAdblock"
+
+        val ROOT_RESTART_OFFERED_FAILURES =
             setOf(
                 ApplyFailure.NoReply,
                 ApplyFailure.RestartFailed,
                 ApplyFailure.RootUnavailable,
-                ApplyFailure.CacheNotCleared,
+                ApplyFailure.StreamCacheClearPending,
             )
 
         val Factory =
@@ -244,7 +291,7 @@ class SettingsViewModel(
                         preferences = app.prefsRepository,
                         appearanceRepository = app.appearanceRepository,
                         framework = app.frameworkConnection,
-                        restarter = app.playStoreRestarter,
+                        broadcastRestarter = app.broadcastPlayStoreRestarter,
                         rootRestarter = app.rootPlayStoreRestarter,
                     )
                 }

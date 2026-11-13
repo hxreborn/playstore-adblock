@@ -28,6 +28,7 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 
     compileOptions {
@@ -63,6 +64,9 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.aboutlibraries.compose.m3)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.ui.test.manifest)
+    testImplementation(libs.robolectric)
     testImplementation(libs.junit)
     testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)

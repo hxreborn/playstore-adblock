@@ -109,11 +109,11 @@
     <string name="apply_no_reply_title">Play Store didn\'t respond</string>
     <string name="apply_no_reply_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_busy_title">Play Store is busy</string>
-    <string name="apply_busy_body">It is installing or updating apps. Try again when it finishes</string>
+    <string name="apply_busy_body">An install, update, or purchase is in progress. Try again when it finishes</string>
     <string name="apply_failed_body">Close it from its app info, try again, or restart it with root</string>
     <string name="apply_restart_with_root">Restart with root</string>
-    <string name="apply_cache_not_cleared_title">Play Store restarted with cached feeds</string>
-    <string name="apply_cache_not_cleared_body">The feed cache could not be cleared. Try again to apply content filters to cached feeds</string>
+    <string name="apply_cache_not_cleared_title">Play Store restarted</string>
+    <string name="apply_cache_not_cleared_body">Cached feeds may still need clearing. Try again to apply content filters to cached feeds</string>
     <string name="apply_root_unavailable_title">Root access isn\'t available</string>
     <string name="apply_root_unavailable_body">Allow GPlay Adblock in your root manager, or close Play Store from its app info</string>
     <string name="apply_app_info">Play Store app info</string>
@@ -160,4 +160,6 @@
     <string name="launcher_icon_hide_title">Hide launcher icon?</string>
     <string name="launcher_icon_hide_body">GPlay Adblock leaves your app drawer. Open these settings from your Xposed manager instead.</string>
     <string name="launcher_icon_hide_confirm">Hide icon</string>
+    <string name="apply_settings_failed_title">Could not apply settings</string>
+    <string name="apply_settings_failed_body">Try again. If it still fails, check the module logs</string>
 </resources>

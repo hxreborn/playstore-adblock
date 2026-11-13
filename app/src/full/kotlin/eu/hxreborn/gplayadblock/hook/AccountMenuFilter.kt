@@ -26,7 +26,9 @@ object AccountMenuFilter {
         settings: FilterSettings,
         targets: AccountMenuTargets,
     ): Boolean {
-        targets.unresolved.forEach { reason -> Logger.warn("account menu $reason") }
+        targets.unresolved.forEach { reason ->
+            Logger.warn("account menu unresolved reason=$reason")
+        }
         var installed = false
         val hiddenRoles =
             buildSet {
@@ -87,7 +89,7 @@ object AccountMenuFilter {
                             constructor.parameterTypes.indices.singleOrNull { index ->
                                 constructor.parameterTypes[index].name == badgeType
                             },
-                        ) { "notification badge parameter not unique" }
+                        ) { "notification badge parameter missing or ambiguous" }
                     module
                         .hook(constructor)
                         .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)

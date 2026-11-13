@@ -50,7 +50,7 @@ jobs:
             >> "$GITHUB_OUTPUT"
           echo "$delim" >> "$GITHUB_OUTPUT"
 
-          if gh api "repos/$REPO/contents/assets/release/$TAG_NAME.png?ref=$TAG_NAME" \
+          if gh api "repos/$REPO/contents/assets/release/$TAG_NAME.png" \
             -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/release.png" 2>/dev/null; then
             echo "photo=$RUNNER_TEMP/release.png" >> "$GITHUB_OUTPUT"
           fi

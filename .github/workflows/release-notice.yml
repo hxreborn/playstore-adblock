@@ -50,6 +50,11 @@ jobs:
             >> "$GITHUB_OUTPUT"
           echo "$delim" >> "$GITHUB_OUTPUT"
 
+          if gh api "repos/$REPO/contents/assets/release/$TAG_NAME.png?ref=$TAG_NAME" \
+            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/release.png" 2>/dev/null; then
+            echo "photo=$RUNNER_TEMP/release.png" >> "$GITHUB_OUTPUT"
+          fi
+
           delim="BODY_EOF_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           echo "body<<$delim" >> "$GITHUB_OUTPUT"
           gh release view "$TAG_NAME" --repo "$REPO" --json body --jq '.body' >> "$GITHUB_OUTPUT"
@@ -62,6 +67,7 @@ jobs:
           BODY: ${{ steps.release.outputs.body }}
           RELEASE_URL: ${{ steps.release.outputs.url }}
           APKS: ${{ steps.release.outputs.apks }}
+          PHOTO: ${{ steps.release.outputs.photo }}
           IS_DRY: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
@@ -154,6 +160,9 @@ jobs:
           fi
 
           if [ "$IS_DRY" = "true" ]; then
+            if [ -n "$PHOTO" ]; then
+              echo "Dry run. Photo sent first: $(wc -c < "$PHOTO") bytes"
+            fi
             echo "Dry run. The notification would be:"
             printf '%s\n' "$text"
             exit 0
@@ -162,6 +171,13 @@ jobs:
           if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT:-}" ]; then
             echo "::error::TG_TOKEN or TG_CHAT is not configured."
             exit 1
+          fi
+
+          if [ -n "$PHOTO" ]; then
+            curl -sS --fail-with-body --max-time 60 \
+              "https://api.telegram.org/bot${TG_TOKEN}/sendPhoto" \
+              -F chat_id="$TG_CHAT" \
+              -F photo=@"$PHOTO" > /dev/null
           fi
 
           # Retries can double-post

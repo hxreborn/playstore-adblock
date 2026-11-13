@@ -176,7 +176,7 @@ jobs:
           if [ -n "$PHOTO" ]; then
             curl -sS --fail-with-body --max-time 60 \
               "https://api.telegram.org/bot${TG_TOKEN}/sendPhoto" \
-              -F chat_id="$TG_CHAT" \
+              --form-string chat_id="$TG_CHAT" \
               -F photo=@"$PHOTO" > /dev/null
           fi
 

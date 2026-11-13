@@ -41,19 +41,11 @@
     }],
     ["@semantic-release/github", {
       "successCommentCondition": "<% return !branch.prerelease; %>",
+      "draftRelease": true,
       "assets": [
-        {
-          "path": "playstore-adblock-v*-core-arm64-v8a.apk",
-          "label": "Play Store Adblock v${nextRelease.version} Core (arm64-v8a)"
-        },
-        {
-          "path": "playstore-adblock-v*-full-arm64-v8a.apk",
-          "label": "Play Store Adblock v${nextRelease.version} Full (arm64-v8a)"
-        },
-        {
-          "path": "playstore-adblock-v*-SHA256SUMS.txt",
-          "label": "SHA-256 checksums"
-        }
+        "playstore-adblock-v*-core-arm64-v8a.apk",
+        "playstore-adblock-v*-full-arm64-v8a.apk",
+        "playstore-adblock-v*-SHA256SUMS.txt"
       ]
     }]
   ]

@@ -4,6 +4,8 @@ updates:
     ignore:
       - dependency-name: "io.github.libxposed:*"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "androidx.compose.material3:material3"
+        versions: ["[1.6.0-alpha,1.6.0)"]
     directory: "/"
     schedule:
       interval: weekly

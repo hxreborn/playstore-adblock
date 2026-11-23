@@ -1,8 +1,8 @@
 [versions]
 aboutlibraries = "15.3.0"
 activityCompose = "1.13.0"
-agp = "9.5.1"
-composeBom = "2026.09.00"
+agp = "9.5.2"
+composeBom = "2026.11.01"
 composePreferences = "2.2.0"
 dexkit = "2.3.0"
 json = "20260814"
@@ -17,7 +17,7 @@ material3 = "1.6.0-alpha01"
 navigation3 = "1.2.1"
 snakeyaml = "2.7"
 splashscreen = "1.2.0"
-robolectric = "4.17"
+robolectric = "4.18.1"
 
 [libraries]
 aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlibraries" }

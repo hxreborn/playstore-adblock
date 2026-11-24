@@ -32,7 +32,8 @@ class FullModuleConfiguration(
 ) : VariantSetup {
     private val guard = crashGuard()
     private val settings = guard.settingsForProcess(requestedSettings)
-    private val optionalFiltersDisabled = settings != requestedSettings
+    private val optionalFiltersDisabled = guard.isTripped()
+    private val filtersSuppressed = settings != requestedSettings
     private var contentPolicyCreated = false
 
     override fun removalPolicy(sponsored: PresentationClassifier): RemovalPolicy {
@@ -59,11 +60,15 @@ class FullModuleConfiguration(
         } catch (exception: Exception) {
             Logger.error("Play Store restart receiver unavailable", exception)
         }
-        val groups = OptionalGroup.requiredBy(settings)
-        if (optionalFiltersDisabled) {
+        val groups =
+            if (optionalFiltersDisabled) {
+                setOf(OptionalGroup.INSTALL_SESSION_QUEUE)
+            } else {
+                OptionalGroup.requiredBy(settings)
+            }
+        if (filtersSuppressed) {
             Logger.error("optional filters skipped after repeated Play Store crashes")
             showOptionalFiltersDisabled()
-            return
         }
         if (contentPolicyCreated) installCrashRecorder(guard)
         if (groups.isEmpty()) return
@@ -72,7 +77,9 @@ class FullModuleConfiguration(
             Logger.warn("optional ${group.label} targets unresolved reason=$reason")
         }
         val installed = groups.filter { group -> install(group, optionalTargets) }
-        if (installed.isNotEmpty() && !contentPolicyCreated) installCrashRecorder(guard)
+        if (installed.any { it != OptionalGroup.INSTALL_SESSION_QUEUE } && !contentPolicyCreated) {
+            installCrashRecorder(guard)
+        }
         Logger.info(
             "optional filters installed=${installed.joinToString(",", "[", "]") { it.label }} " +
                 "requested=${groups.joinToString(",", "[", "]") { it.label }}",
@@ -135,6 +142,15 @@ class FullModuleConfiguration(
                 OptionalGroup.SELF_UPDATE -> {
                     optionalTargets.selfUpdate?.let { selfUpdate ->
                         SelfUpdateFilter.install(module, classLoader, settings, selfUpdate)
+                    } ?: false
+                }
+
+                OptionalGroup.INSTALL_SESSION_QUEUE -> {
+                    optionalTargets.installSessionQueue?.let { queue ->
+                        PlayStoreSettingsReceiver.installSessionQueue(
+                            InstallSessionQueue.from(application, classLoader, queue),
+                        )
+                        true
                     } ?: false
                 }
             }

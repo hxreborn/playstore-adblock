@@ -18,6 +18,19 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class OptionalTargetsFixtureTest {
+    @Test
+    fun `install queue resolves on the tablet release`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("54.3.07") }
+        assumeTrue("54.3.07 fixture is not archived", fixture != null)
+        val result =
+            OptionalDexKitResolver.resolve(
+                listOf(requireNotNull(fixture).apk.absolutePath),
+                setOf(OptionalGroup.INSTALL_SESSION_QUEUE),
+            )
+        assertEquals(emptyMap<OptionalGroup, String>(), result.failures)
+        assertTrue(result.installSessionQueue != null)
+    }
+
     @get:Rule
     val temporary = TemporaryFolder()
 

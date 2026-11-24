@@ -27,7 +27,7 @@ class CrashLoopGuardTest {
         val guard = guard()
         val content = FilterSettings(enabled = setOf(FilterSwitch.HIDE_LIVE_OPS))
         val navigation = FilterSettings(startTab = StartTab.SEARCH)
-        assertEquals(emptySet<OptionalGroup>(), OptionalGroup.requiredBy(content))
+        assertEquals(setOf(OptionalGroup.INSTALL_SESSION_QUEUE), OptionalGroup.requiredBy(content))
         assertEquals(content, guard.settingsForProcess(content))
         assertEquals(navigation, guard.settingsForProcess(navigation))
         repeat(CrashLoopGuard.THRESHOLD) { guard.recordCrash() }

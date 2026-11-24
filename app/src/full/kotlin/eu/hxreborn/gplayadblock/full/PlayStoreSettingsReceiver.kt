@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageInstaller
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -25,6 +24,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 object PlayStoreSettingsReceiver {
     private val livePurchaseActivities = AtomicInteger(0)
+
+    @Volatile private var installSessionQueue: InstallSessionQueue? = null
+
+    internal fun installSessionQueue(queue: InstallSessionQueue) {
+        installSessionQueue = queue
+    }
 
     @SuppressLint("InlinedApi")
     internal fun register(
@@ -170,6 +175,10 @@ object PlayStoreSettingsReceiver {
                 livePurchaseActivities.get() > 0 -> "in a purchase flow"
                 else -> null
             }
+        if (RestartProtocol.isPastDeadline(SystemClock.elapsedRealtime(), deadline)) {
+            Logger.info("restart refused: request expired")
+            return RestartProtocol.RESULT_FAILED
+        }
         if (busy != null) {
             Logger.info("restart refused: Play Store is $busy")
             return RestartProtocol.RESULT_BUSY
@@ -212,21 +221,29 @@ object PlayStoreSettingsReceiver {
 
     private fun hasActiveInstallSession(context: Context): Boolean =
         runCatching {
-            context.packageManager.packageInstaller.mySessions
-                .any { session ->
-                    blocksRestart(session.isActive, session.isStaged, session.isCommittedCompat())
+            val installer = context.packageManager.packageInstaller
+
+            fun activeSessions(): List<BlockingInstallSession> {
+                val now = System.currentTimeMillis()
+                return installer.mySessions.mapNotNull { session ->
+                    val committed = session.isCommitted
+                    if (!blocksRestart(session.isActive, session.isStaged, committed)) {
+                        return@mapNotNull null
+                    }
+                    BlockingInstallSession(
+                        session.sessionId,
+                        committed,
+                        session.appPackageName,
+                        now - session.createdMillis,
+                    )
                 }
+            }
+            val active = activeSessions()
+            if (active.isEmpty()) return@runCatching false
+            val queue = installSessionQueue ?: return@runCatching true
+            installSessionsBlockRestart(active, queue::snapshot, queue::isManaged, ::activeSessions)
         }.onFailure { error -> Logger.warn("install session check failed", error) }
             .getOrThrow()
-
-    // SessionInfo.isCommitted needs API 31; before it, a ready, applied or failed staged session
-    // has been committed.
-    private fun PackageInstaller.SessionInfo.isCommittedCompat(): Boolean =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            isCommitted
-        } else {
-            isStagedSessionReady || isStagedSessionApplied || isStagedSessionFailed
-        }
 }
 
 /**
@@ -239,3 +256,55 @@ internal fun blocksRestart(
     staged: Boolean,
     committed: Boolean,
 ): Boolean = active && !(staged && committed)
+
+internal const val ORPHAN_SESSION_GRACE_MILLIS = 30 * 60 * 1000L
+
+internal fun mayBeOrphanedSession(
+    committed: Boolean,
+    packageName: String?,
+    activePackages: Set<String>,
+    ageMillis: Long,
+): Boolean =
+    !committed && packageName != null && packageName !in activePackages &&
+        ageMillis >= ORPHAN_SESSION_GRACE_MILLIS
+
+internal data class BlockingInstallSession(
+    val id: Int,
+    val committed: Boolean,
+    val packageName: String?,
+    val ageMillis: Long,
+)
+
+internal fun installSessionsBlockRestart(
+    sessions: List<BlockingInstallSession>,
+    queueSnapshot: () -> InstallSessionQueue.Snapshot?,
+    isManaged: (Int, String) -> Boolean,
+    currentSessions: () -> List<BlockingInstallSession>,
+): Boolean {
+    val managed = mutableSetOf<Pair<Int, String>>()
+    for (session in sessions) {
+        if (!mayBeOrphanedSession(
+                session.committed,
+                session.packageName,
+                emptySet(),
+                session.ageMillis,
+            )
+        ) {
+            return true
+        }
+        val packageName = requireNotNull(session.packageName)
+        if (!isManaged(session.id, packageName)) return true
+        managed.add(session.id to packageName)
+    }
+    val snapshot = queueSnapshot() ?: return true
+    return snapshot.hasRunningTask ||
+        currentSessions().any { session ->
+            (session.id to session.packageName) !in managed ||
+                !mayBeOrphanedSession(
+                    session.committed,
+                    session.packageName,
+                    snapshot.packages,
+                    session.ageMillis,
+                )
+        }
+}

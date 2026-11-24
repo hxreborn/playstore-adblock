@@ -71,6 +71,7 @@ object OptionalDexKitResolver {
                     navTypeAnchors,
                 ),
             OptionalGroup.SELF_UPDATE to emptyList(),
+            OptionalGroup.INSTALL_SESSION_QUEUE to emptyList(),
         )
 
     fun resolve(
@@ -131,10 +132,27 @@ object OptionalDexKitResolver {
             groups.associateWith { group ->
                 attempt(group.label) {
                     when (group) {
-                        OptionalGroup.ACCOUNT_MENU -> resolveAccountMenu(bridge, anchored)
-                        OptionalGroup.MANAGE_APPS -> resolveManageApps(bridge, anchored)
-                        OptionalGroup.PERSISTENT_NAV -> resolvePersistentNav(bridge, anchored)
-                        OptionalGroup.SELF_UPDATE -> resolveSelfUpdate(bridge)
+                        OptionalGroup.ACCOUNT_MENU -> {
+                            resolveAccountMenu(bridge, anchored)
+                        }
+
+                        OptionalGroup.MANAGE_APPS -> {
+                            resolveManageApps(bridge, anchored)
+                        }
+
+                        OptionalGroup.PERSISTENT_NAV -> {
+                            resolvePersistentNav(bridge, anchored)
+                        }
+
+                        OptionalGroup.SELF_UPDATE -> {
+                            resolveSelfUpdate(bridge)
+                        }
+
+                        OptionalGroup.INSTALL_SESSION_QUEUE -> {
+                            InstallSessionQueueResolver.resolve(
+                                bridge,
+                            )
+                        }
                     }
                 }
             }
@@ -145,6 +163,9 @@ object OptionalDexKitResolver {
             persistentNav =
                 results[OptionalGroup.PERSISTENT_NAV]?.success() as? PersistentNavTargets,
             selfUpdate = results[OptionalGroup.SELF_UPDATE]?.success() as? SelfUpdateTargets,
+            installSessionQueue =
+                results[OptionalGroup.INSTALL_SESSION_QUEUE]?.success()
+                    as? InstallSessionQueueTargets,
             failures =
                 results
                     .mapNotNull { (group, result) ->

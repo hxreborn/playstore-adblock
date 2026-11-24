@@ -11,11 +11,13 @@ enum class OptionalGroup(
     MANAGE_APPS("manage-apps"),
     PERSISTENT_NAV("persistent-nav"),
     SELF_UPDATE("self-update"),
+    INSTALL_SESSION_QUEUE("install-session-queue"),
     ;
 
     companion object {
         fun requiredBy(settings: FilterSettings): Set<OptionalGroup> =
             buildSet {
+                add(INSTALL_SESSION_QUEUE)
                 settings.enabled.forEach { filter ->
                     when (filter) {
                         FilterSwitch.HIDE_LIVE_OPS,

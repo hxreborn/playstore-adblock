@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 object OptionalTargetCache {
-    const val SCHEMA_VERSION = 4
+    const val SCHEMA_VERSION = 19
     private const val FILE_PREFIX = "optional-targets-"
 
     fun load(
@@ -77,7 +77,10 @@ object OptionalTargetCache {
             .putOpt("manageApps", targets.manageApps?.let(::encodeManageApps))
             .putOpt("persistentNav", targets.persistentNav?.let(::encodePersistentNav))
             .putOpt("selfUpdate", targets.selfUpdate?.let(::encodeSelfUpdate))
-            .put(
+            .putOpt(
+                "installSessionQueue",
+                targets.installSessionQueue?.let(::encodeInstallSessionQueue),
+            ).put(
                 "failures",
                 JSONObject().apply {
                     targets.failures.forEach { (group, reason) -> put(group.name, reason) }
@@ -95,6 +98,11 @@ object OptionalTargetCache {
             manageApps = value.optJSONObject("manageApps")?.let(::decodeManageApps),
             persistentNav = value.optJSONObject("persistentNav")?.let(::decodePersistentNav),
             selfUpdate = value.optJSONObject("selfUpdate")?.let(::decodeSelfUpdate),
+            installSessionQueue =
+                value
+                    .optJSONObject(
+                        "installSessionQueue",
+                    )?.let(::decodeInstallSessionQueue),
             failures =
                 failures.keys().asSequence().associate { name ->
                     OptionalGroup.valueOf(name) to failures.getString(name)
@@ -215,6 +223,41 @@ object OptionalTargetCache {
             schedulerMethod = TargetCache.decodeMethod(value.getJSONObject("schedulerMethod")),
             autoUpdateMethod =
                 value.optJSONObject("autoUpdateMethod")?.let(TargetCache::decodeMethod),
+        )
+
+    private fun encodeInstallSessionQueue(value: InstallSessionQueueTargets): JSONObject =
+        JSONObject()
+            .put("applicationRegistry", TargetCache.encodeField(value.applicationRegistry))
+            .put("registryProvider", TargetCache.encodeField(value.registryProvider))
+            .put("providerGet", TargetCache.encodeMethod(value.providerGet))
+            .put("adminService", TargetCache.encodeField(value.adminService))
+            .put("filterDefault", TargetCache.encodeField(value.filterDefault))
+            .put("filterBuilder", TargetCache.encodeMethod(value.filterBuilder))
+            .put("activeStates", TargetCache.encodeField(value.activeStates))
+            .put("addStates", TargetCache.encodeMethod(value.addStates))
+            .put("buildFilter", TargetCache.encodeMethod(value.buildFilter))
+            .put("query", TargetCache.encodeMethod(value.query))
+            .put("taskPackage", TargetCache.encodeMethod(value.taskPackage))
+            .put("taskIsGroup", TargetCache.encodeMethod(value.taskIsGroup))
+            .put("taskState", TargetCache.encodeMethod(value.taskState))
+            .put("stateName", TargetCache.encodeMethod(value.stateName))
+
+    private fun decodeInstallSessionQueue(value: JSONObject): InstallSessionQueueTargets =
+        InstallSessionQueueTargets(
+            TargetCache.decodeField(value.getJSONObject("applicationRegistry")),
+            TargetCache.decodeField(value.getJSONObject("registryProvider")),
+            TargetCache.decodeMethod(value.getJSONObject("providerGet")),
+            TargetCache.decodeField(value.getJSONObject("adminService")),
+            TargetCache.decodeField(value.getJSONObject("filterDefault")),
+            TargetCache.decodeMethod(value.getJSONObject("filterBuilder")),
+            TargetCache.decodeField(value.getJSONObject("activeStates")),
+            TargetCache.decodeMethod(value.getJSONObject("addStates")),
+            TargetCache.decodeMethod(value.getJSONObject("buildFilter")),
+            TargetCache.decodeMethod(value.getJSONObject("query")),
+            TargetCache.decodeMethod(value.getJSONObject("taskPackage")),
+            TargetCache.decodeMethod(value.getJSONObject("taskIsGroup")),
+            TargetCache.decodeMethod(value.getJSONObject("taskState")),
+            TargetCache.decodeMethod(value.getJSONObject("stateName")),
         )
 
     private fun encodePersistentNav(value: PersistentNavTargets): JSONObject =

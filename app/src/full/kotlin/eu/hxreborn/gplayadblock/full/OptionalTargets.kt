@@ -10,6 +10,7 @@ data class OptionalTargets(
     val manageApps: ManageAppsTargets? = null,
     val persistentNav: PersistentNavTargets? = null,
     val selfUpdate: SelfUpdateTargets? = null,
+    val installSessionQueue: InstallSessionQueueTargets? = null,
     val failures: Map<OptionalGroup, String> = emptyMap(),
     val transientFailure: Boolean = false,
 ) {
@@ -19,6 +20,7 @@ data class OptionalTargets(
             OptionalGroup.MANAGE_APPS -> manageApps != null
             OptionalGroup.PERSISTENT_NAV -> persistentNav != null
             OptionalGroup.SELF_UPDATE -> selfUpdate != null
+            OptionalGroup.INSTALL_SESSION_QUEUE -> installSessionQueue != null
         }
 
     fun completeGroups(): Set<OptionalGroup> =
@@ -36,6 +38,7 @@ data class OptionalTargets(
             manageApps = manageApps?.merge(next.manageApps) ?: next.manageApps,
             persistentNav = persistentNav ?: next.persistentNav,
             selfUpdate = selfUpdate ?: next.selfUpdate,
+            installSessionQueue = installSessionQueue ?: next.installSessionQueue,
         )
 }
 
@@ -101,6 +104,23 @@ data class HeaderCardTargets(
     val cardSupplierMethod: MethodRef,
     val cardIconLoaderMethod: MethodRef,
     val titleIcons: List<ResourcePair>,
+)
+
+data class InstallSessionQueueTargets(
+    val applicationRegistry: FieldRef,
+    val registryProvider: FieldRef,
+    val providerGet: MethodRef,
+    val adminService: FieldRef,
+    val filterDefault: FieldRef,
+    val filterBuilder: MethodRef,
+    val activeStates: FieldRef,
+    val addStates: MethodRef,
+    val buildFilter: MethodRef,
+    val query: MethodRef,
+    val taskPackage: MethodRef,
+    val taskIsGroup: MethodRef,
+    val taskState: MethodRef,
+    val stateName: MethodRef,
 )
 
 data class SelfUpdateTargets(

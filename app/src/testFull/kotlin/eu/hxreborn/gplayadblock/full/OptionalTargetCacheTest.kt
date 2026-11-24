@@ -116,6 +116,37 @@ class OptionalTargetCacheTest {
     }
 
     @Test
+    fun `install queue targets survive a round trip`() {
+        fun field(name: String) = FieldRef("owner", name)
+
+        fun method(name: String) = MethodRef("owner", name, "java.lang.Object", emptyList())
+        val queue =
+            OptionalTargets(
+                requested = setOf(OptionalGroup.INSTALL_SESSION_QUEUE),
+                installSessionQueue =
+                    InstallSessionQueueTargets(
+                        applicationRegistry = field("applicationRegistry"),
+                        registryProvider = field("registryProvider"),
+                        providerGet = method("providerGet"),
+                        adminService = field("adminService"),
+                        filterDefault = field("filterDefault"),
+                        filterBuilder = method("filterBuilder"),
+                        activeStates = field("activeStates"),
+                        addStates = method("addStates"),
+                        buildFilter = method("buildFilter"),
+                        query = method("query"),
+                        taskPackage = method("taskPackage"),
+                        taskIsGroup = method("taskIsGroup"),
+                        taskState = method("taskState"),
+                        stateName = method("stateName"),
+                    ),
+            )
+        val dataDir = folder.root.absolutePath
+        OptionalTargetCache.store(dataDir, key, queue)
+        assertEquals(queue, OptionalTargetCache.load(dataDir, key, queue.requested))
+    }
+
+    @Test
     fun `a scan for fewer groups is not reused for more groups`() {
         val dataDir = folder.root.absolutePath
         OptionalTargetCache.store(dataDir, key, targets)

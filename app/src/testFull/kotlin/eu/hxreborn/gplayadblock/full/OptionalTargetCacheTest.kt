@@ -116,6 +116,66 @@ class OptionalTargetCacheTest {
     }
 
     @Test
+    fun `search order targets survive a round trip`() {
+        val searchOrder =
+            OptionalTargets(
+                requested = setOf(OptionalGroup.SEARCH_ORDER),
+                searchOrder =
+                    SearchOrderTargets(
+                        itemPrefetchMethods =
+                            listOf("aiix", "aikn", "aiks").map { className ->
+                                MethodRef(
+                                    className,
+                                    "a",
+                                    "void",
+                                    listOf("java.util.List", "boolean"),
+                                )
+                            },
+                    ),
+            )
+        val dataDir = folder.root.absolutePath
+        OptionalTargetCache.store(dataDir, key, searchOrder)
+        assertEquals(searchOrder, OptionalTargetCache.load(dataDir, key, searchOrder.requested))
+    }
+
+    @Test
+    fun `search root targets survive a round trip`() {
+        val root =
+            OptionalTargets(
+                requested = setOf(OptionalGroup.SEARCH_ROOT),
+                searchRoot =
+                    SearchRootTargets(
+                        ConstructorRef("snapshot", listOf("owner", "java.util.List")),
+                        "root",
+                        MethodRef("root", "refresh", "void", listOf("event")),
+                        MethodRef("child", "refresh", "void", emptyList()),
+                        MethodRef("child", "load", "void", emptyList()),
+                        SearchScrollTargets(
+                            MethodRef(
+                                "ui",
+                                "state",
+                                "list",
+                                listOf("java.lang.String", "composer"),
+                            ),
+                            MethodRef("list", "scroll", "void", listOf("int", "int", "boolean")),
+                            listOf(MethodRef("ui", "render", "void", emptyList())),
+                            MethodRef(
+                                "renderer",
+                                "accept",
+                                "java.lang.Object",
+                                listOf("snapshot", "continuation"),
+                            ),
+                            MethodRef("list", "layout", "void", emptyList()),
+                            listOf(MethodRef("caller", "resume", "java.lang.Object", emptyList())),
+                        ),
+                    ),
+            )
+        val dataDir = folder.root.absolutePath
+        OptionalTargetCache.store(dataDir, key, root)
+        assertEquals(root, OptionalTargetCache.load(dataDir, key, root.requested))
+    }
+
+    @Test
     fun `install queue targets survive a round trip`() {
         fun field(name: String) = FieldRef("owner", name)
 

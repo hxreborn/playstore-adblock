@@ -18,8 +18,11 @@ object VariantConfiguration {
     ): VariantSetup = SponsoredOnly
 
     private object SponsoredOnly : VariantSetup {
-        override fun removalPolicy(sponsored: PresentationClassifier): RemovalPolicy = sponsored
+        override fun removalPolicy(
+            sponsored: PresentationClassifier,
+            graph: Boolean,
+        ): RemovalPolicy = sponsored
 
-        override fun installAfterSponsored() = Unit
+        override fun installAfterSponsored(installed: Set<String>) = Unit
     }
 }

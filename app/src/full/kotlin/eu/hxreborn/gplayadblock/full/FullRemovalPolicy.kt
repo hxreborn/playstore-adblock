@@ -240,11 +240,6 @@ class FullRemovalPolicy internal constructor(
         val SEARCH_PROMOTION_MARKER =
             "search_quality_cluster_COLLAPSED_DEV_SUCCESS_CLUSTER".toByteArray(Charsets.US_ASCII)
 
-        fun contentFiltersEnabled(settings: FilterSettings): Boolean =
-            settings.isOn(FilterSwitch.HIDE_LIVE_OPS) ||
-                settings.isOn(FilterSwitch.HIDE_PRE_REGISTRATION_GAMES) ||
-                settings.isOn(FilterSwitch.HIDE_SEARCH_PROMOTIONS)
-
         fun from(
             sponsored: PresentationClassifier,
             classLoader: ClassLoader,

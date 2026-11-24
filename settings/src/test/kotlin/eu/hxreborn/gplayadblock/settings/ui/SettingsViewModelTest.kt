@@ -7,6 +7,7 @@ import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkConnection
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkInfo
+import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
 import eu.hxreborn.gplayadblock.settings.prefs.PrefsRepository
 import eu.hxreborn.gplayadblock.settings.prefs.RecordingEditor
 import eu.hxreborn.gplayadblock.settings.prefs.SettingsKeys
@@ -94,6 +95,7 @@ class SettingsViewModelTest {
 
     private fun viewModel(
         ioDispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(scheduler),
+        searchSortAvailable: () -> Boolean = { true },
     ) = SettingsViewModel(
         preferences,
         appearance,
@@ -101,12 +103,57 @@ class SettingsViewModelTest {
         restarter,
         rootRestarter,
         ioDispatcher,
+        searchSortAvailable,
     )
 
     private fun connectFramework() =
         connection.attach(Any(), FrameworkInfo("Vector", "2.0", 101), remote::editor)
 
     private fun SettingsViewModel.ready() = uiState.value as SettingsUiState.Ready
+
+    @Test
+    fun `minimum ratings edits are pending only while sorting is available and enabled`() {
+        var appSupportsSorting = true
+        val viewModel = viewModel(searchSortAvailable = { appSupportsSorting })
+        viewModel.setMinimumRatings(MinimumRatings.TEN)
+        assertEquals(MinimumRatings.ONE_HUNDRED, preferences.desiredSettings().minimumRatings)
+        viewModel.setFilter(FilterSwitch.SORT_SEARCH_RESULTS, true)
+        viewModel.setMinimumRatings(MinimumRatings.FIVE_HUNDRED)
+        assertTrue(viewModel.ready().searchSortAvailable)
+        assertEquals(2, viewModel.ready().pendingCount)
+        appSupportsSorting = false
+        viewModel.refreshSearchSortAvailability()
+        assertFalse(viewModel.ready().searchSortAvailable)
+        assertEquals(0, viewModel.ready().pendingCount)
+        viewModel.setMinimumRatings(MinimumRatings.FIFTY)
+        assertEquals(MinimumRatings.FIVE_HUNDRED, preferences.desiredSettings().minimumRatings)
+        appSupportsSorting = true
+        viewModel.refreshSearchSortAvailability()
+        assertTrue(viewModel.ready().searchSortAvailable)
+        assertEquals(2, viewModel.ready().pendingCount)
+        viewModel.setFilter(FilterSwitch.SORT_SEARCH_RESULTS, false)
+        assertEquals(0, viewModel.ready().pendingCount)
+        assertEquals(MinimumRatings.FIVE_HUNDRED, preferences.desiredSettings().minimumRatings)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+    }
+
+    @Test
+    fun `apply publishes minimum ratings and restarts without clearing stream cache`() {
+        val enabled = FilterSettings(enabled = setOf(FilterSwitch.SORT_SEARCH_RESULTS))
+        preferences.save(enabled)
+        preferences.markApplied(enabled)
+        val viewModel = viewModel()
+        connectFramework()
+        remote.commits.clear()
+        viewModel.setMinimumRatings(MinimumRatings.ONE_THOUSAND)
+        assertEquals(1, viewModel.ready().pendingCount)
+        viewModel.apply()
+        assertEquals(1_000, remote.commits.single()[SettingsKeys.MINIMUM_RATINGS])
+        assertEquals(MinimumRatings.ONE_THOUSAND, preferences.appliedSettings()?.minimumRatings)
+        assertEquals(listOf(false), restarter.clearRequests)
+        assertEquals(0, viewModel.ready().pendingCount)
+        assertEquals(ApplyPhase.Idle, viewModel.ready().phase)
+    }
 
     @Test
     fun `state is loading until the stored settings are read`() {

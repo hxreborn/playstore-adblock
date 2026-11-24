@@ -30,6 +30,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -145,6 +146,10 @@ private fun rememberScreenTransitions(): ScreenTransitions {
 
 @Composable
 fun SettingsApp(viewModel: SettingsViewModel) {
+    LaunchedEffect(
+        viewModel,
+        LocalConfiguration.current,
+    ) { viewModel.refreshSearchSortAvailability() }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val ready = state as? SettingsUiState.Ready ?: return
     GPlayAdblockTheme(appearance = ready.appearance) {
@@ -212,8 +217,10 @@ private fun SettingsNavigation(
                             category = key.category,
                             settings = state.desired,
                             startTabBeforeReset = state.startTabBeforeReset,
+                            searchSortAvailable = state.searchSortAvailable,
                             onFilterChange = viewModel::setFilter,
                             onStartTabChange = viewModel::setStartTab,
+                            onMinimumRatingsChange = viewModel::setMinimumRatings,
                             onBack = { popIfTop(key) },
                         )
                     }
@@ -281,17 +288,21 @@ private fun ApplyHaptics(phase: ApplyPhase) {
 }
 
 private fun pendingChanges(state: SettingsUiState.Ready): List<PendingChange> {
-    val desired = state.desired
+    val applicable = state.applicableSettings
     val switches =
-        desired
+        applicable
             .differingSwitches(state.appliedOrDefault)
             .sorted()
-            .map { PendingChange.Switch(it, desired.isOn(it)) }
+            .map { PendingChange.Switch(it, applicable.isOn(it)) }
     val startScreen =
-        if (state.startScreenChanged) PendingChange.StartScreen(desired.startTab) else null
+        if (state.startScreenChanged) PendingChange.StartScreen(applicable.startTab) else null
     val streamCacheClear =
         PendingChange.StreamCacheClear.takeIf {
             state.streamCacheClearWithoutContentChange
         }
-    return switches + listOfNotNull(startScreen, streamCacheClear)
+    val minimumRatings =
+        PendingChange.RatingMinimum(applicable.minimumRatings).takeIf {
+            applicable.minimumRatings != state.appliedOrDefault.minimumRatings
+        }
+    return switches + listOfNotNull(startScreen, minimumRatings, streamCacheClear)
 }

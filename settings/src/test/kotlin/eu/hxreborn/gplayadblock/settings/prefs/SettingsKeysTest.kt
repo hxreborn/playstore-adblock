@@ -12,6 +12,53 @@ class SettingsKeysTest {
     }
 
     @Test
+    fun `sorting defaults off for new and existing preferences`() {
+        val sort = FilterSwitch.SORT_SEARCH_RESULTS
+        assertFalse(FilterSettings().isOn(sort))
+        val previous = SettingsKeys.read(mapOf("hide_help" to true))
+        assertFalse(previous.isOn(sort))
+        val enabled = previous.with(sort, true)
+        val written = LinkedHashMap<String, Any?>()
+        SettingsKeys.write(enabled, RecordingEditor(written))
+        assertEquals(enabled, SettingsKeys.read(written))
+        assertFalse(enabled.changesStreamContent(previous))
+    }
+
+    @Test
+    fun `minimum ratings defaults to one hundred for new and existing settings`() {
+        assertEquals(MinimumRatings.ONE_HUNDRED, FilterSettings().minimumRatings)
+        val fresh = SettingsKeys.read(emptyMap<String, Any>())
+        assertEquals(MinimumRatings.ONE_HUNDRED, fresh.minimumRatings)
+        assertEquals(
+            MinimumRatings.ONE_HUNDRED,
+            SettingsKeys.read(mapOf(FilterSwitch.SORT_SEARCH_RESULTS.key to true)).minimumRatings,
+        )
+    }
+
+    @Test
+    fun `each minimum rating count is saved as the matching integer`() {
+        val counts = listOf(10, 50, 100, 500, 1_000)
+        assertEquals(counts, MinimumRatings.entries.map { it.count })
+        for ((count, minimum) in counts.zip(MinimumRatings.entries)) {
+            val saved = FilterSettings(minimumRatings = minimum)
+            val written = LinkedHashMap<String, Any?>()
+            SettingsKeys.write(saved, RecordingEditor(written))
+            assertEquals(count, written[SettingsKeys.MINIMUM_RATINGS])
+            assertEquals(saved, SettingsKeys.read(written))
+        }
+    }
+
+    @Test
+    fun `saved values outside the minimum ratings choices use the default`() {
+        for (value in listOf(0, 99, 501, 1_001, "500", 50.5)) {
+            assertEquals(
+                MinimumRatings.ONE_HUNDRED,
+                SettingsKeys.read(mapOf(SettingsKeys.MINIMUM_RATINGS to value)).minimumRatings,
+            )
+        }
+    }
+
+    @Test
     fun `stored Boolean and start tab values read as saved`() {
         val settings =
             SettingsKeys.read(

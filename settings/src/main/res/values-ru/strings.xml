@@ -42,6 +42,7 @@
     <string name="minimal_search_home">Минимальный экран поиска</string>
     <string name="block_store_self_updates">Блокировать самообновление Play Market</string>
     <string name="section_start_screen">Стартовый экран</string>
+    <string name="section_search_sorting">Сортировка поиска</string>
     <string name="start_tab_unchanged">Не менять выбор Play Market</string>
     <string name="start_tab_games">Игры</string>
     <string name="start_tab_apps">Приложения</string>
@@ -160,4 +161,13 @@
     <string name="launcher_icon_hide_confirm">Скрыть значок</string>
     <string name="apply_settings_failed_title">Не удалось применить настройки</string>
     <string name="apply_settings_failed_body">Повторите попытку. Если ошибка повторится, проверьте журналы модуля</string>
+    <string name="sort_search_results">Сортировать результаты поиска</string>
+    <string name="sort_search_results_summary">Добавляет кнопку «Сортировка» в результаты поиска на телефонах</string>
+    <string name="minimum_ratings_title">Минимум оценок для «Highest rated»</string>
+    <string name="minimum_ratings_10">10 оценок</string>
+    <string name="minimum_ratings_50">50 оценок</string>
+    <string name="minimum_ratings_100">100 оценок (рекомендуется)</string>
+    <string name="minimum_ratings_500">500 оценок</string>
+    <string name="minimum_ratings_1000">1 000 оценок</string>
+    <string name="search_sorting_footnote">Сначала сортируются результаты на экране. По мере загрузки новых результатов в Google Play порядок пересчитывается, поэтому первые позиции могут меняться в течение нескольких секунд. Режим «Highest rated» сравнивает оценки в звёздах, которые показывает Google Play. При равных оценках выше идут приложения с большим числом оценок. Приложения с числом оценок ниже минимума идут после остальных, а приложения без оценок идут в конце списка.</string>
 </resources>

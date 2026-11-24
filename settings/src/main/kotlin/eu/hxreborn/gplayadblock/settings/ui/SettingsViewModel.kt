@@ -9,12 +9,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import eu.hxreborn.gplayadblock.settings.GPlayAdblockApp
 import eu.hxreborn.gplayadblock.settings.prefs.Appearance
 import eu.hxreborn.gplayadblock.settings.prefs.AppearanceRepository
-import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkConnection
 import eu.hxreborn.gplayadblock.settings.prefs.FrameworkInfo
+import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
 import eu.hxreborn.gplayadblock.settings.prefs.PrefsRepository
+import eu.hxreborn.gplayadblock.settings.prefs.SearchSortAvailability
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
 import eu.hxreborn.gplayadblock.settings.protocol.PlayStoreRestarter
@@ -74,25 +75,35 @@ sealed interface SettingsUiState {
         val phase: ApplyPhase,
         val startTabBeforeReset: StartTab?,
         val streamCacheClearPending: Boolean = false,
+        val searchSortAvailable: Boolean = true,
     ) : SettingsUiState {
         val appliedOrDefault: FilterSettings get() = applied ?: FilterSettings()
         val streamCacheClearWithoutContentChange: Boolean
             get() =
-                streamCacheClearPending &&
-                    desired.differingSwitches(appliedOrDefault).none {
-                        it.category == FilterCategory.CONTENT
-                    }
+                streamCacheClearPending && !desired.changesStreamContent(appliedOrDefault)
+        internal val applicableSettings: FilterSettings
+            get() = desired.withApplicableSearchSort(appliedOrDefault, searchSortAvailable)
         val pendingCount: Int
             get() {
-                val switchChanges = desired.countDifferences(appliedOrDefault)
+                val settingChanges = applicableSettings.countDifferences(appliedOrDefault)
                 return if (streamCacheClearWithoutContentChange) {
-                    switchChanges + 1
+                    settingChanges + 1
                 } else {
-                    switchChanges
+                    settingChanges
                 }
             }
         val startScreenChanged: Boolean get() = desired.startTab != appliedOrDefault.startTab
     }
+}
+
+private fun FilterSettings.withApplicableSearchSort(
+    applied: FilterSettings,
+    available: Boolean,
+): FilterSettings {
+    val sort = FilterSwitch.SORT_SEARCH_RESULTS
+    if (available && isOn(sort)) return this
+    val settings = if (available) this else with(sort, applied.isOn(sort))
+    return settings.copy(minimumRatings = applied.minimumRatings)
 }
 
 private data class StoredSettings(
@@ -109,7 +120,9 @@ class SettingsViewModel(
     private val broadcastRestarter: PlayStoreRestarter,
     private val rootRestarter: PlayStoreRestarter,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val searchSortAvailable: () -> Boolean = { true },
 ) : ViewModel() {
+    private val searchSortAvailability = MutableStateFlow(searchSortAvailable())
     private val phase = MutableStateFlow<ApplyPhase>(ApplyPhase.Idle)
     private val applyLock = Mutex()
     private val startTabBeforeReset = MutableStateFlow<StartTab?>(null)
@@ -126,7 +139,8 @@ class SettingsViewModel(
             framework.framework,
             phase,
             startTabBeforeReset,
-        ) { stored, frameworkInfo, applyPhase, reset ->
+            searchSortAvailability,
+        ) { stored, frameworkInfo, applyPhase, reset, available ->
             SettingsUiState.Ready(
                 desired = stored.desired,
                 applied = stored.applied,
@@ -135,6 +149,7 @@ class SettingsViewModel(
                 phase = applyPhase,
                 startTabBeforeReset = reset,
                 streamCacheClearPending = stored.streamCacheClearPending,
+                searchSortAvailable = available,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState.Loading)
 
@@ -150,6 +165,7 @@ class SettingsViewModel(
         filter: FilterSwitch,
         on: Boolean,
     ) {
+        if (filter == FilterSwitch.SORT_SEARCH_RESULTS && !searchSortAvailability.value) return
         val before = preferences.desiredSettings()
         val after = before.with(filter, on)
         preferences.save(after)
@@ -166,6 +182,18 @@ class SettingsViewModel(
     fun setStartTab(tab: StartTab) {
         preferences.save(preferences.desiredSettings().withStartTab(tab))
         startTabBeforeReset.value = null
+        clearFailure()
+    }
+
+    fun refreshSearchSortAvailability() {
+        searchSortAvailability.value = searchSortAvailable()
+    }
+
+    fun setMinimumRatings(minimum: MinimumRatings) {
+        if (!searchSortAvailability.value) return
+        val settings = preferences.desiredSettings()
+        if (!settings.isOn(FilterSwitch.SORT_SEARCH_RESULTS)) return
+        preferences.save(settings.copy(minimumRatings = minimum))
         clearFailure()
     }
 
@@ -192,14 +220,24 @@ class SettingsViewModel(
             applyLock.withLock {
                 var restarted = false
                 try {
-                    val snapshot = preferences.desiredSettings()
+                    val desiredSnapshot = preferences.desiredSettings()
                     val previous = preferences.appliedSettings() ?: FilterSettings()
-                    val changedSwitches = snapshot.differingSwitches(previous)
+                    val snapshot =
+                        desiredSnapshot.withApplicableSearchSort(
+                            previous,
+                            searchSortAvailability.value,
+                        )
+                    if (!searchSortAvailability.value && snapshot == previous &&
+                        !preferences.streamCacheClearPending()
+                    ) {
+                        phase.value = ApplyPhase.Idle
+                        return@launch
+                    }
                     if (!framework.publish(snapshot)) {
                         phase.value = ApplyPhase.Failed(ApplyFailure.NotSent)
                         return@launch
                     }
-                    if (changedSwitches.any { it.category == FilterCategory.CONTENT }) {
+                    if (snapshot.changesStreamContent(previous)) {
                         preferences.requestStreamCacheClear()
                     }
                     phase.value = ApplyPhase.WaitingForExit
@@ -293,6 +331,11 @@ class SettingsViewModel(
                         framework = app.frameworkConnection,
                         broadcastRestarter = app.broadcastPlayStoreRestarter,
                         rootRestarter = app.rootPlayStoreRestarter,
+                        searchSortAvailable = {
+                            SearchSortAvailability.supports(
+                                app.resources.configuration.smallestScreenWidthDp,
+                            )
+                        },
                     )
                 }
             }

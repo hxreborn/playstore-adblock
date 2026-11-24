@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
@@ -31,7 +32,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
+import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
+
+internal fun FilterCategory.visibleSwitches(searchSortAvailable: Boolean): List<FilterSwitch> =
+    FilterSwitch.entries.filter {
+        it.category == this && (searchSortAvailable || it != FilterSwitch.SORT_SEARCH_RESULTS)
+    }
 
 internal val FilterCategory.titleRes: Int
     get() =
@@ -59,6 +66,7 @@ internal val FilterSwitch.titleRes: Int
             FilterSwitch.HIDE_LIVE_OPS -> R.string.hide_live_ops
             FilterSwitch.HIDE_PRE_REGISTRATION_GAMES -> R.string.hide_pre_registration_games
             FilterSwitch.HIDE_SEARCH_PROMOTIONS -> R.string.hide_search_promotions
+            FilterSwitch.SORT_SEARCH_RESULTS -> R.string.sort_search_results
             FilterSwitch.SUPPRESS_NOTIFICATION_BADGE -> R.string.suppress_notification_badge
             FilterSwitch.HIDE_HELP -> R.string.hide_help
             FilterSwitch.HIDE_PERSONALIZATION -> R.string.hide_personalization
@@ -93,6 +101,10 @@ internal val FilterSwitch.summaryRes: Int
 
             FilterSwitch.HIDE_SEARCH_PROMOTIONS -> {
                 R.string.hide_search_promotions_summary
+            }
+
+            FilterSwitch.SORT_SEARCH_RESULTS -> {
+                R.string.sort_search_results_summary
             }
 
             FilterSwitch.SUPPRESS_NOTIFICATION_BADGE -> {
@@ -178,6 +190,7 @@ internal val FilterSwitch.icon: ImageVector
             FilterSwitch.HIDE_LIVE_OPS -> Icons.Outlined.Campaign
             FilterSwitch.HIDE_PRE_REGISTRATION_GAMES -> Icons.Outlined.Event
             FilterSwitch.HIDE_SEARCH_PROMOTIONS -> Icons.AutoMirrored.Outlined.ManageSearch
+            FilterSwitch.SORT_SEARCH_RESULTS -> Icons.Outlined.Sort
             FilterSwitch.SUPPRESS_NOTIFICATION_BADGE -> Icons.Outlined.CircleNotifications
             FilterSwitch.HIDE_HELP -> Icons.AutoMirrored.Outlined.Help
             FilterSwitch.HIDE_PERSONALIZATION -> Icons.Outlined.Tune
@@ -208,4 +221,14 @@ internal val StartTab.labelRes: Int
             StartTab.SEARCH -> R.string.start_tab_search
             StartTab.BOOKS -> R.string.start_tab_books
             StartTab.YOU -> R.string.start_tab_you
+        }
+
+internal val MinimumRatings.labelRes: Int
+    get() =
+        when (this) {
+            MinimumRatings.TEN -> R.string.minimum_ratings_10
+            MinimumRatings.FIFTY -> R.string.minimum_ratings_50
+            MinimumRatings.ONE_HUNDRED -> R.string.minimum_ratings_100
+            MinimumRatings.FIVE_HUNDRED -> R.string.minimum_ratings_500
+            MinimumRatings.ONE_THOUSAND -> R.string.minimum_ratings_1000
         }

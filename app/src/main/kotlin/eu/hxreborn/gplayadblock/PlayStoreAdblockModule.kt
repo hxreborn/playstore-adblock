@@ -148,7 +148,7 @@ class PlayStoreAdblockModule : XposedModule() {
                         )
                         notifyFilteringUnavailable(context)
                     }
-                    variant.installAfterSponsored()
+                    variant.installAfterSponsored(installed)
                 }
             }
         } catch (exception: Exception) {
@@ -177,7 +177,7 @@ class PlayStoreAdblockModule : XposedModule() {
                     this,
                     classLoader,
                     targets,
-                    variant.removalPolicy(sponsored()),
+                    variant.removalPolicy(sponsored(), graph = true),
                 )
             },
             targets.suggestion?.let { suggestion ->
@@ -190,7 +190,7 @@ class PlayStoreAdblockModule : XposedModule() {
                     this,
                     classLoader,
                     targets,
-                    variant.removalPolicy(sponsored()),
+                    variant.removalPolicy(sponsored(), graph = false),
                 )
             },
             install(HookGroup.RESPONSE, mismatches) {
@@ -198,7 +198,7 @@ class PlayStoreAdblockModule : XposedModule() {
                     this,
                     classLoader,
                     targets,
-                    variant.removalPolicy(sponsored()),
+                    variant.removalPolicy(sponsored(), graph = false),
                 )
             },
             targets.spotlight?.let { spotlight ->

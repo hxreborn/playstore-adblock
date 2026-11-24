@@ -11,11 +11,17 @@ enum class OptionalGroup(
     MANAGE_APPS("manage-apps"),
     PERSISTENT_NAV("persistent-nav"),
     SELF_UPDATE("self-update"),
+    SEARCH_ORDER("search-order"),
+    SEARCH_ROOT("search-root"),
+    SEARCH_SORT_CHIP("search-sort-chip"),
     INSTALL_SESSION_QUEUE("install-session-queue"),
     ;
 
     companion object {
-        fun requiredBy(settings: FilterSettings): Set<OptionalGroup> =
+        fun requiredBy(
+            settings: FilterSettings,
+            searchSortAvailable: Boolean = true,
+        ): Set<OptionalGroup> =
             buildSet {
                 add(INSTALL_SESSION_QUEUE)
                 settings.enabled.forEach { filter ->
@@ -25,6 +31,14 @@ enum class OptionalGroup(
                         FilterSwitch.HIDE_SEARCH_PROMOTIONS,
                         -> {
                             Unit
+                        }
+
+                        FilterSwitch.SORT_SEARCH_RESULTS -> {
+                            if (searchSortAvailable) {
+                                add(SEARCH_ORDER)
+                                add(SEARCH_ROOT)
+                                add(SEARCH_SORT_CHIP)
+                            }
                         }
 
                         FilterSwitch.SUPPRESS_NOTIFICATION_BADGE,

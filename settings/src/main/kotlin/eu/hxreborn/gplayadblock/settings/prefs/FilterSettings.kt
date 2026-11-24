@@ -8,6 +8,16 @@ enum class FilterCategory {
     PLAY_STORE_UPDATES,
 }
 
+enum class MinimumRatings(
+    val count: Int,
+) {
+    TEN(10),
+    FIFTY(50),
+    ONE_HUNDRED(100),
+    FIVE_HUNDRED(500),
+    ONE_THOUSAND(1_000),
+}
+
 enum class StartTab {
     UNCHANGED,
     GAMES,
@@ -25,6 +35,7 @@ enum class FilterSwitch(
     HIDE_LIVE_OPS("hide_live_ops", FilterCategory.CONTENT),
     HIDE_PRE_REGISTRATION_GAMES("hide_pre_registration_games", FilterCategory.CONTENT),
     HIDE_SEARCH_PROMOTIONS("hide_search_promotions", FilterCategory.CONTENT),
+    SORT_SEARCH_RESULTS("sort_search_results", FilterCategory.CONTENT),
     SUPPRESS_NOTIFICATION_BADGE("suppress_notification_badge", FilterCategory.ACCOUNT_MENU),
     HIDE_HELP("hide_help", FilterCategory.ACCOUNT_MENU),
     HIDE_PERSONALIZATION("hide_personalization", FilterCategory.ACCOUNT_MENU),
@@ -49,6 +60,7 @@ enum class FilterSwitch(
 data class FilterSettings(
     val enabled: Set<FilterSwitch> = emptySet(),
     val startTab: StartTab = StartTab.UNCHANGED,
+    val minimumRatings: MinimumRatings = MinimumRatings.ONE_HUNDRED,
 ) {
     fun isOn(filter: FilterSwitch): Boolean = filter in enabled
 
@@ -60,7 +72,7 @@ data class FilterSettings(
     ): FilterSettings {
         val switched = if (on) enabled + filter else enabled - filter
         val keptStartTab = if (on && filter.hiddenTab == startTab) StartTab.UNCHANGED else startTab
-        return FilterSettings(switched, keptStartTab)
+        return copy(enabled = switched, startTab = keptStartTab)
     }
 
     fun withStartTab(tab: StartTab): FilterSettings =
@@ -69,6 +81,13 @@ data class FilterSettings(
     fun differingSwitches(other: FilterSettings): Set<FilterSwitch> =
         (enabled - other.enabled) + (other.enabled - enabled)
 
+    fun changesStreamContent(other: FilterSettings): Boolean =
+        differingSwitches(other).any {
+            it.category == FilterCategory.CONTENT && it != FilterSwitch.SORT_SEARCH_RESULTS
+        }
+
     fun countDifferences(other: FilterSettings): Int =
-        differingSwitches(other).size + if (startTab == other.startTab) 0 else 1
+        differingSwitches(other).size +
+            (if (startTab == other.startTab) 0 else 1) +
+            (if (minimumRatings == other.minimumRatings) 0 else 1)
 }

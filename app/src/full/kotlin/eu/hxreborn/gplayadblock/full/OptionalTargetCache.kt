@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 object OptionalTargetCache {
-    const val SCHEMA_VERSION = 19
+    const val SCHEMA_VERSION = 21
     private const val FILE_PREFIX = "optional-targets-"
 
     fun load(
@@ -77,6 +77,10 @@ object OptionalTargetCache {
             .putOpt("manageApps", targets.manageApps?.let(::encodeManageApps))
             .putOpt("persistentNav", targets.persistentNav?.let(::encodePersistentNav))
             .putOpt("selfUpdate", targets.selfUpdate?.let(::encodeSelfUpdate))
+            .putOpt("searchOrder", targets.searchOrder?.let(::encodeSearchOrder))
+            .putOpt("searchRoot", targets.searchRoot?.let(::encodeSearchRoot))
+            .putOpt("searchSortChip", targets.searchSortChip?.let(::encodeSearchSortChip))
+            .putOpt("searchScrollFailure", targets.searchScrollFailure)
             .putOpt(
                 "installSessionQueue",
                 targets.installSessionQueue?.let(::encodeInstallSessionQueue),
@@ -98,11 +102,15 @@ object OptionalTargetCache {
             manageApps = value.optJSONObject("manageApps")?.let(::decodeManageApps),
             persistentNav = value.optJSONObject("persistentNav")?.let(::decodePersistentNav),
             selfUpdate = value.optJSONObject("selfUpdate")?.let(::decodeSelfUpdate),
+            searchOrder = value.optJSONObject("searchOrder")?.let(::decodeSearchOrder),
+            searchRoot = value.optJSONObject("searchRoot")?.let(::decodeSearchRoot),
+            searchSortChip = value.optJSONObject("searchSortChip")?.let(::decodeSearchSortChip),
             installSessionQueue =
                 value
                     .optJSONObject(
                         "installSessionQueue",
                     )?.let(::decodeInstallSessionQueue),
+            searchScrollFailure = value.optString("searchScrollFailure").takeIf { it.isNotEmpty() },
             failures =
                 failures.keys().asSequence().associate { name ->
                     OptionalGroup.valueOf(name) to failures.getString(name)
@@ -225,6 +233,12 @@ object OptionalTargetCache {
                 value.optJSONObject("autoUpdateMethod")?.let(TargetCache::decodeMethod),
         )
 
+    private fun encodeSearchOrder(value: SearchOrderTargets): JSONObject =
+        JSONObject().put(
+            "itemPrefetchMethods",
+            JSONArray(value.itemPrefetchMethods.map(TargetCache::encodeMethod)),
+        )
+
     private fun encodeInstallSessionQueue(value: InstallSessionQueueTargets): JSONObject =
         JSONObject()
             .put("applicationRegistry", TargetCache.encodeField(value.applicationRegistry))
@@ -259,6 +273,125 @@ object OptionalTargetCache {
             TargetCache.decodeMethod(value.getJSONObject("taskState")),
             TargetCache.decodeMethod(value.getJSONObject("stateName")),
         )
+
+    private fun encodeSearchSortChip(value: SearchSortChipTargets): JSONObject =
+        JSONObject()
+            .put("pageMethod", TargetCache.encodeMethod(value.pageMethod))
+            .put("filterMethod", TargetCache.encodeMethod(value.filterMethod))
+            .put("analyticsMethod", TargetCache.encodeMethod(value.analyticsMethod))
+            .put("lifecycleMethod", TargetCache.encodeMethod(value.lifecycleMethod))
+            .put("selectionMethod", TargetCache.encodeMethod(value.selectionMethod))
+            .put("selectionOwnerField", TargetCache.encodeField(value.selectionOwnerField))
+            .put("selectionIdField", TargetCache.encodeField(value.selectionIdField))
+            .put("filterCallers", JSONArray(value.filterCallers.map(TargetCache::encodeMethod)))
+            .put("streamConstructor", TargetCache.encodeConstructor(value.streamConstructor))
+            .put(
+                "scopeCancellationMethod",
+                value.scopeCancellationMethod?.let(TargetCache::encodeMethod),
+            ).put(
+                "streamScopes",
+                JSONArray(
+                    value.streamScopes.map { scope ->
+                        JSONObject()
+                            .put("method", TargetCache.encodeMethod(scope.method))
+                            .put("ownerField", TargetCache.encodeField(scope.ownerField))
+                    },
+                ),
+            )
+
+    private fun decodeSearchSortChip(value: JSONObject): SearchSortChipTargets =
+        SearchSortChipTargets(
+            pageMethod = TargetCache.decodeMethod(value.getJSONObject("pageMethod")),
+            filterMethod = TargetCache.decodeMethod(value.getJSONObject("filterMethod")),
+            analyticsMethod = TargetCache.decodeMethod(value.getJSONObject("analyticsMethod")),
+            lifecycleMethod = TargetCache.decodeMethod(value.getJSONObject("lifecycleMethod")),
+            scopeCancellationMethod =
+                value
+                    .optJSONObject(
+                        "scopeCancellationMethod",
+                    )?.let(TargetCache::decodeMethod),
+            selectionMethod = TargetCache.decodeMethod(value.getJSONObject("selectionMethod")),
+            selectionOwnerField =
+                TargetCache.decodeField(
+                    value.getJSONObject("selectionOwnerField"),
+                ),
+            selectionIdField = TargetCache.decodeField(value.getJSONObject("selectionIdField")),
+            filterCallers =
+                value.getJSONArray("filterCallers").let { array ->
+                    List(
+                        array.length(),
+                    ) { index -> TargetCache.decodeMethod(array.getJSONObject(index)) }
+                },
+            streamConstructor =
+                TargetCache.decodeConstructor(value.getJSONObject("streamConstructor")),
+            streamScopes =
+                value.getJSONArray("streamScopes").let { array ->
+                    List(array.length()) { index ->
+                        val scope = array.getJSONObject(index)
+                        SearchControllerScope(
+                            TargetCache.decodeMethod(scope.getJSONObject("method")),
+                            TargetCache.decodeField(scope.getJSONObject("ownerField")),
+                        )
+                    }
+                },
+        )
+
+    private fun encodeSearchRoot(value: SearchRootTargets): JSONObject =
+        JSONObject()
+            .put("snapshotConstructor", TargetCache.encodeConstructor(value.snapshotConstructor))
+            .put("rootClassName", value.rootClassName)
+            .put("refreshRoot", TargetCache.encodeMethod(value.refreshRoot))
+            .put("refreshChild", TargetCache.encodeMethod(value.refreshChild))
+            .put("loadNext", TargetCache.encodeMethod(value.loadNext))
+            .putOpt(
+                "scroll",
+                value.scroll?.let { scroll ->
+                    JSONObject()
+                        .put("stateProvider", TargetCache.encodeMethod(scroll.stateProvider))
+                        .put("scrollToItem", TargetCache.encodeMethod(scroll.scrollToItem))
+                        .put(
+                            "providerCallers",
+                            JSONArray(scroll.providerCallers.map(TargetCache::encodeMethod)),
+                        ).putOpt("renderer", scroll.renderer?.let(TargetCache::encodeMethod))
+                        .putOpt("listLayout", scroll.listLayout?.let(TargetCache::encodeMethod))
+                        .put(
+                            "rendererCallers",
+                            JSONArray(scroll.rendererCallers.map(TargetCache::encodeMethod)),
+                        )
+                },
+            )
+
+    private fun decodeSearchRoot(value: JSONObject): SearchRootTargets =
+        SearchRootTargets(
+            TargetCache.decodeConstructor(value.getJSONObject("snapshotConstructor")),
+            value.getString("rootClassName"),
+            TargetCache.decodeMethod(value.getJSONObject("refreshRoot")),
+            TargetCache.decodeMethod(value.getJSONObject("refreshChild")),
+            TargetCache.decodeMethod(value.getJSONObject("loadNext")),
+            value.optJSONObject("scroll")?.let { scroll ->
+                val callers = scroll.getJSONArray("providerCallers")
+                SearchScrollTargets(
+                    TargetCache.decodeMethod(scroll.getJSONObject("stateProvider")),
+                    TargetCache.decodeMethod(scroll.getJSONObject("scrollToItem")),
+                    List(callers.length()) { TargetCache.decodeMethod(callers.getJSONObject(it)) },
+                    scroll.optJSONObject("renderer")?.let(TargetCache::decodeMethod),
+                    scroll.optJSONObject("listLayout")?.let(TargetCache::decodeMethod),
+                    scroll.getJSONArray("rendererCallers").let { values ->
+                        List(values.length()) { TargetCache.decodeMethod(values.getJSONObject(it)) }
+                    },
+                )
+            },
+        )
+
+    private fun decodeSearchOrder(value: JSONObject): SearchOrderTargets {
+        val methods = value.getJSONArray("itemPrefetchMethods")
+        return SearchOrderTargets(
+            itemPrefetchMethods =
+                List(methods.length()) { index ->
+                    TargetCache.decodeMethod(methods.getJSONObject(index))
+                },
+        )
+    }
 
     private fun encodePersistentNav(value: PersistentNavTargets): JSONObject =
         JSONObject()

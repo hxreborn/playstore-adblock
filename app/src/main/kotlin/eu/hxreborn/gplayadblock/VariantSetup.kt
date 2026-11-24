@@ -4,7 +4,10 @@ import eu.hxreborn.gplayadblock.hook.PresentationClassifier
 import eu.hxreborn.gplayadblock.hook.RemovalPolicy
 
 interface VariantSetup {
-    fun removalPolicy(sponsored: PresentationClassifier): RemovalPolicy
+    fun removalPolicy(
+        sponsored: PresentationClassifier,
+        graph: Boolean,
+    ): RemovalPolicy
 
-    fun installAfterSponsored()
+    fun installAfterSponsored(installed: Set<String>)
 }

@@ -11,6 +11,8 @@ import org.luckypray.dexkit.result.FieldData
 import org.luckypray.dexkit.result.MethodData
 import java.lang.reflect.Modifier
 
+internal fun isVoidSortSelection(returnType: String): Boolean = returnType == "void"
+
 object OptionalDexKitResolver {
     private const val ACCOUNT_FEATURES_ANCHOR = "AccountMenuFeatures{deactivatedAccountsFeature="
     private const val NOTIFICATION_TOP_BAR_ANCHOR =
@@ -34,6 +36,9 @@ object OptionalDexKitResolver {
             "Skipping DFE self-update check as there is an update already queued.",
             "Bulk scheduling self-update with policies",
         )
+    private const val ITEM_PREFETCH_ANCHOR = "HANDLE_ITEM_PREFETCH_START"
+    private const val STREAM_SNAPSHOT_ANCHOR = "Snapshot{%s,%s,%s,%s}"
+    private const val SEARCH_FILTER_BAR_ANCHOR = "FilterBar#"
     private const val AUTO_UPDATE_ANCHOR =
         "UChk: document %s is not qualified for auto update v2"
     private const val RATINGS_AND_REVIEWS_ELEMENT = 14306
@@ -71,6 +76,9 @@ object OptionalDexKitResolver {
                     navTypeAnchors,
                 ),
             OptionalGroup.SELF_UPDATE to emptyList(),
+            OptionalGroup.SEARCH_ORDER to listOf(listOf(ITEM_PREFETCH_ANCHOR)),
+            OptionalGroup.SEARCH_ROOT to emptyList(),
+            OptionalGroup.SEARCH_SORT_CHIP to emptyList(),
             OptionalGroup.INSTALL_SESSION_QUEUE to emptyList(),
         )
 
@@ -86,19 +94,33 @@ object OptionalDexKitResolver {
             )
         }
         var merged = OptionalTargets(requested = groups)
+        var scroll: SearchScrollTargets? = null
+        var snapshotKeyType: String? = null
         val reasons = groups.associateWith { ArrayList<String>() }
+        val scrollFailures = mutableListOf<String>()
         var transientFailure = false
-        for (apkPath in apkPaths.distinct()) {
+        val paths = apkPaths.distinct()
+        val scannedWithoutKey = mutableListOf<String>()
+        for (apkPath in paths) {
             val pending = groups - merged.completeGroups()
             if (pending.isEmpty()) break
             try {
                 DexKitBridge.create(apkPath).use { bridge ->
-                    val resolved = resolve(bridge, pending)
+                    val (resolved, discoveredScroll, discoveredKey) =
+                        resolveApk(bridge, pending, snapshotKeyType)
+                    if (snapshotKeyType == null && discoveredKey == null &&
+                        OptionalGroup.SEARCH_SORT_CHIP in pending
+                    ) {
+                        scannedWithoutKey.add(apkPath)
+                    }
+                    snapshotKeyType = snapshotKeyType ?: discoveredKey
+                    scroll = preferredSearchScroll(scroll, discoveredScroll)
+                    resolved.searchScrollFailure?.let { scrollFailures.add("$apkPath: $it") }
                     resolved.failures.forEach { (group, reason) ->
                         reasons.getValue(group) += "$apkPath: $reason"
                     }
                     transientFailure = transientFailure || resolved.transientFailure
-                    merged = merged.withMoreCompleteGroups(resolved)
+                    merged = merged.withMoreCompleteGroups(resolved, scroll)
                 }
             } catch (exception: Exception) {
                 pending.forEach { group ->
@@ -114,20 +136,66 @@ object OptionalDexKitResolver {
                 transientFailure = true
             }
         }
+        if (snapshotKeyType != null && OptionalGroup.SEARCH_SORT_CHIP in groups &&
+            merged.searchSortChip == null
+        ) {
+            val chipGroups = setOf(OptionalGroup.SEARCH_SORT_CHIP)
+            for (path in scannedWithoutKey) {
+                try {
+                    DexKitBridge.create(path).use { bridge ->
+                        val result = resolveApk(bridge, chipGroups, snapshotKeyType).targets
+                        result.failures[OptionalGroup.SEARCH_SORT_CHIP]?.let { reason ->
+                            reasons
+                                .getValue(
+                                    OptionalGroup.SEARCH_SORT_CHIP,
+                                ).add("$path retry: $reason")
+                        }
+                        transientFailure = transientFailure || result.transientFailure
+                        merged = merged.withMoreCompleteGroups(result)
+                    }
+                } catch (_: Exception) {
+                    transientFailure = true
+                } catch (_: LinkageError) {
+                    transientFailure = true
+                }
+                if (merged.searchSortChip != null) break
+            }
+        }
         return merged.copy(
             failures =
                 groups.filterNot(merged::hasTargets).associateWith { group ->
                     reasons.getValue(group).joinToString(" | ").ifBlank { "no APK paths" }
                 },
             transientFailure = transientFailure,
+            searchScrollFailure =
+                scrollFailures
+                    .takeIf {
+                        merged.searchRoot != null &&
+                            scroll?.canRestorePosition() != true &&
+                            it.isNotEmpty()
+                    }?.joinToString(" | "),
         )
     }
 
-    internal fun resolve(
+    private data class ApkTargets(
+        val targets: OptionalTargets,
+        val searchScroll: SearchScrollTargets?,
+        val snapshotKeyType: String?,
+    )
+
+    private fun resolveApk(
         bridge: DexKitBridge,
         groups: Set<OptionalGroup>,
-    ): OptionalTargets {
+        knownKeyType: String?,
+    ): ApkTargets {
         val anchored = AnchoredClasses(bridge, groups.flatMap { anchorsByGroup.getValue(it) })
+        val snapshot by lazy { runCatching { resolveSnapshotConstructor(bridge) } }
+        val scroll =
+            if (OptionalGroup.SEARCH_ROOT in groups) {
+                attempt("search scroll") { resolveSearchScroll(bridge) }
+            } else {
+                null
+            }
         val results =
             groups.associateWith { group ->
                 attempt(group.label) {
@@ -148,6 +216,20 @@ object OptionalDexKitResolver {
                             resolveSelfUpdate(bridge)
                         }
 
+                        OptionalGroup.SEARCH_ORDER -> {
+                            resolveSearchOrder(bridge, anchored)
+                        }
+
+                        OptionalGroup.SEARCH_ROOT -> {
+                            resolveSearchRoot(bridge, snapshot.getOrThrow())
+                        }
+
+                        OptionalGroup.SEARCH_SORT_CHIP -> {
+                            resolveSearchSortChip(bridge) {
+                                knownKeyType ?: snapshot.getOrThrow().paramTypeNames.first()
+                            }
+                        }
+
                         OptionalGroup.INSTALL_SESSION_QUEUE -> {
                             InstallSessionQueueResolver.resolve(
                                 bridge,
@@ -156,27 +238,49 @@ object OptionalDexKitResolver {
                     }
                 }
             }
-        return OptionalTargets(
-            requested = groups,
-            accountMenu = results[OptionalGroup.ACCOUNT_MENU]?.success() as? AccountMenuTargets,
-            manageApps = results[OptionalGroup.MANAGE_APPS]?.success() as? ManageAppsTargets,
-            persistentNav =
-                results[OptionalGroup.PERSISTENT_NAV]?.success() as? PersistentNavTargets,
-            selfUpdate = results[OptionalGroup.SELF_UPDATE]?.success() as? SelfUpdateTargets,
-            installSessionQueue =
-                results[OptionalGroup.INSTALL_SESSION_QUEUE]?.success()
-                    as? InstallSessionQueueTargets,
-            failures =
-                results
-                    .mapNotNull { (group, result) ->
-                        (result as? Resolution.Failure)?.let { failure -> group to failure.reason }
-                    }.toMap(),
-            transientFailure =
-                results.values.any { result ->
-                    (result as? Resolution.Failure)?.transient == true
-                } ||
-                    (results[OptionalGroup.ACCOUNT_MENU]?.success() as? AccountMenuTargets)
-                        ?.transientFailure == true,
+        val failures =
+            results
+                .mapNotNull { (group, result) ->
+                    (result as? Resolution.Failure)?.let { group to it.reason }
+                }.toMap()
+        val keyLookup =
+            if (OptionalGroup.SEARCH_ROOT in groups ||
+                (OptionalGroup.SEARCH_SORT_CHIP in groups && knownKeyType == null)
+            ) {
+                attempt("search snapshot key") { snapshot.getOrThrow().paramTypeNames.first() }
+            } else {
+                null
+            }
+        val targets =
+            OptionalTargets(
+                requested = groups,
+                accountMenu = results[OptionalGroup.ACCOUNT_MENU]?.success() as? AccountMenuTargets,
+                manageApps = results[OptionalGroup.MANAGE_APPS]?.success() as? ManageAppsTargets,
+                persistentNav =
+                    results[OptionalGroup.PERSISTENT_NAV]?.success() as? PersistentNavTargets,
+                selfUpdate = results[OptionalGroup.SELF_UPDATE]?.success() as? SelfUpdateTargets,
+                searchOrder = results[OptionalGroup.SEARCH_ORDER]?.success() as? SearchOrderTargets,
+                searchRoot = results[OptionalGroup.SEARCH_ROOT]?.success() as? SearchRootTargets,
+                searchSortChip =
+                    results[OptionalGroup.SEARCH_SORT_CHIP]?.success() as? SearchSortChipTargets,
+                installSessionQueue =
+                    results[OptionalGroup.INSTALL_SESSION_QUEUE]?.success()
+                        as? InstallSessionQueueTargets,
+                failures = failures,
+                searchScrollFailure = (scroll as? Resolution.Failure)?.reason,
+                transientFailure =
+                    (keyLookup as? Resolution.Failure)?.transient == true ||
+                        (scroll as? Resolution.Failure)?.transient == true ||
+                        results.values.any { result ->
+                            (result as? Resolution.Failure)?.transient == true
+                        } ||
+                        (results[OptionalGroup.ACCOUNT_MENU]?.success() as? AccountMenuTargets)
+                            ?.transientFailure == true,
+            )
+        return ApkTargets(
+            targets,
+            scroll?.success() as? SearchScrollTargets,
+            keyLookup?.success() as? String,
         )
     }
 
@@ -645,6 +749,389 @@ object OptionalDexKitResolver {
         )
     }
 
+    private fun resolveSearchOrder(
+        bridge: DexKitBridge,
+        anchored: AnchoredClasses,
+    ): SearchOrderTargets {
+        val dispatcher = anchored.single(ITEM_PREFETCH_ANCHOR)
+        val prefetchInterfaces =
+            dispatcher.fields
+                .filterNot { field -> Modifier.isStatic(field.modifiers) }
+                .map(FieldData::typeName)
+                .distinct()
+                .filterNot(primitiveTypes::contains)
+                .mapNotNull(bridge::getClassData)
+                .filter { type ->
+                    Modifier.isInterface(type.modifiers) &&
+                        type.methods.singleOrNull()?.let(::takesItemBatch) == true
+                }
+        val prefetchInterface =
+            prefetchInterfaces.singleOrNull()
+                ?: throw ResolutionFailure("item prefetch interfaces=${prefetchInterfaces.size}")
+        val prefetchMethodName = prefetchInterface.methods.single().name
+        val implementations =
+            bridge.findClass {
+                matcher { addInterface(prefetchInterface.name) }
+            }
+        val methods =
+            implementations.mapNotNull { implementation ->
+                implementation.methods.singleOrNull { method ->
+                    method.name == prefetchMethodName &&
+                        !Modifier.isAbstract(method.modifiers) &&
+                        takesItemBatch(method)
+                }
+            }
+        if (methods.isEmpty()) {
+            throw ResolutionFailure(
+                "item prefetch implementations=${implementations.size} methods=0",
+            )
+        }
+        return SearchOrderTargets(methods.map { it.toRef() }.sortedBy(MethodRef::className))
+    }
+
+    private fun resolveSnapshotConstructor(bridge: DexKitBridge): MethodData {
+        val snapshots =
+            bridge
+                .findMethod {
+                    matcher { usingStrings(STREAM_SNAPSHOT_ANCHOR) }
+                }.filter {
+                    it.returnTypeName == "java.lang.String" &&
+                        !Modifier.isStatic(it.modifiers)
+                }
+        val snapshot =
+            snapshots.singleOrNull()
+                ?: throw ResolutionFailure("stream snapshot methods=${snapshots.size}")
+        val constructors =
+            snapshot.declaredClass?.methods.orEmpty().filter { method ->
+                method.isConstructor && hasSnapshotKeyFirst(method.paramTypeNames)
+            }
+        return constructors.singleOrNull()
+            ?: throw ResolutionFailure("stream snapshot constructors=${constructors.size}")
+    }
+
+    private fun resolveSearchRoot(
+        bridge: DexKitBridge,
+        constructor: MethodData,
+    ): SearchRootTargets {
+        val roots =
+            constructor.callers.filter { method ->
+                !Modifier.isStatic(method.modifiers) && method.returnTypeName == "void" &&
+                    method.paramCount == 1 &&
+                    method.declaredClassName != constructor.declaredClassName
+            }
+        val root =
+            roots.singleOrNull()
+                ?: throw ResolutionFailure("stream root callers=${roots.size}")
+        val handlers =
+            bridge.findClass {
+                matcher { usingStrings = listOf("StreamNodeHandler has already been initialized.") }
+            }
+        val handler =
+            handlers.singleOrNull()
+                ?: throw ResolutionFailure("stream handlers=${handlers.size}")
+        val dataMethods =
+            handler.methods.filter {
+                Modifier.isPrivate(it.modifiers) &&
+                    it.paramTypeNames == listOf("java.lang.Throwable") &&
+                    it.returnTypeName != "void"
+            }
+        val dataMethod =
+            dataMethods.singleOrNull()
+                ?: throw ResolutionFailure("stream data methods=${dataMethods.size}")
+        val refreshMethods =
+            dataMethod.callers.filter {
+                it.declaredClassName == handler.name && !Modifier.isStatic(it.modifiers) &&
+                    it.paramCount == 0 && it.returnTypeName == "void"
+            }
+        val refresh =
+            refreshMethods.singleOrNull()
+                ?: throw ResolutionFailure("stream refresh methods=${refreshMethods.size}")
+        val loadMethods =
+            bridge
+                .findMethod {
+                    matcher { usingStrings("StreamDataStore is not initialized.") }
+                }.filter {
+                    !Modifier.isStatic(it.modifiers) && it.paramCount == 0 &&
+                        it.returnTypeName == "void"
+                }
+        val loadNext =
+            loadMethods.singleOrNull()
+                ?: throw ResolutionFailure("stream load methods=${loadMethods.size}")
+        return SearchRootTargets(
+            constructor.toConstructorRef(),
+            root.declaredClassName,
+            root.toRef(),
+            refresh.toRef(),
+            loadNext.toRef(),
+        )
+    }
+
+    private fun resolveSearchScroll(bridge: DexKitBridge): SearchScrollTargets {
+        val layouts =
+            bridge.findMethod {
+                matcher { usingStrings("firstVisibleItem:index") }
+            }
+        val owners =
+            layouts
+                .mapNotNull { it.declaredClass }
+                .distinctBy { it.name }
+        val stateClass =
+            owners.singleOrNull()
+                ?: throw ResolutionFailure("search list state classes=${owners.size}")
+        val layoutMethods = layouts.filter { it.declaredClassName == stateClass.name }
+        val layout =
+            layoutMethods.singleOrNull()
+                ?: throw ResolutionFailure("search list layout methods=${layoutMethods.size}")
+        val methods =
+            stateClass.methods.filter {
+                !Modifier.isStatic(it.modifiers) && it.returnTypeName == "void" &&
+                    it.paramTypeNames == listOf("int", "int", "boolean")
+            }
+        val scroll =
+            methods.singleOrNull()
+                ?: throw ResolutionFailure("search list scroll methods=${methods.size}")
+        val providers =
+            bridge
+                .findMethod {
+                    matcher { returnType(stateClass.name) }
+                }.filter {
+                    Modifier.isStatic(it.modifiers) && it.paramCount == 2 &&
+                        it.paramTypeNames.firstOrNull() == "java.lang.String" &&
+                        it.callers.isNotEmpty()
+                }
+        val pairedProviders =
+            providers.filter { candidate ->
+                candidate.invokes
+                    .filter {
+                        it.returnTypeName == "java.lang.Object" &&
+                            it.descriptor.contains("([Ljava/lang/Object;")
+                    }.groupingBy { it.descriptor }
+                    .eachCount()
+                    .values
+                    .any { it >= 2 }
+            }
+        val provider =
+            pairedProviders.singleOrNull()
+                ?: throw ResolutionFailure("search list state providers=${pairedProviders.size}")
+        val renderers =
+            bridge
+                .findMethod {
+                    matcher { usingStrings("UI_MODEL_RECEIVED") }
+                }.filter {
+                    !Modifier.isStatic(it.modifiers) && it.returnTypeName == "java.lang.Object" &&
+                        it.paramCount == 2 &&
+                        it.usingFields.any { access ->
+                            access.field.declaredClassName == it.paramTypeNames.first()
+                        }
+                }
+        val renderer =
+            renderers.singleOrNull()
+                ?: throw ResolutionFailure("search renderer methods=${renderers.size}")
+        val rendererCallers = renderer.callers
+        if (rendererCallers.isEmpty()) throw ResolutionFailure("search renderer callers=0")
+        return SearchScrollTargets(
+            provider.toRef(),
+            scroll.toRef(),
+            provider.callers.map { it.toRef() },
+            renderer.toRef(),
+            layout.toRef(),
+            rendererCallers.map { it.toRef() },
+        )
+    }
+
+    private fun resolveSearchSortChip(
+        bridge: DexKitBridge,
+        snapshotKeyType: () -> String,
+    ): SearchSortChipTargets {
+        val pageMethods =
+            bridge
+                .findMethod {
+                    matcher {
+                        usingStrings(
+                            listOf(SEARCH_FILTER_BAR_ANCHOR),
+                            StringMatchType.Contains,
+                        )
+                    }
+                }.filter { method ->
+                    !Modifier.isStatic(method.modifiers) &&
+                        method.paramTypeNames.getOrNull(1) == "java.util.List" &&
+                        method.paramTypeNames.getOrNull(2) == "boolean" &&
+                        method.returnTypeName == "java.lang.Object"
+                }
+        val page =
+            pageMethods.singleOrNull()
+                ?: throw ResolutionFailure("search filter bar methods=${pageMethods.size}")
+        val controller =
+            page.declaredClass
+                ?: throw ResolutionFailure("search filter controller missing")
+        val filters =
+            controller.methods.filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames.getOrNull(0) == page.paramTypeNames.first() &&
+                    method.paramTypeNames.getOrNull(1) == "java.util.List" &&
+                    "boolean" !in method.paramTypeNames &&
+                    method.returnTypeName == "java.lang.Object"
+            }
+        val filter =
+            filters.singleOrNull()
+                ?: throw ResolutionFailure("search filter change methods=${filters.size}")
+        val urls =
+            bridge
+                .findMethod {
+                    matcher { usingStrings(listOf("_all", "sft"), StringMatchType.Contains) }
+                }.filter { method ->
+                    Modifier.isStatic(method.modifiers) &&
+                        method.paramTypeNames == listOf("java.lang.String", "java.util.List") &&
+                        method.returnTypeName == "java.lang.String"
+                }
+        val url =
+            urls.singleOrNull()
+                ?: throw ResolutionFailure("search filter URL methods=${urls.size}")
+        val analytics =
+            url.declaredClass?.methods.orEmpty().filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.returnTypeName == "void" &&
+                    method.paramTypeNames.count { it == "java.util.List" } == 1 &&
+                    method.paramTypeNames.take(2) == listOf("java.lang.String", "java.lang.String")
+            }
+        val analyticsMethod =
+            analytics.singleOrNull()
+                ?: throw ResolutionFailure("search filter analytics methods=${analytics.size}")
+        val lifecycleMethods =
+            bridge
+                .findMethod {
+                    matcher {
+                        usingStrings(
+                            listOf("PAGE_LOAD_FIRST_RPC_INITIATED"),
+                            StringMatchType.Contains,
+                        )
+                    }
+                }.filter { it.declaredClassName == controller.name }
+        val lifecycle =
+            lifecycleMethods.singleOrNull()
+                ?: throw ResolutionFailure("search lifecycle methods=${lifecycleMethods.size}")
+        val filterConstructors =
+            filter.invokes
+                .filter { it.isConstructor }
+                .map { it.declaredClassName }
+                .toSet()
+        val structured =
+            bridge
+                .findMethod { matcher { usingStrings(listOf("_all"), StringMatchType.Contains) } }
+                .filter { method ->
+                    val types =
+                        method.declaredClass
+                            ?.fields
+                            .orEmpty()
+                            .map(FieldData::typeName)
+                    val typedCaptures =
+                        controller.name in types && page.paramTypeNames.first() in types
+                    val constructedByFilter = method.declaredClassName in filterConstructors
+                    (typedCaptures || constructedByFilter) &&
+                        method.invokes.any { it.descriptor == url.descriptor }
+                }
+        if (structured.size != 1) {
+            throw ResolutionFailure("search structured filter methods=${structured.size}")
+        }
+        val callbacks =
+            analyticsMethod.callers.filter { method ->
+                isVoidSortSelection(method.returnTypeName) &&
+                    method.paramTypeNames == listOf("java.util.List", "boolean") &&
+                    method.usingFields.any { it.field.declaredClassName == controller.name }
+            }
+        val callback =
+            callbacks.singleOrNull()
+                ?: throw ResolutionFailure("search filter callbacks=${callbacks.size}")
+        val ownerFields =
+            callback.declaredClass?.fields.orEmpty().filter { field ->
+                !Modifier.isStatic(field.modifiers) && field.typeName == "java.lang.Object"
+            }
+        val ownerField =
+            ownerFields.singleOrNull()
+                ?: throw ResolutionFailure("search callback owner fields=${ownerFields.size}")
+        val selectionFields =
+            callback.usingFields
+                .map { it.field }
+                .distinctBy(FieldData::descriptor)
+                .filter { field ->
+                    val types =
+                        field.declaredClass
+                            ?.fields
+                            .orEmpty()
+                            .filterNot { Modifier.isStatic(it.modifiers) }
+                            .map(FieldData::typeName)
+                            .sorted()
+                    field.typeName == "java.lang.String" &&
+                        types == listOf("boolean", "java.lang.String")
+                }
+        val selectionField =
+            selectionFields.singleOrNull()
+                ?: throw ResolutionFailure("search selection id fields=${selectionFields.size}")
+        val filterCallers = filter.callers.distinctBy(MethodData::descriptor)
+        if (filterCallers.isEmpty()) throw ResolutionFailure("search filter callers=0")
+        val keyType = snapshotKeyType()
+        val scopeClasses =
+            bridge.findClass {
+                matcher { fields { add { type(controller.name, StringMatchType.Equals, false) } } }
+            }
+        val scopes =
+            scopeClasses.flatMap { scope ->
+                val owner = scope.fields.filter { it.typeName == controller.name }.singleOrNull()
+                if (owner == null) {
+                    emptyList()
+                } else {
+                    scope.methods.flatMap { method ->
+                        method.invokes
+                            .filter { invoked ->
+                                invoked.isConstructor &&
+                                    invoked.paramTypeNames.count { it == keyType } == 1
+                            }.map { constructor -> Triple(method, owner, constructor) }
+                    }
+                }
+            }
+        val streamConstructors = scopes.map { it.third }.distinctBy(MethodData::descriptor)
+        val streamConstructor =
+            streamConstructors.singleOrNull()
+                ?: throw ResolutionFailure("search stream constructors=${streamConstructors.size}")
+        val streamScopes =
+            scopes
+                .map { (method, owner, _) ->
+                    SearchControllerScope(method.toRef(), owner.toRef())
+                }.distinct()
+        if (streamScopes.isEmpty()) throw ResolutionFailure("search controller scopes=0")
+        val scopeCancellation =
+            bridge
+                .findMethod {
+                    matcher {
+                        usingStrings(
+                            listOf("Job is still new or active:"),
+                            StringMatchType.Contains,
+                        )
+                    }
+                }.filter {
+                    !Modifier.isStatic(it.modifiers) && it.paramCount == 0 &&
+                        it.returnTypeName == "java.util.concurrent.CancellationException"
+                }.singleOrNull()
+        return SearchSortChipTargets(
+            page.toRef(),
+            filter.toRef(),
+            analyticsMethod.toRef(),
+            lifecycle.toRef(),
+            callback.toRef(),
+            ownerField.toRef(),
+            selectionField.toRef(),
+            filterCallers.map { it.toRef() },
+            streamConstructor.toConstructorRef(),
+            streamScopes,
+            scopeCancellation?.toRef(),
+        )
+    }
+
+    private fun takesItemBatch(method: MethodData): Boolean =
+        !Modifier.isStatic(method.modifiers) &&
+            method.returnTypeName == "void" &&
+            method.paramTypeNames == listOf("java.util.List", "boolean")
+
     private fun completesWithSet(
         bridge: DexKitBridge,
         typeName: String,
@@ -660,6 +1147,8 @@ object OptionalDexKitResolver {
     ): Resolution =
         try {
             Resolution.Success(block())
+        } catch (failure: InstallSessionQueueResolver.Missing) {
+            Resolution.Failure(failure.message.orEmpty(), transient = false)
         } catch (failure: ResolutionFailure) {
             Resolution.Failure(failure.message.orEmpty(), transient = false)
         } catch (exception: Exception) {
@@ -704,4 +1193,12 @@ object OptionalDexKitResolver {
 
     private fun FieldData.toRef(): FieldRef =
         FieldRef(className = declaredClassName, fieldName = fieldName)
+
+    internal fun hasSnapshotKeyFirst(types: List<String>): Boolean =
+        types.firstOrNull()?.let {
+            it !in primitiveTypes &&
+                it !in setOf("java.util.List", "java.lang.Throwable", "java.lang.String") &&
+                types.count { type -> type == "java.util.List" } == 1 &&
+                "boolean" in types && "java.lang.Throwable" in types
+        } == true
 }

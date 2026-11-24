@@ -83,6 +83,7 @@
     <string name="block_store_self_updates_summary">Keeps the installed Play Store version. Other apps still update</string>
 
     <string name="section_start_screen">Start screen</string>
+    <string name="section_search_sorting">Search sorting</string>
     <string name="start_screen_title">Open Play Store on</string>
     <string name="start_tab_unchanged">Keep Play Store\'s choice</string>
     <string name="start_tab_games">Games</string>
@@ -162,4 +163,13 @@
     <string name="launcher_icon_hide_confirm">Hide icon</string>
     <string name="apply_settings_failed_title">Could not apply settings</string>
     <string name="apply_settings_failed_body">Try again. If it still fails, check the module logs</string>
+    <string name="sort_search_results">Sort search results</string>
+    <string name="sort_search_results_summary">Adds a Sort chip to search results on phones</string>
+    <string name="minimum_ratings_title">Minimum ratings for Highest rated</string>
+    <string name="minimum_ratings_10">10 ratings</string>
+    <string name="minimum_ratings_50">50 ratings</string>
+    <string name="minimum_ratings_100">100 ratings (recommended)</string>
+    <string name="minimum_ratings_500">500 ratings</string>
+    <string name="minimum_ratings_1000">1,000 ratings</string>
+    <string name="search_sorting_footnote">Sorting starts with the results on screen and continues as Play Store loads more, so the top of the list can change for a few seconds. Highest rated uses the stars Play Store shows and breaks ties by number of ratings. Apps under the minimum come after the rest, and apps without ratings come last.</string>
 </resources>

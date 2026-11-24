@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
+import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.ui.ApplyFailure
 import eu.hxreborn.gplayadblock.settings.ui.labelRes
@@ -86,6 +87,10 @@ sealed interface PendingChange {
 
     data class StartScreen(
         val tab: StartTab,
+    ) : PendingChange
+
+    data class RatingMinimum(
+        val minimum: MinimumRatings,
     ) : PendingChange
 
     data object StreamCacheClear : PendingChange
@@ -347,6 +352,13 @@ private fun PendingChangeRow(change: PendingChange) {
             }
         }
 
+        is PendingChange.RatingMinimum -> {
+            ListItem(
+                trailingContent = { Text(stringResource(change.minimum.labelRes)) },
+                colors = colors,
+            ) { Text(stringResource(R.string.minimum_ratings_title)) }
+        }
+
         PendingChange.StreamCacheClear -> {
             ListItem(colors = colors) {
                 Text(stringResource(R.string.pending_feed_cache_clear))
@@ -445,6 +457,9 @@ private fun changedAreasSummary(changes: List<PendingChange>): String {
             listOfNotNull(
                 stringResource(R.string.section_start_screen).takeIf {
                     changes.any { it is PendingChange.StartScreen }
+                },
+                stringResource(R.string.minimum_ratings_title).takeIf {
+                    changes.any { it is PendingChange.RatingMinimum }
                 },
                 stringResource(R.string.pending_feed_cache_clear).takeIf {
                     PendingChange.StreamCacheClear in changes

@@ -10,9 +10,13 @@ data class OptionalTargets(
     val manageApps: ManageAppsTargets? = null,
     val persistentNav: PersistentNavTargets? = null,
     val selfUpdate: SelfUpdateTargets? = null,
+    val searchOrder: SearchOrderTargets? = null,
+    val searchRoot: SearchRootTargets? = null,
+    val searchSortChip: SearchSortChipTargets? = null,
     val installSessionQueue: InstallSessionQueueTargets? = null,
     val failures: Map<OptionalGroup, String> = emptyMap(),
     val transientFailure: Boolean = false,
+    val searchScrollFailure: String? = null,
 ) {
     fun hasTargets(group: OptionalGroup): Boolean =
         when (group) {
@@ -20,6 +24,9 @@ data class OptionalTargets(
             OptionalGroup.MANAGE_APPS -> manageApps != null
             OptionalGroup.PERSISTENT_NAV -> persistentNav != null
             OptionalGroup.SELF_UPDATE -> selfUpdate != null
+            OptionalGroup.SEARCH_ORDER -> searchOrder != null
+            OptionalGroup.SEARCH_ROOT -> searchRoot != null
+            OptionalGroup.SEARCH_SORT_CHIP -> searchSortChip != null
             OptionalGroup.INSTALL_SESSION_QUEUE -> installSessionQueue != null
         }
 
@@ -28,16 +35,37 @@ data class OptionalTargets(
             when (group) {
                 OptionalGroup.ACCOUNT_MENU -> accountMenu?.unresolved?.isEmpty() == true
                 OptionalGroup.MANAGE_APPS -> manageApps?.unresolved?.isEmpty() == true
+                OptionalGroup.SEARCH_ROOT -> searchRoot?.scroll?.canRestorePosition() == true
                 else -> hasTargets(group)
             }
         }
 
-    fun withMoreCompleteGroups(next: OptionalTargets): OptionalTargets =
+    fun withMoreCompleteGroups(
+        next: OptionalTargets,
+        scroll: SearchScrollTargets? = null,
+    ): OptionalTargets =
         copy(
             accountMenu = accountMenu?.merge(next.accountMenu) ?: next.accountMenu,
             manageApps = manageApps?.merge(next.manageApps) ?: next.manageApps,
             persistentNav = persistentNav ?: next.persistentNav,
             selfUpdate = selfUpdate ?: next.selfUpdate,
+            searchOrder = searchOrder ?: next.searchOrder,
+            searchRoot =
+                (searchRoot ?: next.searchRoot)?.let { root ->
+                    if (root.scroll?.canRestorePosition() == true) {
+                        root
+                    } else {
+                        root.copy(
+                            scroll =
+                                preferredSearchScroll(
+                                    scroll,
+                                    next.searchRoot?.scroll,
+                                    root.scroll,
+                                ),
+                        )
+                    }
+                },
+            searchSortChip = searchSortChip ?: next.searchSortChip,
             installSessionQueue = installSessionQueue ?: next.installSessionQueue,
         )
 }
@@ -104,6 +132,55 @@ data class HeaderCardTargets(
     val cardSupplierMethod: MethodRef,
     val cardIconLoaderMethod: MethodRef,
     val titleIcons: List<ResourcePair>,
+)
+
+data class SearchOrderTargets(
+    val itemPrefetchMethods: List<MethodRef>,
+)
+
+data class SearchRootTargets(
+    val snapshotConstructor: ConstructorRef,
+    val rootClassName: String,
+    val refreshRoot: MethodRef,
+    val refreshChild: MethodRef,
+    val loadNext: MethodRef,
+    val scroll: SearchScrollTargets? = null,
+)
+
+data class SearchScrollTargets(
+    val stateProvider: MethodRef,
+    val scrollToItem: MethodRef,
+    val providerCallers: List<MethodRef>,
+    val renderer: MethodRef? = null,
+    val listLayout: MethodRef? = null,
+    val rendererCallers: List<MethodRef> = emptyList(),
+) {
+    internal fun canRestorePosition(): Boolean =
+        renderer != null && listLayout != null &&
+            rendererCallers.isNotEmpty() && providerCallers.isNotEmpty()
+}
+
+internal fun preferredSearchScroll(vararg candidates: SearchScrollTargets?): SearchScrollTargets? =
+    candidates.firstOrNull { it?.canRestorePosition() == true }
+        ?: candidates.firstOrNull { it != null }
+
+data class SearchSortChipTargets(
+    val pageMethod: MethodRef,
+    val filterMethod: MethodRef,
+    val analyticsMethod: MethodRef,
+    val lifecycleMethod: MethodRef,
+    val selectionMethod: MethodRef,
+    val selectionOwnerField: FieldRef,
+    val selectionIdField: FieldRef,
+    val filterCallers: List<MethodRef>,
+    val streamConstructor: ConstructorRef,
+    val streamScopes: List<SearchControllerScope>,
+    val scopeCancellationMethod: MethodRef? = null,
+)
+
+data class SearchControllerScope(
+    val method: MethodRef,
+    val ownerField: FieldRef,
 )
 
 data class InstallSessionQueueTargets(

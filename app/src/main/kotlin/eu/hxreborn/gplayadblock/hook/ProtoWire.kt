@@ -22,9 +22,62 @@ internal object ProtoWire {
         var shift = 0
         while (index < message.size && shift < Long.SIZE_BITS) {
             val byte = message[index++].toInt() and 0xff
+            if (shift == 63 && byte > 1) return null
             value = value or ((byte and 0x7f).toLong() shl shift)
             if (byte and 0x80 == 0) return Varint(value, index)
             shift += 7
+        }
+        return null
+    }
+
+    fun lengthDelimitedField(
+        message: ByteArray,
+        number: Int,
+    ): ByteArray? =
+        firstField(message, number, LENGTH_DELIMITED) { tag, end ->
+            readVarint(message, tag.nextIndex)?.let { length ->
+                message.copyOfRange(length.nextIndex, end)
+            }
+        }
+
+    fun nestedField(
+        message: ByteArray,
+        vararg path: Int,
+    ): ByteArray? =
+        path.fold<ByteArray?>(message) { current, number ->
+            current?.let { lengthDelimitedField(it, number) }
+        }
+
+    fun varintField(
+        message: ByteArray,
+        number: Int,
+    ): Long? =
+        firstField(message, number, VARINT) { tag, _ ->
+            readVarint(message, tag.nextIndex)?.value
+        }
+
+    fun fixed32Field(
+        message: ByteArray,
+        number: Int,
+    ): Int? =
+        firstField(message, number, FIXED32) { tag, _ ->
+            (0 until Int.SIZE_BYTES).fold(0) { value, offset ->
+                value or ((message[tag.nextIndex + offset].toInt() and 0xff) shl (offset * 8))
+            }
+        }
+
+    private inline fun <T> firstField(
+        message: ByteArray,
+        number: Int,
+        type: Int,
+        read: (tag: Varint, end: Int) -> T?,
+    ): T? {
+        var index = 0
+        while (index < message.size) {
+            val tag = readVarint(message, index) ?: return null
+            val end = fieldEnd(message, tag) ?: return null
+            if (fieldNumber(tag) == number && wireType(tag) == type) return read(tag, end)
+            index = end
         }
         return null
     }
@@ -59,6 +112,7 @@ internal object ProtoWire {
         message: ByteArray,
         tag: Varint,
     ): Int? {
+        if (tag.value !in 8..0xffffffffL) return null
         val start = tag.nextIndex
         val end =
             when (wireType(tag)) {

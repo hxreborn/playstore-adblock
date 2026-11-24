@@ -2,6 +2,7 @@ package eu.hxreborn.gplayadblock.full
 
 import eu.hxreborn.gplayadblock.discovery.ReleaseFixtures
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -31,6 +32,79 @@ class OptionalTargetsFixtureTest {
         assertTrue(result.installSessionQueue != null)
     }
 
+    @Test
+    fun `captured release without scroll discovery cannot install sort chip`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("52.5.22") }
+        assumeTrue("52.5.22 fixture is not archived", fixture != null)
+        val result =
+            OptionalDexKitResolver.resolve(
+                listOf(requireNotNull(fixture).apk.absolutePath),
+                setOf(
+                    OptionalGroup.SEARCH_ROOT,
+                    OptionalGroup.SEARCH_ORDER,
+                    OptionalGroup.SEARCH_SORT_CHIP,
+                ),
+            )
+        val root = requireNotNull(result.searchRoot)
+        assertTrue(result.searchOrder != null && result.searchSortChip != null)
+        assertNull(root.scroll)
+        assertTrue(!result.canInstallSearchSort())
+        assertTrue(!result.searchScrollFailure.isNullOrBlank())
+    }
+
+    @Test
+    fun `search list scroll resolves on the captured release`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("54.3.07") }
+        assumeTrue("54.3.07 fixture is not archived", fixture != null)
+        val result =
+            OptionalDexKitResolver.resolve(
+                listOf(requireNotNull(fixture).apk.absolutePath),
+                setOf(OptionalGroup.SEARCH_ROOT),
+            )
+        assertEquals(emptyMap<OptionalGroup, String>(), result.failures)
+        val scroll = requireNotNull(result.searchRoot?.scroll)
+        assertEquals(listOf("int", "int", "boolean"), scroll.scrollToItem.paramTypeNames)
+        assertTrue(scroll.canRestorePosition())
+    }
+
+    @Test
+    fun `search scope cancellation resolves on the captured release`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("54.3.07") }
+        assumeTrue("54.3.07 fixture is not archived", fixture != null)
+        val result =
+            OptionalDexKitResolver.resolve(
+                listOf(requireNotNull(fixture).apk.absolutePath),
+                setOf(OptionalGroup.SEARCH_SORT_CHIP),
+            )
+        assertTrue(result.searchSortChip?.scopeCancellationMethod != null)
+    }
+
+    @Test
+    fun `search root snapshot resolves on archived releases`() {
+        for (fixture in ReleaseFixtures.all()) {
+            val result =
+                OptionalDexKitResolver.resolve(
+                    listOf(fixture.apk.absolutePath),
+                    setOf(OptionalGroup.SEARCH_ROOT),
+                )
+            assertEquals(fixture.release, emptyMap<OptionalGroup, String>(), result.failures)
+            assertTrue(fixture.release, result.searchRoot != null)
+        }
+    }
+
+    @Test
+    fun `search sort resolves coroutine with object captures`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("52.6.26") }
+        assumeTrue("52.6.26 fixture is not archived", fixture != null)
+        val result =
+            OptionalDexKitResolver.resolve(
+                listOf(requireNotNull(fixture).apk.absolutePath),
+                setOf(OptionalGroup.SEARCH_SORT_CHIP),
+            )
+        assertEquals(emptyMap<OptionalGroup, String>(), result.failures)
+        assertTrue(result.searchSortChip != null)
+    }
+
     @get:Rule
     val temporary = TemporaryFolder()
 
@@ -58,9 +132,45 @@ class OptionalTargetsFixtureTest {
         val checked = ReleaseFixtures.all().lastOrNull { it.release in CHECKED_RELEASES }
         assumeTrue("none of $CHECKED_RELEASES is archived", checked != null)
         val fixture = requireNotNull(checked)
-        val apk = temporary.newFile("masked.apk")
+        val apk = apkWithout(fixture.apk, anchor)
+        val resolved =
+            OptionalDexKitResolver.resolve(
+                listOf(apk.absolutePath),
+                setOf(OptionalGroup.ACCOUNT_MENU),
+            )
+        assertEquals(emptyMap<OptionalGroup, String>(), resolved.failures)
+        assertTrue(!resolved.transientFailure)
+        return requireNotNull(resolved.accountMenu)
+    }
+
+    @Test
+    fun `chip discovery reuses a snapshot key across splits in either order`() {
+        val fixture = ReleaseFixtures.all().singleOrNull { it.release.contains("54.3.07") }
+        assumeTrue(fixture != null)
+        val base = requireNotNull(fixture).apk
+        val rootApk = apkWithout(base, "FilterBar#")
+        val chipApk = apkWithout(base, "Snapshot{%s,%s,%s,%s}")
+        val groups = setOf(OptionalGroup.SEARCH_ROOT, OptionalGroup.SEARCH_SORT_CHIP)
+        assertNull(
+            OptionalDexKitResolver.resolve(listOf(chipApk.absolutePath), groups).searchSortChip,
+        )
+        val rootOnly = OptionalDexKitResolver.resolve(listOf(rootApk.absolutePath), groups)
+        assertTrue(rootOnly.searchRoot != null)
+        assertNull(rootOnly.searchSortChip)
+        for (paths in listOf(listOf(rootApk, chipApk), listOf(chipApk, rootApk))) {
+            val resolved = OptionalDexKitResolver.resolve(paths.map(File::getAbsolutePath), groups)
+            assertTrue(resolved.searchRoot != null)
+            assertTrue(resolved.searchSortChip != null)
+        }
+    }
+
+    private fun apkWithout(
+        sourceApk: File,
+        anchor: String,
+    ): File {
+        val apk = temporary.newFile()
         var changed = false
-        ZipFile(fixture.apk).use { source ->
+        ZipFile(sourceApk).use { source ->
             ZipOutputStream(apk.outputStream()).use { destination ->
                 source.entries().asSequence().forEach { entry ->
                     var bytes = source.getInputStream(entry).use { it.readBytes() }
@@ -99,14 +209,7 @@ class OptionalTargetsFixtureTest {
             }
         }
         assertTrue("fixture contains $anchor", changed)
-        val resolved =
-            OptionalDexKitResolver.resolve(
-                listOf(apk.absolutePath),
-                setOf(OptionalGroup.ACCOUNT_MENU),
-            )
-        assertEquals(emptyMap<OptionalGroup, String>(), resolved.failures)
-        assertTrue(!resolved.transientFailure)
-        return requireNotNull(resolved.accountMenu)
+        return apk
     }
 
     @Before

@@ -35,7 +35,6 @@ import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.Appearance
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
-import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
 import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.prefs.ThemeMode
 import eu.hxreborn.gplayadblock.settings.ui.SettingsUiState
@@ -51,6 +50,7 @@ import eu.hxreborn.gplayadblock.settings.ui.icon
 import eu.hxreborn.gplayadblock.settings.ui.labelRes
 import eu.hxreborn.gplayadblock.settings.ui.theme.Tokens
 import eu.hxreborn.gplayadblock.settings.ui.titleRes
+import eu.hxreborn.gplayadblock.settings.ui.visibleSwitches
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -117,7 +117,7 @@ fun HomeScreen(
                     shape = shapeForPosition(categories.size, index),
                     icon = category.icon,
                     title = stringResource(category.titleRes),
-                    summary = categorySummary(category, state.desired),
+                    summary = categorySummary(category, state.desired, state.searchSortAvailable),
                     onClick = { onOpenCategory(category) },
                     modifier =
                         Modifier
@@ -171,14 +171,15 @@ fun HomeScreen(
 private fun categorySummary(
     category: FilterCategory,
     settings: FilterSettings,
+    searchSortAvailable: Boolean,
 ): String {
-    val total = FilterSwitch.entries.count { it.category == category }
-    val on = settings.enabled.count { it.category == category }
+    val switches = category.visibleSwitches(searchSortAvailable)
+    val on = switches.count(settings::isOn)
     val counts =
         when {
             on == 0 -> stringResource(R.string.category_summary_off)
-            total == 1 -> stringResource(R.string.category_summary_on_single)
-            else -> stringResource(R.string.category_summary_on, on, total)
+            switches.size == 1 -> stringResource(R.string.category_summary_on_single)
+            else -> stringResource(R.string.category_summary_on, on, switches.size)
         }
     if (category != FilterCategory.NAVIGATION ||
         settings.startTab == StartTab.UNCHANGED

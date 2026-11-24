@@ -1,6 +1,7 @@
 package eu.hxreborn.gplayadblock.hook
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -13,6 +14,43 @@ class ProtoWireTest {
     private val inlineHeader = bytes(0x62, 0x02, 0x0a, 0x00)
     private val headerRequest = bytes(0x7a, 0x01, 0x00)
     private val checksum = bytes(0x2d, 1, 2, 3, 4)
+
+    @Test
+    fun `field scanning rejects a zero field number or a tag wider than 32 bits`() {
+        assertNull(ProtoWire.varintField(byteArrayOf(0, 1, 0x10, 42), 2))
+        val wideTag =
+            byteArrayOf(0x90.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x10, 42)
+        assertNull(ProtoWire.varintField(wideTag + byteArrayOf(0x10, 43), 2))
+    }
+
+    @Test
+    fun `nested length delimited fields follow the path and read the first occurrence`() {
+        val inner = bytes(0x0a, 0x02, 'o'.code, 'k'.code)
+        val message = bytes(0x08, 0x01, 0x1a, inner.size) + inner + bytes(0x1a, 0x00)
+
+        assertArrayEquals(bytes('o'.code, 'k'.code), ProtoWire.nestedField(message, 3, 1))
+        assertNull(ProtoWire.nestedField(message, 3, 2))
+        assertNull(ProtoWire.nestedField(message, 4))
+    }
+
+    @Test
+    fun `varint and fixed32 fields read their value only for the matching wire type`() {
+        val rating = 4.5f.toRawBits()
+        val message =
+            bytes(0x0a, 0x00, 0x10, 0x80, 0xad, 0xe2, 0x04) +
+                bytes(
+                    0x0d,
+                    rating and 0xff,
+                    (rating ushr 8) and 0xff,
+                    (rating ushr 16) and 0xff,
+                    rating ushr 24,
+                )
+
+        assertEquals(10_000_000L, ProtoWire.varintField(message, 2))
+        assertEquals(4.5f, Float.fromBits(requireNotNull(ProtoWire.fixed32Field(message, 1))))
+        assertNull(ProtoWire.varintField(message, 1))
+        assertNull(ProtoWire.fixed32Field(message, 2))
+    }
 
     @Test
     fun `listed fields are dropped and every other field keeps its bytes and order`() {

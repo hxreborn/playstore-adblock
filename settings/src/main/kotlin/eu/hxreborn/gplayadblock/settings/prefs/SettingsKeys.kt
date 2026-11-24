@@ -5,8 +5,10 @@ import android.content.SharedPreferences
 object SettingsKeys {
     const val GROUP = "gplay_adblock_settings"
     const val START_TAB = "start_tab"
+    const val MINIMUM_RATINGS = "minimum_ratings"
 
-    val allKeys: List<String> = FilterSwitch.entries.map(FilterSwitch::key) + START_TAB
+    val allKeys: List<String> =
+        FilterSwitch.entries.map(FilterSwitch::key) + listOf(START_TAB, MINIMUM_RATINGS)
 
     fun read(values: Map<String, *>): FilterSettings =
         FilterSettings(
@@ -14,6 +16,7 @@ object SettingsKeys {
                 FilterSwitch.entries
                     .filterTo(mutableSetOf()) { filter -> readBoolean(values[filter.key]) },
             startTab = readStartTab(values[START_TAB]),
+            minimumRatings = readMinimumRatings(values[MINIMUM_RATINGS]),
         ).let { settings ->
             if (settings.startTab in settings.hiddenTabs()) {
                 settings.copy(startTab = StartTab.UNCHANGED)
@@ -29,7 +32,9 @@ object SettingsKeys {
         FilterSwitch.entries.forEach { filter ->
             editor.putBoolean(filter.key, settings.isOn(filter))
         }
-        return editor.putString(START_TAB, settings.startTab.name)
+        return editor
+            .putString(START_TAB, settings.startTab.name)
+            .putInt(MINIMUM_RATINGS, settings.minimumRatings.count)
     }
 
     fun readBoolean(value: Any?): Boolean =
@@ -38,6 +43,9 @@ object SettingsKeys {
             is String -> value.equals("true", ignoreCase = true)
             else -> false
         }
+
+    private fun readMinimumRatings(value: Any?): MinimumRatings =
+        MinimumRatings.entries.firstOrNull { it.count == value } ?: MinimumRatings.ONE_HUNDRED
 
     fun readStartTab(value: Any?): StartTab =
         (value as? String)

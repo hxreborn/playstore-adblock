@@ -53,7 +53,7 @@ android {
         create("core") { dimension = "distribution" }
         create("full") {
             dimension = "distribution"
-            androidResources.localeFilters += "ru"
+            androidResources.localeFilters += listOf("ru", "zh-rCN")
         }
     }
 

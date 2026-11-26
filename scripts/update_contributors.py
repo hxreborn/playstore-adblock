@@ -20,6 +20,8 @@ AVATAR_DIR = OUT / "avatars"
 API = "https://api.github.com"
 AVATAR_SIZE = 96
 STATS_ATTEMPTS = 5
+SIMPLIFIED_CHINESE_TRANSLATOR_ID = 52035277
+SIMPLIFIED_CHINESE_LINES_ADDED = 162
 
 
 def repo_slug():
@@ -93,6 +95,11 @@ def collect(slug):
         added = sum(week["a"] for week in stat["weeks"])
         removed = sum(week["d"] for week in stat["weeks"])
         people[author["login"]] = entry(author, added, removed)
+    if not people:
+        return []
+    translator = get_json(f"user/{SIMPLIFIED_CHINESE_TRANSLATOR_ID}")
+    translator_entry = people.setdefault(translator["login"], entry(translator, 0, 0))
+    translator_entry["added"] += SIMPLIFIED_CHINESE_LINES_ADDED
     ordered = sorted(
         people.values(),
         key=lambda p: (p["login"] != owner, -p["added"], p["login"].lower()),

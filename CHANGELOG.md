@@ -1,3 +1,18 @@
+## [2.1.0](https://github.com/hxreborn/playstore-adblock/compare/v2.0.0...v2.1.0) (2026-11-26)
+
+### Features
+
+* add sorting to Play Store search results ([037019e](https://github.com/hxreborn/playstore-adblock/commit/037019e3a0766e3ce847bddff45a467a54d9be68))
+
+### Bug Fixes
+
+* **full:** allow applying settings with stale install sessions ([96ca670](https://github.com/hxreborn/playstore-adblock/commit/96ca6700a2a3e4008bef32a063d636ef0620018e))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [2.0.0](https://github.com/hxreborn/playstore-adblock/compare/v1.6.1...v2.0.0) (2026-11-13)
 
 ### ⚠ BREAKING CHANGES

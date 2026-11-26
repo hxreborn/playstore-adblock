@@ -1,3 +1,14 @@
+## [2.2.0-beta.1](https://github.com/hxreborn/playstore-adblock/compare/v2.1.0...v2.2.0-beta.1) (2026-11-26)
+
+### Features
+
+* **ui:** add Simplified Chinese to Full settings ([cf63f18](https://github.com/hxreborn/playstore-adblock/commit/cf63f18a1dd38e2d9445abb05cc5c922cb44b7fd)), closes [#53](https://github.com/hxreborn/playstore-adblock/issues/53)
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [2.1.0](https://github.com/hxreborn/playstore-adblock/compare/v2.0.0...v2.1.0) (2026-11-26)
 
 ### Features

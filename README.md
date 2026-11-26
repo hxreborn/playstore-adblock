@@ -60,6 +60,9 @@ first APK in a release, which is Core.
 Turn on the ones you want in the settings app. Ad blocking works without them:
 
 - **Content**: editorial promotion cards, the pre-registration games shelf, promoted search shelves
+- **Sort search results** adds a **Sort** chip to Play Store search results on phones, with
+  **Most downloaded** and **Highest rated**. It is off by default. After turning it on, tap
+  **Apply and restart Play Store**.
 - **Account menu**: notification badge, Help & feedback, Personalization, Play Points reminder,
   Notifications & offers, Payments & subscriptions, experimental features, Library, Play Pass
 - **Manage apps & device**: Play Protect, device sync, Ratings & reviews, Contributions

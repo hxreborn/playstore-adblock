@@ -399,7 +399,7 @@ internal object SearchSortFilter {
                         state.orderFor(owner),
                         bytesMethod,
                         editor,
-                        filters.takeIf { it.size != strings?.size },
+                        filters.takeIf { it.size != strings.size },
                     )
                 } else {
                     chain.proceed()

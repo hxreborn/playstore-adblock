@@ -30,7 +30,7 @@ enum class OptionalGroup(
                         FilterSwitch.HIDE_PRE_REGISTRATION_GAMES,
                         FilterSwitch.HIDE_SEARCH_PROMOTIONS,
                         -> {
-                            Unit
+                            return@forEach
                         }
 
                         FilterSwitch.SORT_SEARCH_RESULTS -> {

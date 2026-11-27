@@ -8,6 +8,17 @@ internal object ProtoWire {
     const val LENGTH_DELIMITED = 2
     const val FIXED32 = 5
 
+    fun ByteArray.containsSubsequence(needle: ByteArray): Boolean {
+        if (needle.isEmpty() || needle.size > size) return false
+        outer@ for (start in 0..size - needle.size) {
+            for (offset in needle.indices) {
+                if (this[start + offset] != needle[offset]) continue@outer
+            }
+            return true
+        }
+        return false
+    }
+
     data class Varint(
         val value: Long,
         val nextIndex: Int,

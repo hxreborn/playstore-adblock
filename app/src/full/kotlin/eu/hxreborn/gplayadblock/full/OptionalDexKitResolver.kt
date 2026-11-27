@@ -5,6 +5,7 @@ import eu.hxreborn.gplayadblock.discovery.DexKitResolver
 import eu.hxreborn.gplayadblock.discovery.FieldRef
 import eu.hxreborn.gplayadblock.discovery.MethodRef
 import org.luckypray.dexkit.DexKitBridge
+import org.luckypray.dexkit.annotations.DexKitExperimentalApi
 import org.luckypray.dexkit.query.enums.StringMatchType
 import org.luckypray.dexkit.result.ClassData
 import org.luckypray.dexkit.result.FieldData
@@ -453,6 +454,7 @@ object OptionalDexKitResolver {
                 method.paramTypeNames == listOf("java.util.Collection")
         }
 
+    @OptIn(DexKitExperimentalApi::class)
     private fun adjacentResourcePairs(method: MethodData): List<ResourcePair> =
         method.usingNumbers
             .map { number -> if (number.bitWidth == Int.SIZE_BITS) number.intValue() else null }
@@ -1055,9 +1057,7 @@ object OptionalDexKitResolver {
                 .distinctBy(FieldData::descriptor)
                 .filter { field ->
                     val types =
-                        field.declaredClass
-                            ?.fields
-                            .orEmpty()
+                        field.declaredClass.fields
                             .filterNot { Modifier.isStatic(it.modifiers) }
                             .map(FieldData::typeName)
                             .sorted()

@@ -195,7 +195,15 @@ object StreamResponseFilter {
                 .mapNotNull { field -> field.get(response) as? List<*> }
                 .flatMap(List<*>::asSequence)
                 .filter(nodeWrapperClass::isInstance)
-                .count { wrapper -> nodeIdField.get(wrapper) in removableIds }
+                .count { wrapper -> isRemovableNode(wrapper, removableIds) }
+
+        private fun isRemovableNode(
+            wrapper: Any?,
+            removableIds: Set<Any>,
+        ): Boolean {
+            val id = nodeIdField.get(wrapper) ?: return false
+            return id in removableIds
+        }
 
         private fun parents(
             decodedNodes: IdentityHashMap<Any, Any>,
@@ -225,7 +233,7 @@ object StreamResponseFilter {
             presentationRewrites: IdentityHashMap<Any, Any>,
             removableIds: Set<Any>,
         ): Any? {
-            if (nodeIdField.get(wrapper) in removableIds) return null
+            if (isRemovableNode(wrapper, removableIds)) return null
             val decoded = decodedNodes[wrapper] ?: decodeNode(wrapper) ?: return wrapper
             val filteredChildren = filterChildren(nodeChildrenField.get(decoded), removableIds)
             val strippedPresentation = presentationRewrites[wrapper]

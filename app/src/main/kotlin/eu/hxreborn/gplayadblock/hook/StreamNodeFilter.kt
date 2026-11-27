@@ -85,27 +85,22 @@ object StreamNodeFilter {
             if (handlers.isEmpty()) return result
 
             val orderingContext = classifier.orderingContext(parent)
-            val casesById = HashMap<Any, Int>()
+            val removableIds = HashSet<Any>()
             val nodesById = HashMap<Any, Any>()
             val handlersById = HashMap<Any, Any>()
             for (handler in handlers) {
                 if (handler == null) continue
                 val childId = childIdField.get(handler) ?: continue
-                val case = presentationCase(handler)
-                if (classifier.isRemovable(case)) casesById[childId] = case
-                if (orderingContext != null) {
-                    nodeField.get(handler)?.let { node ->
-                        nodesById[childId] = node
-                        handlersById[childId] = handler
-                    }
+                val node = nodeField.get(handler)
+                if (classifier.isRemovable(presentationCase(node))) removableIds += childId
+                if (orderingContext != null && node != null) {
+                    nodesById[childId] = node
+                    handlersById[childId] = handler
                 }
             }
-            if (casesById.isEmpty() && orderingContext == null) return result
+            if (removableIds.isEmpty() && orderingContext == null) return result
 
-            val filtered = ArrayList<Any?>(children.size)
-            for (child in children) {
-                if (casesById[child] == null) filtered += child
-            }
+            val filtered = children.filterNotTo(ArrayList(children.size), removableIds::contains)
             if (filtered.size == children.size && orderingContext == null) return result
 
             val parentId = childIdField.get(parent)
@@ -144,8 +139,8 @@ object StreamNodeFilter {
             return nested.orEmpty().map { it?.let(nodeField::get) }
         }
 
-        private fun presentationCase(handler: Any): Int {
-            val node = nodeField.get(handler) ?: return 0
+        private fun presentationCase(node: Any?): Int {
+            if (node == null) return 0
             val presentation = presentationAccessor.invoke(node) ?: return 0
             return classifier.classify(presentation)
         }

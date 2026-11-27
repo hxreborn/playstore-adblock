@@ -201,7 +201,7 @@ internal object InstallSessionQueueResolver {
                         .filter { (_, event) ->
                             event.field?.declaredClassName ==
                                 context &&
-                                event.field?.typeName == "java.lang.String"
+                                event.field.typeName == "java.lang.String"
                         }.mapNotNull { (index, _) ->
                             val next = predicateEvents.drop(index + 1).take(10)
                             val getter =

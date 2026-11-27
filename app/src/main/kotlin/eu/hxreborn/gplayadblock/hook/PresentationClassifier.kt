@@ -1,12 +1,9 @@
 package eu.hxreborn.gplayadblock.hook
 
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
-import eu.hxreborn.gplayadblock.hook.ProtoWire.LENGTH_DELIMITED
-import eu.hxreborn.gplayadblock.hook.ProtoWire.VARINT
-import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldEnd
-import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldNumber
-import eu.hxreborn.gplayadblock.hook.ProtoWire.readVarint
-import eu.hxreborn.gplayadblock.hook.ProtoWire.wireType
+import eu.hxreborn.gplayadblock.hook.ProtoWire.containsSubsequence
+import eu.hxreborn.gplayadblock.hook.ProtoWire.lengthDelimitedField
+import eu.hxreborn.gplayadblock.hook.ProtoWire.varintField
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.util.Collections
@@ -60,17 +57,21 @@ class PresentationClassifier(
         if (payload == null || !clusterCaseField.declaringClass.isInstance(payload)) return 0
         val case = clusterCaseField.getInt(payload)
         return when {
-            case in AD_CLUSTER_CASES -> case
+            case in AD_CLUSTER_CASES -> {
+                case
+            }
 
-            hasAdSlotMetadata(payload) -> GENERIC_AD_CLUSTER
+            hasAdSlotMetadata(payload) -> {
+                GENERIC_AD_CLUSTER
+            }
 
-            case == GENERIC_CLUSTER &&
-                hasAdDisclosureMetadata(
-                    payload,
-                )
-            -> GENERIC_AD_DISCLOSURE_CLUSTER
+            case == GENERIC_CLUSTER && hasAdDisclosureMetadata(payload) -> {
+                GENERIC_AD_DISCLOSURE_CLUSTER
+            }
 
-            else -> case
+            else -> {
+                case
+            }
         }
     }
 
@@ -90,50 +91,6 @@ class PresentationClassifier(
         val bytes = byteStringToByteArrayMethod.invoke(serverLogs) as? ByteArray ?: return false
         return bytes.containsSubsequence(AD_SLOT_MARKER) ||
             bytes.containsSubsequence(SPONSORED_CLUSTER_MARKER)
-    }
-
-    private fun ByteArray.containsSubsequence(needle: ByteArray): Boolean {
-        if (needle.isEmpty() || needle.size > size) return false
-        outer@ for (start in 0..size - needle.size) {
-            for (offset in needle.indices) {
-                if (this[start + offset] != needle[offset]) continue@outer
-            }
-            return true
-        }
-        return false
-    }
-
-    private fun lengthDelimitedField(
-        message: ByteArray,
-        target: Int,
-    ): ByteArray? {
-        var index = 0
-        while (index < message.size) {
-            val tag = readVarint(message, index) ?: return null
-            val end = fieldEnd(message, tag) ?: return null
-            if (fieldNumber(tag) == target && wireType(tag) == LENGTH_DELIMITED) {
-                val length = readVarint(message, tag.nextIndex) ?: return null
-                return message.copyOfRange(length.nextIndex, end)
-            }
-            index = end
-        }
-        return null
-    }
-
-    private fun varintField(
-        message: ByteArray,
-        target: Int,
-    ): Long? {
-        var index = 0
-        while (index < message.size) {
-            val tag = readVarint(message, index) ?: return null
-            val end = fieldEnd(message, tag) ?: return null
-            if (fieldNumber(tag) == target && wireType(tag) == VARINT) {
-                return readVarint(message, tag.nextIndex)?.value
-            }
-            index = end
-        }
-        return null
     }
 
     private fun cardCase(presentation: Any): Int {

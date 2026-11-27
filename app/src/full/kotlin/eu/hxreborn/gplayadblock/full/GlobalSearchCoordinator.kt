@@ -318,22 +318,19 @@ internal class GlobalSearchCoordinator(
                     ) {
                         EmptySearchRankOutcome.WAIT -> {
                             scheduleSortStep(root, polling.delayFor(nativeProgress), ::step)
-                            return
                         }
 
                         EmptySearchRankOutcome.HEAP_LIMIT -> {
                             finishUnsupported()
-                            return
                         }
 
                         EmptySearchRankOutcome.NO_APPS -> {
-                            Unit
+                            if (!finishJob()) return
+                            if (visibleOrder?.belongsTo(root) == true) visibleOrder = null
+                            ordering.clearRootPlans(root)
+                            failed.record(root, selected, nativeProgress(root))
                         }
                     }
-                    if (!finishJob()) return
-                    if (visibleOrder?.belongsTo(root) == true) visibleOrder = null
-                    ordering.clearRootPlans(root)
-                    failed.record(root, selected, nativeProgress(root))
                     return
                 }
                 if (sourceIds.toSet().size != sourceIds.size) {

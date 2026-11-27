@@ -36,9 +36,13 @@ def dex(class_names):
 
 
 class CheckModuleApkTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = Path(directory.name)
+
     def apk(self, classes, libraries=("lib/arm64-v8a/libdexkit.so",), scope="com.android.vending\n"):
-        directory = tempfile.mkdtemp()
-        path = Path(directory) / "module.apk"
+        path = self.directory / "module.apk"
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("META-INF/xposed/scope.list", scope)
             archive.writestr("META-INF/xposed/module.prop", MODULE_PROP)
@@ -78,7 +82,7 @@ class CheckModuleApkTest(unittest.TestCase):
         self.assertIn("java_init.list", failures[0])
 
     def test_the_core_mapping_is_checked_for_full_only_classes(self):
-        mapping = Path(tempfile.mkdtemp()) / "mapping.txt"
+        mapping = self.directory / "mapping.txt"
         mapping.write_text(
             "# compiler: R8\n"
             "eu.hxreborn.gplayadblock.PlayStoreAdblockModule -> a.a:\n"
@@ -86,11 +90,23 @@ class CheckModuleApkTest(unittest.TestCase):
             "    void a() -> b\n"
         )
         failures, _ = check_module_apk.check(self.apk([MODULE_CLASS]), "core", True, str(mapping))
-        self.assertIn("core mapping holds 1 full-only classes", failures[0])
+        self.assertIn("core contains 1 full-only classes", failures[0])
 
+    def test_a_repackaged_framework_class_fails(self):
+        mapping = self.directory / "mapping.txt"
+        mapping.write_text("io.github.libxposed.api.XposedModule -> a.b:\n")
+        failures, _ = check_module_apk.check(self.apk([MODULE_CLASS, "a.b"]), "core", True, mapping)
+        self.assertIn("libxposed API classes packaged", failures[0])
+
+    def test_search_hooks_in_core_fail_even_with_a_mapping(self):
+        mapping = self.directory / "mapping.txt"
+        mapping.write_text("eu.hxreborn.gplayadblock.hook.SearchSortFilter -> a.s:\n")
+        apk = self.apk([MODULE_CLASS, "a.s", "eu.hxreborn.gplayadblock.hook.SearchRootFilter"])
+        failures, _ = check_module_apk.check(apk, "core", True, mapping)
+        self.assertIn("core contains 2 full-only classes", failures[0])
 
     def test_a_full_class_merged_into_another_counts_as_present(self):
-        mapping = Path(tempfile.mkdtemp()) / "mapping.txt"
+        mapping = self.directory / "mapping.txt"
         mapping.write_text(
             "eu.hxreborn.gplayadblock.settings.GPlayAdblockApp -> a.a:\n"
             "io.github.libxposed.service.XposedServiceHelper -> a.b:\n"
@@ -101,13 +117,13 @@ class CheckModuleApkTest(unittest.TestCase):
         self.assertEqual([], failures)
 
     def test_a_full_member_inlined_into_core_fails(self):
-        mapping = Path(tempfile.mkdtemp()) / "mapping.txt"
+        mapping = self.directory / "mapping.txt"
         mapping.write_text(
             "eu.hxreborn.gplayadblock.PlayStoreAdblockModule -> a.a:\n"
             "    1:2:void eu.hxreborn.gplayadblock.full.FullRemovalPolicy.classify(java.lang.Object):3:4 -> a\n"
         )
         failures, _ = check_module_apk.check(self.apk([MODULE_CLASS]), "core", True, str(mapping))
-        self.assertIn("core mapping holds 1 full-only classes", failures[0])
+        self.assertIn("core contains 1 full-only classes", failures[0])
 
 
 if __name__ == "__main__":

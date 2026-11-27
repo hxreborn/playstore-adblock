@@ -32,6 +32,8 @@ CORE_FORBIDDEN_PREFIXES = (
     "eu.hxreborn.gplayadblock.hook.AccountMenuFilter",
     "eu.hxreborn.gplayadblock.hook.ManageAppsFilter",
     "eu.hxreborn.gplayadblock.hook.PersistentNavFilter",
+    "eu.hxreborn.gplayadblock.hook.SearchRootFilter",
+    "eu.hxreborn.gplayadblock.hook.SearchSortFilter",
     "eu.hxreborn.gplayadblock.hook.SelfUpdateFilter",
 )
 FULL_REQUIRED_CLASSES = (
@@ -110,29 +112,24 @@ def check(apk_path, flavor, release, mapping_path):
         defined = set(classes)
         if len(entry_points) != 1 or entry_points[0] not in defined:
             failures.append(f"java_init.list {entry_points} is not a packaged class")
-        api_classes = sorted(name for name in defined if name.startswith(FRAMEWORK_API_PREFIX))
-        if api_classes:
-            failures.append(f"{len(api_classes)} libxposed API classes packaged, first {api_classes[0]}")
         native = {name for name in entries if name.startswith("lib/")}
         expected_native = RELEASE_NATIVE_LIBRARIES[flavor]
         if release and native != expected_native:
             failures.append(f"native libraries {sorted(native)}, expected {sorted(expected_native)}")
+    class_names = defined
     if mapping_path:
-        originals = mapping_originals(mapping_path)
-        if flavor == "core":
-            leaked = sorted(
-                name for name in originals if name.startswith(CORE_FORBIDDEN_PREFIXES)
-            )
-            if leaked:
-                failures.append(f"core mapping holds {len(leaked)} full-only classes, first {leaked[0]}")
-        else:
-            missing = [name for name in FULL_REQUIRED_CLASSES if name not in originals]
-            if missing:
-                failures.append(f"full mapping lacks {missing}")
-    elif flavor == "core":
-        leaked = sorted(name for name in defined if name.startswith(CORE_FORBIDDEN_PREFIXES))
+        class_names = defined | mapping_originals(mapping_path)
+    api_classes = sorted(name for name in class_names if name.startswith(FRAMEWORK_API_PREFIX))
+    if api_classes:
+        failures.append(f"{len(api_classes)} libxposed API classes packaged, first {api_classes[0]}")
+    if flavor == "core":
+        leaked = sorted(name for name in class_names if name.startswith(CORE_FORBIDDEN_PREFIXES))
         if leaked:
-            failures.append(f"core dex defines {len(leaked)} full-only classes, first {leaked[0]}")
+            failures.append(f"core contains {len(leaked)} full-only classes, first {leaked[0]}")
+    elif mapping_path:
+        missing = [name for name in FULL_REQUIRED_CLASSES if name not in class_names]
+        if missing:
+            failures.append(f"full APK lacks {missing}")
     return failures, len(classes)
 
 

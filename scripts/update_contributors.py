@@ -40,23 +40,23 @@ def repo_slug():
     return match.group(1)
 
 
-def request(url):
+def request_api(path):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "update-contributors"}
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30)
+    return urllib.request.urlopen(urllib.request.Request(f"{API}/{path}", headers=headers), timeout=30)
 
 
 def get_json(path):
-    with request(f"{API}/{path}") as response:
+    with request_api(path) as response:
         return json.load(response)
 
 
 def get_stats(slug):
     delay = 2
     for attempt in range(STATS_ATTEMPTS):
-        with request(f"{API}/repos/{slug}/stats/contributors") as response:
+        with request_api(f"repos/{slug}/stats/contributors") as response:
             if response.status == 200:
                 return json.load(response)
         if attempt < STATS_ATTEMPTS - 1:
@@ -141,7 +141,7 @@ def fetch_avatars(people, known_urls):
         target = AVATAR_DIR / f"{login}.webp"
         if known_urls.get(login) == person["avatar_url"] and target.exists():
             continue
-        with request(avatar_download_url(person["avatar_url"])) as response:
+        with urllib.request.urlopen(avatar_download_url(person["avatar_url"]), timeout=30) as response:
             fresh[login] = encode_webp(response.read())
     return fresh
 

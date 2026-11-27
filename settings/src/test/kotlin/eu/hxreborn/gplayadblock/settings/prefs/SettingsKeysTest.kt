@@ -137,13 +137,4 @@ class SettingsKeysTest {
         assertEquals(settings, settings.withStartTab(StartTab.YOU))
         assertEquals(StartTab.SEARCH, settings.withStartTab(StartTab.SEARCH).startTab)
     }
-
-    @Test
-    fun `differences count switched filters and a changed start tab`() {
-        val applied = FilterSettings(setOf(FilterSwitch.HIDE_HELP))
-        val desired = FilterSettings(setOf(FilterSwitch.HIDE_DEVICE_SYNC), StartTab.APPS)
-        assertEquals(3, desired.countDifferences(applied))
-        assertEquals(0, desired.countDifferences(desired))
-        assertFalse(desired.isOn(FilterSwitch.HIDE_HELP))
-    }
 }

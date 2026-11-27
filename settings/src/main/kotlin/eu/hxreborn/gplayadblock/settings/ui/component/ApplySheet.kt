@@ -68,33 +68,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import eu.hxreborn.gplayadblock.settings.R
 import eu.hxreborn.gplayadblock.settings.prefs.FilterCategory
-import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
-import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
-import eu.hxreborn.gplayadblock.settings.prefs.StartTab
 import eu.hxreborn.gplayadblock.settings.ui.ApplyFailure
+import eu.hxreborn.gplayadblock.settings.ui.PendingChange
 import eu.hxreborn.gplayadblock.settings.ui.labelRes
 import eu.hxreborn.gplayadblock.settings.ui.theme.Tokens
 import eu.hxreborn.gplayadblock.settings.ui.titleRes
 import kotlinx.coroutines.flow.first
 
 val LocalApplySheetInset = compositionLocalOf { 0.dp }
-
-sealed interface PendingChange {
-    data class Switch(
-        val filter: FilterSwitch,
-        val on: Boolean,
-    ) : PendingChange
-
-    data class StartScreen(
-        val tab: StartTab,
-    ) : PendingChange
-
-    data class RatingMinimum(
-        val minimum: MinimumRatings,
-    ) : PendingChange
-
-    data object StreamCacheClear : PendingChange
-}
 
 sealed interface ApplySheetContent {
     data class Pending(

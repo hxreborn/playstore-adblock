@@ -4,7 +4,9 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 class PrefsRepository(
     private val desired: SharedPreferences,
@@ -49,13 +51,8 @@ class PrefsRepository(
 internal fun <T> SharedPreferences.observe(read: () -> T): Flow<T> =
     callbackFlow {
         val listener =
-            SharedPreferences.OnSharedPreferenceChangeListener {
-                _,
-                _,
-                ->
-                trySend(read())
-            }
+            SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
         registerOnSharedPreferenceChangeListener(listener)
-        trySend(read())
+        trySend(Unit)
         awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
-    }.distinctUntilChanged()
+    }.conflate().map { read() }.distinctUntilChanged()

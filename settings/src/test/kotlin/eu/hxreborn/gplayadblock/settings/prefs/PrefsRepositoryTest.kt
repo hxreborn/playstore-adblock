@@ -1,5 +1,6 @@
 package eu.hxreborn.gplayadblock.settings.prefs
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
@@ -10,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PrefsRepositoryTest {
     private val repository = PrefsRepository(FakeSharedPreferences(), FakeSharedPreferences())
 
@@ -35,6 +37,19 @@ class PrefsRepositoryTest {
             repository.save(saved)
             job.join()
             assertEquals(listOf(FilterSettings(), saved), emitted)
+        }
+
+    @Test
+    fun `the desired flow reports the last setting after a burst of saves`() =
+        runTest {
+            val emitted = ArrayList<FilterSettings>()
+            backgroundScope.launch { repository.observeDesired().toList(emitted) }
+            testScheduler.runCurrent()
+            FilterSwitch.entries.forEach { filter ->
+                repository.save(FilterSettings(setOf(filter)))
+            }
+            testScheduler.runCurrent()
+            assertEquals(repository.desiredSettings(), emitted.last())
         }
 
     @Test

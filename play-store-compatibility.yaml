@@ -184,3 +184,9 @@ releases:
     tested_on: 2026-10-06
     module_version_code: 10500
     notes: cache filtering tested from an ad-bearing cache
+  - version_name: "54.4.11-34 [0] [PR] 1025789771"
+    version_code: 85441140
+    status: supported
+    tested_on: 2026-11-27
+    module_version_code: 20100
+    notes: Full and Core removed sponsored storefront, search and app-page listings in paired stock comparisons

@@ -48,7 +48,6 @@ import eu.hxreborn.gplayadblock.settings.protocol.RestartProtocol
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetContent
 import eu.hxreborn.gplayadblock.settings.ui.component.ApplySheetScaffold
 import eu.hxreborn.gplayadblock.settings.ui.component.FailureAction
-import eu.hxreborn.gplayadblock.settings.ui.component.PendingChange
 import eu.hxreborn.gplayadblock.settings.ui.screen.AboutScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.AppearanceScreen
 import eu.hxreborn.gplayadblock.settings.ui.screen.CategoryScreen
@@ -263,7 +262,7 @@ private fun applySheetContent(state: SettingsUiState.Ready): ApplySheetContent? 
         state.pendingCount > 0 -> {
             ApplySheetContent.Pending(
                 canApply = state.framework != null,
-                changes = pendingChanges(state),
+                changes = state.pendingChanges,
             )
         }
 
@@ -285,24 +284,4 @@ private fun ApplyHaptics(phase: ApplyPhase) {
         }
         previous = phase
     }
-}
-
-private fun pendingChanges(state: SettingsUiState.Ready): List<PendingChange> {
-    val applicable = state.applicableSettings
-    val switches =
-        applicable
-            .differingSwitches(state.appliedOrDefault)
-            .sorted()
-            .map { PendingChange.Switch(it, applicable.isOn(it)) }
-    val startScreen =
-        if (state.startScreenChanged) PendingChange.StartScreen(applicable.startTab) else null
-    val streamCacheClear =
-        PendingChange.StreamCacheClear.takeIf {
-            state.streamCacheClearWithoutContentChange
-        }
-    val minimumRatings =
-        PendingChange.RatingMinimum(applicable.minimumRatings).takeIf {
-            applicable.minimumRatings != state.appliedOrDefault.minimumRatings
-        }
-    return switches + listOfNotNull(startScreen, minimumRatings, streamCacheClear)
 }

@@ -182,6 +182,25 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `pending changes list switches in display order followed by the start tab`() {
+        val applied = FilterSettings(setOf(FilterSwitch.HIDE_HELP))
+        val desired = FilterSettings(setOf(FilterSwitch.HIDE_DEVICE_SYNC), StartTab.APPS)
+        preferences.markApplied(applied)
+        preferences.save(desired)
+        val viewModel = viewModel()
+        assertEquals(
+            listOf(
+                PendingChange.Switch(FilterSwitch.HIDE_HELP, false),
+                PendingChange.Switch(FilterSwitch.HIDE_DEVICE_SYNC, true),
+                PendingChange.StartScreen(StartTab.APPS),
+            ),
+            viewModel.ready().pendingChanges,
+        )
+        preferences.markApplied(desired)
+        assertTrue(viewModel.ready().pendingChanges.isEmpty())
+    }
+
+    @Test
     fun `a changed start screen counts as one pending change`() {
         val viewModel = viewModel()
         viewModel.setStartTab(StartTab.BOOKS)
@@ -628,8 +647,7 @@ class SettingsViewModelTest {
         assertEquals(1, remote.commits.size)
         assertEquals(true, remote.commits.single()[FilterSwitch.HIDE_LIVE_OPS.key])
         assertTrue(first.ready().streamCacheClearPending)
-        assertTrue(first.ready().streamCacheClearWithoutContentChange)
-        assertEquals(1, first.ready().pendingCount)
+        assertEquals(listOf(PendingChange.StreamCacheClear), first.ready().pendingChanges)
 
         restarter.outcome = RestartOutcome.Restarted
         viewModel().apply()

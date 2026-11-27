@@ -2,13 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-val cfgTargetPackage: String = providers.gradleProperty("target.package").get()
-val cfgModuleId: String = providers.gradleProperty("module.id").get()
-val cfgModuleName: String = providers.gradleProperty("module.name").get()
-val cfgModuleAuthor: String = providers.gradleProperty("module.author").get()
-val cfgModuleDescription: String = providers.gradleProperty("module.description").get()
-val cfgXposedApiMin: Int = providers.gradleProperty("xposed.api.min").get().toInt()
-val cfgXposedApiTarget: Int = providers.gradleProperty("xposed.api.target").get().toInt()
+val targetPackageProvider = providers.gradleProperty("target.package")
+val moduleIdProvider = providers.gradleProperty("module.id")
 val versionNameProvider = providers.gradleProperty("version.name")
 val versionCodeProvider = providers.gradleProperty("version.code").map(String::toInt)
 
@@ -22,13 +17,13 @@ android {
     }
 
     defaultConfig {
-        applicationId = cfgModuleId
+        applicationId = moduleIdProvider.get()
         minSdk = 30
         targetSdk = 36
         versionCode = versionCodeProvider.get()
         versionName = versionNameProvider.get()
 
-        buildConfigField("String", "TARGET_PACKAGE", "\"$cfgTargetPackage\"")
+        buildConfigField("String", "TARGET_PACKAGE", "\"${targetPackageProvider.get()}\"")
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -134,18 +129,22 @@ dependencies {
     testImplementation(libs.snakeyaml)
 }
 
+val hostDexKitDirectory = rootDir.resolve("analysis/tools/dexkit-host")
+val releaseFixturesDirectory = rootDir.resolve("analysis/release-fixtures")
+val compatibilityMetadata = rootDir.resolve("play-store-compatibility.yaml")
+
 tasks.withType<Test>().configureEach {
-    systemProperty("java.library.path", rootDir.resolve("analysis/tools/dexkit-host").absolutePath)
-    systemProperty(
-        "gplayadblock.releaseFixtures",
-        rootDir.resolve("analysis/release-fixtures").absolutePath,
-    )
-    systemProperty(
-        "gplayadblock.compatibilityMetadata",
-        rootDir.resolve("play-store-compatibility.yaml").absolutePath,
-    )
+    inputs.files(
+        fileTree(releaseFixturesDirectory) { include("com.android.vending-*/base.apk") },
+        hostDexKitDirectory.resolve("libdexkit.so"),
+        compatibilityMetadata,
+    ).withPathSensitivity(PathSensitivity.RELATIVE)
+    systemProperty("java.library.path", hostDexKitDirectory.absolutePath)
+    systemProperty("gplayadblock.releaseFixtures", releaseFixturesDirectory.absolutePath)
+    systemProperty("gplayadblock.compatibilityMetadata", compatibilityMetadata.absolutePath)
     System.getProperty("gplayadblock.recordOptionalFingerprints")?.let { path ->
         systemProperty("gplayadblock.recordOptionalFingerprints", path)
+        outputs.upToDateWhen { false }
     }
     testLogging { showStandardStreams = true }
 }
@@ -156,11 +155,8 @@ tasks.register<JavaExec>("recordFingerprints") {
     dependsOn("compileCoreDebugUnitTestSources")
     classpath = files(provider { tasks.named<Test>("testCoreDebugUnitTest").get().classpath })
     mainClass.set("eu.hxreborn.gplayadblock.discovery.RecordFingerprintsKt")
-    systemProperty("java.library.path", rootDir.resolve("analysis/tools/dexkit-host").absolutePath)
-    systemProperty(
-        "gplayadblock.releaseFixtures",
-        rootDir.resolve("analysis/release-fixtures").absolutePath,
-    )
+    systemProperty("java.library.path", hostDexKitDirectory.absolutePath)
+    systemProperty("gplayadblock.releaseFixtures", releaseFixturesDirectory.absolutePath)
     systemProperty(
         "gplayadblock.fingerprints",
         layout.projectDirectory.dir("src/test/resources/fingerprints").asFile.absolutePath,
@@ -242,15 +238,15 @@ abstract class GenerateXposedModuleProp : DefaultTask() {
 
 val generateXposedModuleProp =
     tasks.register<GenerateXposedModuleProp>("generateXposedModuleProp") {
-        moduleId.set(cfgModuleId)
-        moduleName.set(cfgModuleName)
-        moduleAuthor.set(cfgModuleAuthor)
-        moduleDescription.set(cfgModuleDescription)
+        moduleId.set(moduleIdProvider)
+        moduleName.set(providers.gradleProperty("module.name"))
+        moduleAuthor.set(providers.gradleProperty("module.author"))
+        moduleDescription.set(providers.gradleProperty("module.description"))
         moduleVersionName.set(versionNameProvider)
         moduleVersionCode.set(versionCodeProvider)
-        moduleMinApiVersion.set(cfgXposedApiMin)
-        moduleTargetApiVersion.set(cfgXposedApiTarget)
-        targetPackage.set(cfgTargetPackage)
+        moduleMinApiVersion.set(providers.gradleProperty("xposed.api.min").map(String::toInt))
+        moduleTargetApiVersion.set(providers.gradleProperty("xposed.api.target").map(String::toInt))
+        targetPackage.set(targetPackageProvider)
     }
 
 androidComponents {

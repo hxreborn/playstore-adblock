@@ -20,6 +20,7 @@ import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
+import java.util.concurrent.atomic.AtomicBoolean
 
 @PublishedApi
 internal lateinit var module: PlayStoreAdblockModule
@@ -58,16 +59,11 @@ class PlayStoreAdblockModule : XposedModule() {
         private val module: PlayStoreAdblockModule,
         private val classLoader: ClassLoader,
     ) {
-        @Volatile
-        private var installed = false
+        private val installed = AtomicBoolean()
 
         fun intercept(chain: XposedInterface.Chain): Any? {
             chain.proceed()
-            if (installed) return null
-            synchronized(this) {
-                if (installed) return null
-                installed = true
-            }
+            if (!installed.compareAndSet(false, true)) return null
             val context = chain.getArg(0) as Context
             module.install(context, chain.thisObject as Application, classLoader)
             return null

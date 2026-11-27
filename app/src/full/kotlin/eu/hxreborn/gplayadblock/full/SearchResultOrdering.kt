@@ -2,6 +2,7 @@ package eu.hxreborn.gplayadblock.full
 
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.hook.PresentationClassifier
+import eu.hxreborn.gplayadblock.hook.ProtoWire.containsSubsequence
 import eu.hxreborn.gplayadblock.settings.prefs.MinimumRatings
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
@@ -312,17 +313,6 @@ class SearchResultOrdering internal constructor(
                 ItemStatsIndex.nodeItemKey(bytes)
             }
         return key
-    }
-
-    private fun ByteArray.containsSubsequence(needle: ByteArray): Boolean {
-        if (needle.isEmpty() || needle.size > size) return false
-        outer@ for (start in 0..size - needle.size) {
-            for (offset in needle.indices) {
-                if (this[start + offset] != needle[offset]) continue@outer
-            }
-            return true
-        }
-        return false
     }
 
     companion object {

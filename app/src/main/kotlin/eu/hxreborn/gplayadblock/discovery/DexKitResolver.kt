@@ -318,11 +318,11 @@ object DexKitResolver {
             responseClass.fields
                 .filter { field ->
                     !field.isStatic &&
-                        field.type?.methods?.any { method ->
+                        field.type.methods.any { method ->
                             !Modifier.isStatic(method.modifiers) &&
                                 method.paramTypeNames == listOf("int") &&
                                 method.returnTypeName == field.typeName
-                        } == true
+                        }
                 }.distinctBy(FieldData::descriptor)
         if (responseListFields.size != 2 ||
             responseListFields.map(FieldData::typeName).distinct().size != 1
@@ -514,11 +514,9 @@ object DexKitResolver {
             nodeDefaultInstanceFields.singleOrNull()
                 ?: return missing("node default fields=${nodeDefaultInstanceFields.size}")
         val rootDefaultInstanceFields =
-            decodedRootClass
-                ?.fields
-                ?.filter { field ->
-                    field.isStatic && field.typeName == decodedRootClass.name
-                }.orEmpty()
+            decodedRootClass.fields.filter { field ->
+                field.isStatic && field.typeName == decodedRootClass.name
+            }
         val rootDefaultInstanceField =
             rootDefaultInstanceFields.singleOrNull()
                 ?: return missing("root default fields=${rootDefaultInstanceFields.size}")
@@ -533,28 +531,26 @@ object DexKitResolver {
         val cachePageBoundariesFields =
             nodeClass.fields.filter { field ->
                 !field.isStatic &&
-                    field.type?.methods?.any { method ->
+                    field.type.methods.any { method ->
                         !Modifier.isStatic(method.modifiers) &&
                             method.paramTypeNames == listOf("int") &&
                             method.returnTypeName == "int"
-                    } == true &&
-                    field.type?.methods?.any { method ->
+                    } &&
+                    field.type.methods.any { method ->
                         !Modifier.isStatic(method.modifiers) &&
                             method.paramTypeNames == listOf("int") &&
                             method.returnTypeName == field.typeName
-                    } == true
+                    }
             }
         val cachePageBoundariesField =
             cachePageBoundariesFields.singleOrNull()
                 ?: return missing("cache page boundary fields=${cachePageBoundariesFields.size}")
         val cachePageBoundariesCopyMethods =
-            cachePageBoundariesField.type
-                ?.methods
-                ?.filter { method ->
-                    !Modifier.isStatic(method.modifiers) &&
-                        method.paramTypeNames == listOf("int") &&
-                        method.returnTypeName == cachePageBoundariesField.typeName
-                }.orEmpty()
+            cachePageBoundariesField.type.methods.filter { method ->
+                !Modifier.isStatic(method.modifiers) &&
+                    method.paramTypeNames == listOf("int") &&
+                    method.returnTypeName == cachePageBoundariesField.typeName
+            }
         val cachePageBoundariesCopyMethod =
             cachePageBoundariesCopyMethods.singleOrNull()
                 ?: return missing(
@@ -815,14 +811,12 @@ object DexKitResolver {
                 !field.isStatic &&
                     field.typeName !in primitiveTypes &&
                     field.descriptor in builderReadFields &&
-                    field.type?.superClass?.name == genericCardPayloadClass.superClass?.name
+                    field.type.superClass?.name == genericCardPayloadClass.superClass?.name
             }
         val genericAdMetadataField =
             adMetadataFields.singleOrNull()
                 ?: return fail("generic ad metadata fields=${adMetadataFields.size}")
-        val adMetadataClass =
-            genericAdMetadataField.type
-                ?: return fail("ad metadata class missing")
+        val adMetadataClass = genericAdMetadataField.type
         val adMetadataBaseClass =
             adMetadataClass.superClass
                 ?: return fail("ad metadata base class missing")
@@ -887,12 +881,9 @@ object DexKitResolver {
             caseFieldsByDescriptor[topCaseField.key]
                 ?: return fail("cluster case field metadata missing")
         val clusterPayloadFields =
-            clusterCaseField.declaredClass
-                ?.fields
-                .orEmpty()
-                .filter { field ->
-                    !field.isStatic && field.typeName == "java.lang.Object"
-                }
+            clusterCaseField.declaredClass.fields.filter { field ->
+                !field.isStatic && field.typeName == "java.lang.Object"
+            }
         val clusterPayloadField =
             clusterPayloadFields.singleOrNull()
                 ?: return fail("cluster payload fields=${clusterPayloadFields.size}")
@@ -1064,12 +1055,9 @@ object DexKitResolver {
                     "byte string conversion methods=${byteStringToByteArrayMethods.size}",
                 )
         val clusterServerLogsFields =
-            clusterCaseField.declaredClass
-                ?.fields
-                .orEmpty()
-                .filter { field ->
-                    !field.isStatic && field.typeName == byteStringClass.name
-                }
+            clusterCaseField.declaredClass.fields.filter { field ->
+                !field.isStatic && field.typeName == byteStringClass.name
+            }
         val clusterServerLogsField =
             clusterServerLogsFields.singleOrNull()
                 ?: return fail(

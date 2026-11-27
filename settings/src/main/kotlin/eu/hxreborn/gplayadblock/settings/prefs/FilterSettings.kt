@@ -78,16 +78,10 @@ data class FilterSettings(
     fun withStartTab(tab: StartTab): FilterSettings =
         if (tab in hiddenTabs()) this else copy(startTab = tab)
 
-    fun differingSwitches(other: FilterSettings): Set<FilterSwitch> =
-        (enabled - other.enabled) + (other.enabled - enabled)
-
     fun changesStreamContent(other: FilterSettings): Boolean =
-        differingSwitches(other).any {
-            it.category == FilterCategory.CONTENT && it != FilterSwitch.SORT_SEARCH_RESULTS
+        FilterSwitch.entries.any { filter ->
+            filter.category == FilterCategory.CONTENT &&
+                filter != FilterSwitch.SORT_SEARCH_RESULTS &&
+                isOn(filter) != other.isOn(filter)
         }
-
-    fun countDifferences(other: FilterSettings): Int =
-        differingSwitches(other).size +
-            (if (startTab == other.startTab) 0 else 1) +
-            (if (minimumRatings == other.minimumRatings) 0 else 1)
 }

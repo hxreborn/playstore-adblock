@@ -106,6 +106,7 @@ working, and the next **Apply and restart Play Store** turns them back on.
 | 53.0.27-XX | 853027XX | supported |
 | 53.3.21-XX | 853321XX | supported |
 | 53.4.23-XX | 853423XX | supported |
+| 54.4.11-XX | 854411XX | supported |
 
 Find your build either in Play Store → Settings → About or with:
 

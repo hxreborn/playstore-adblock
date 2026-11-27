@@ -226,7 +226,7 @@ class SearchSortInstallationTest {
         installation.run { ran = true }
         assertFalse(ran)
         assertEquals(1, failures.size)
-        assertEquals("native", installation.intercept({ "native" }) { "sorted" })
+        assertEquals("native", installation.dispatch({ "native" }) { "sorted" })
     }
 
     @Test
@@ -394,12 +394,12 @@ class SearchSortInstallationTest {
             installation.install {
                 registered.forEach { name ->
                     val call = {
-                        installation.intercept(
-                            {
+                        installation.dispatch(
+                            native = {
                                 nativeCalls++
                                 "native"
                             },
-                            {
+                            sort = {
                                 sortCalls++
                                 "sorted"
                             },
@@ -431,7 +431,7 @@ class SearchSortInstallationTest {
     @Test
     fun `successful registration activates all registered interceptors together`() {
         val installation = SearchSortInstallation { throw it }
-        val call = { installation.intercept({ "native" }, { "sorted" }) }
+        val call = { installation.dispatch({ "native" }) { "sorted" } }
         assertTrue(
             installation.install {
                 assertEquals("native", call())

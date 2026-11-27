@@ -4,11 +4,8 @@ import eu.hxreborn.gplayadblock.Logger
 import eu.hxreborn.gplayadblock.discovery.ResolvedTargets
 import eu.hxreborn.gplayadblock.hook.PresentationClassifier
 import eu.hxreborn.gplayadblock.hook.ProtoEditor
-import eu.hxreborn.gplayadblock.hook.ProtoWire.LENGTH_DELIMITED
-import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldEnd
-import eu.hxreborn.gplayadblock.hook.ProtoWire.fieldNumber
-import eu.hxreborn.gplayadblock.hook.ProtoWire.readVarint
-import eu.hxreborn.gplayadblock.hook.ProtoWire.wireType
+import eu.hxreborn.gplayadblock.hook.ProtoWire.containsSubsequence
+import eu.hxreborn.gplayadblock.hook.ProtoWire.lengthDelimitedField
 import eu.hxreborn.gplayadblock.hook.RemovalPolicy
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSettings
 import eu.hxreborn.gplayadblock.settings.prefs.FilterSwitch
@@ -145,23 +142,6 @@ class FullRemovalPolicy internal constructor(
                         ?.containsSubsequence(marker) == true
             }.singleOrNull()
 
-    private fun lengthDelimitedField(
-        message: ByteArray,
-        target: Int,
-    ): ByteArray? {
-        var index = 0
-        while (index < message.size) {
-            val tag = readVarint(message, index) ?: return null
-            val end = fieldEnd(message, tag) ?: return null
-            if (fieldNumber(tag) == target && wireType(tag) == LENGTH_DELIMITED) {
-                val length = readVarint(message, tag.nextIndex) ?: return null
-                return message.copyOfRange(length.nextIndex, end)
-            }
-            index = end
-        }
-        return null
-    }
-
     private fun optionalCase(presentation: Any): Int? =
         try {
             contentCase(presentation)
@@ -216,17 +196,6 @@ class FullRemovalPolicy internal constructor(
                 null
             }
         }
-    }
-
-    private fun ByteArray.containsSubsequence(needle: ByteArray): Boolean {
-        if (needle.isEmpty() || needle.size > size) return false
-        outer@ for (start in 0..size - needle.size) {
-            for (offset in needle.indices) {
-                if (this[start + offset] != needle[offset]) continue@outer
-            }
-            return true
-        }
-        return false
     }
 
     companion object {

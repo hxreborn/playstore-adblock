@@ -77,22 +77,12 @@ sealed interface SettingsUiState {
         val streamCacheClearPending: Boolean = false,
         val searchSortAvailable: Boolean = true,
     ) : SettingsUiState {
-        val appliedOrDefault: FilterSettings get() = applied ?: FilterSettings()
-        val streamCacheClearWithoutContentChange: Boolean
-            get() =
-                streamCacheClearPending && !desired.changesStreamContent(appliedOrDefault)
-        internal val applicableSettings: FilterSettings
-            get() = desired.withApplicableSearchSort(appliedOrDefault, searchSortAvailable)
-        val pendingCount: Int
-            get() {
-                val settingChanges = applicableSettings.countDifferences(appliedOrDefault)
-                return if (streamCacheClearWithoutContentChange) {
-                    settingChanges + 1
-                } else {
-                    settingChanges
-                }
-            }
-        val startScreenChanged: Boolean get() = desired.startTab != appliedOrDefault.startTab
+        private val previous = applied ?: FilterSettings()
+        val pendingChanges: List<PendingChange> =
+            desired
+                .withApplicableSearchSort(previous, searchSortAvailable)
+                .pendingChangesSince(previous, streamCacheClearPending)
+        val pendingCount: Int get() = pendingChanges.size
     }
 }
 

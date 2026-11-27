@@ -116,11 +116,6 @@ internal class SearchSortInstallation(
             native()
         }
     }
-
-    fun <T> intercept(
-        proceed: () -> T,
-        intercept: () -> T,
-    ): T = if (active) intercept() else proceed()
 }
 
 internal fun SearchSortInstallation.hook(

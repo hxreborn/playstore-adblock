@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Help
 import androidx.compose.material.icons.automirrored.outlined.ManageSearch
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -21,7 +22,6 @@ import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
@@ -190,7 +190,7 @@ internal val FilterSwitch.icon: ImageVector
             FilterSwitch.HIDE_LIVE_OPS -> Icons.Outlined.Campaign
             FilterSwitch.HIDE_PRE_REGISTRATION_GAMES -> Icons.Outlined.Event
             FilterSwitch.HIDE_SEARCH_PROMOTIONS -> Icons.AutoMirrored.Outlined.ManageSearch
-            FilterSwitch.SORT_SEARCH_RESULTS -> Icons.Outlined.Sort
+            FilterSwitch.SORT_SEARCH_RESULTS -> Icons.AutoMirrored.Outlined.Sort
             FilterSwitch.SUPPRESS_NOTIFICATION_BADGE -> Icons.Outlined.CircleNotifications
             FilterSwitch.HIDE_HELP -> Icons.AutoMirrored.Outlined.Help
             FilterSwitch.HIDE_PERSONALIZATION -> Icons.Outlined.Tune

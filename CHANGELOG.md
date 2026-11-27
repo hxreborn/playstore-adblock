@@ -1,3 +1,25 @@
+## [2.2.0](https://github.com/hxreborn/playstore-adblock/compare/v2.1.0...v2.2.0) (2026-11-27)
+
+### Features
+
+* **ui:** add Simplified Chinese to Full settings ([27d8a38](https://github.com/hxreborn/playstore-adblock/commit/27d8a38b944e153155e1fb901972c74bf6afdec1)), closes [#53](https://github.com/hxreborn/playstore-adblock/issues/53)
+
+### Bug Fixes
+
+* **hook:** update dexkit to 2.3.1 ([6def5e0](https://github.com/hxreborn/playstore-adblock/commit/6def5e0ec2c6da06572adf637958435506b84002))
+* **settings:** keep the latest settings after rapid changes ([799318e](https://github.com/hxreborn/playstore-adblock/commit/799318eb19236f06f59bda903fb26e7b7b69cf60))
+* **ui:** mirror the search sort icon in right-to-left layouts ([2449f25](https://github.com/hxreborn/playstore-adblock/commit/2449f2542a9da4b49c6cf8fc7acba5a15734c50e))
+
+### Refactor
+
+* **hook:** share protobuf readers across Play Store filters ([57f40b2](https://github.com/hxreborn/playstore-adblock/commit/57f40b2bbdc405c093188bd6399542a4c1612cdf))
+* **settings:** count pending changes from the Apply sheet rows ([8022a2a](https://github.com/hxreborn/playstore-adblock/commit/8022a2a7d57970070b26c250aaf7093470a07182))
+
+
+---
+
+📣 [Telegram Updates channel](https://t.me/PlayStoreAdblock) for new Play Store version checks and release notices.
+
 ## [2.1.0](https://github.com/hxreborn/playstore-adblock/compare/v2.0.0...v2.1.0) (2026-11-26)
 
 ### Features

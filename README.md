@@ -44,18 +44,18 @@
 
 1. Download one APK from [Releases](https://github.com/hxreborn/playstore-adblock/releases):
    - **Core**: ad blocking only, with no app icon or settings. This is the module earlier releases shipped
-   - **Full**: the same ad blocking plus optional filters and a settings app
+   - **Full variant**: the same ad blocking plus optional filters and a settings app
 2. Enable the module in your Xposed manager, scoped to Google Play Store (`com.android.vending`)
 3. Force-stop the Play Store so it restarts with the module active
 
-Core and Full install over each other, and your Full settings come back when you switch back to Full.
-If you use Full, check that your Xposed manager's update picks the Full APK. Some managers install the
+The Core and Full variants install over each other, and your Full variant settings come back when you switch back to it.
+If you use the Full variant, check that your Xposed manager's update picks the Full APK. Some managers install the
 first APK in a release, which is Core.
 
 > [!NOTE]
 > If you still see ads or an empty placeholder shelf, clear the Play Store cache, force-stop it, and relaunch. Play Store keeps serving cached ad responses until they refresh.
 
-## Optional filters (Full)
+## Optional filters (Full variant)
 
 Turn on the ones you want in the settings app. Ad blocking works without them:
 
